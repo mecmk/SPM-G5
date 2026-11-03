@@ -249,6 +249,7 @@ def _live_booking_ids(conn, condition: str = "TRUE") -> list:
 
 
 @pytest.mark.story("1", ac=3)
+@pytest.mark.story("9.5", ac=2)
 @pytest.mark.parametrize(
     ("table", "closing", "columns"),
     [
@@ -262,10 +263,29 @@ def _live_booking_ids(conn, condition: str = "TRUE") -> list:
         pytest.param(
             "venue_bookings",
             "status = 'CANCELLED', cancelled_at = now(), release_cause = 'EVENT_CANCELLED',"
-            " released_by_id = :user WHERE status <> 'CANCELLED'",
+            " released_by_id = :user, closure_reason = NULL, closure_description = NULL"
+            " WHERE status <> 'CANCELLED'",
             "status, cancelled_at, release_cause, release_reason, released_by_id,"
             " replaced_by_booking_id, replaces_live_original",
             id="6.2-booking-released",
+        ),
+        pytest.param(
+            "venue_bookings",
+            "status = 'CANCELLED', cancelled_at = now(), release_cause = 'VENUE_UNAVAILABLE',"
+            " released_by_id = :user, closure_reason = 'MAINTENANCE',"
+            " closure_description = 'Floor relaid' WHERE status = 'APPROVED'",
+            "status, cancelled_at, release_cause, release_reason, released_by_id,"
+            " closure_reason, closure_description",
+            id="9.5-booking-cancelled-by-closure",
+        ),
+        pytest.param(
+            "venue_bookings",
+            "status = 'REJECTED', decided_by_id = :user, decided_at = now(),"
+            " decision_reason = 'Venue closed: Maintenance', closure_reason = 'MAINTENANCE',"
+            " closure_description = 'Floor relaid' WHERE status = 'PENDING'",
+            "status, decided_by_id, decided_at, decision_reason, closure_reason,"
+            " closure_description",
+            id="9.5-request-rejected-by-closure",
         ),
         pytest.param(
             "event_equipment_requests",
@@ -355,7 +375,10 @@ def test_reseeding_leaves_a_booking_closed_once_its_slot_is_taken(db: Session):
 
 def _withdraw(conn, *booking_ids) -> None:
     conn.execute(
-        text("UPDATE venue_bookings SET status = 'WITHDRAWN' WHERE id = ANY(:ids)"),
+        text(
+            "UPDATE venue_bookings SET status = 'WITHDRAWN', closure_reason = NULL,"
+            " closure_description = NULL WHERE id = ANY(:ids)"
+        ),
         {"ids": list(booking_ids)},
     )
 
@@ -385,61 +408,24 @@ def _approve_replacement(conn, replacement) -> None:
         {"replacement": replacement, "id": Bookings.OPEN_STUDIOS_HARBOUR},
     )
     conn.execute(
-        text("UPDATE venue_bookings SET status = 'APPROVED' WHERE id = :id"), {"id": replacement}
+        text(
+            "UPDATE venue_bookings SET status = 'APPROVED', closure_reason = NULL,"
+            " closure_description = NULL WHERE id = :id"
+        ),
+        {"id": replacement},
     )
 
 
-@pytest.mark.story("1", ac=3)
-@pytest.mark.story("12.6", ac=3)
-def test_reseeding_keeps_a_booking_replaced_by_the_seeded_replacement(db: Session):
-    """Venue Staff approved the seeded replacement. Its original cannot come back beside it, and
-    it must not go back to waiting on an original that is gone, so the seed leaves both."""
-    conn = db.connection()
-    original, replacement = Bookings.OPEN_STUDIOS_HARBOUR, Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
-    _approve_replacement(conn, replacement)
-
-    _reseed(conn)
-
-    assert _booking_statuses(conn, [original, replacement]) == {
-        original: "CANCELLED",
-        replacement: "APPROVED",
-    }
-
-
-@pytest.mark.story("1", ac=3)
-@pytest.mark.story("12.6", ac=3)
-def test_reseeding_keeps_a_booking_replaced_by_a_newer_replacement(db: Session):
-    """The same for a replacement raised through the app. The seeded one, withdrawn to make way,
-    must not come back either."""
-    conn = db.connection()
-    original, seeded = Bookings.OPEN_STUDIOS_HARBOUR, Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
-    _withdraw(conn, seeded)
-    newer = _raise_replacement(conn)
-    _approve_replacement(conn, newer)
-
-    _reseed(conn)
-
-    assert _booking_statuses(conn, [original, seeded, newer]) == {
-        original: "CANCELLED",
-        seeded: "WITHDRAWN",
-        newer: "APPROVED",
-    }
-
-
-@pytest.mark.story("1", ac=3)
-@pytest.mark.story("12.6", ac=10)
-def test_reseeding_leaves_a_replacement_closed_once_a_newer_one_is_pending(db: Session):
-    """The seeded replacement was withdrawn and another raised (12.6). Making the seeded one
-    pending again would give the booking two, which uq_venue_bookings_one_pending_replacement
-    refuses."""
-    conn = db.connection()
-    seeded = Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER
-    _withdraw(conn, seeded)
-    newer = _raise_replacement(conn)
-
-    _reseed(conn)
-
-    assert _booking_statuses(conn, [seeded, newer]) == {seeded: "WITHDRAWN", newer: "PENDING"}
+# Three more of these tests - an approved seeded replacement, a newer approved replacement and a
+# newer pending replacement - each began from the seeded pending replacement of the Open Studios
+# booking (12.6, event 82). Story 9.5 retired 12.6's replacement request (CL-193, D5) and its
+# migration rejected that row, so the seed has no pending replacement any more and the scenarios
+# cannot happen. What they protected, that a re-run does not put a seeded booking back live beside
+# a newer booking that took its slot or its venue requirement, is still proven by
+# test_reseeding_leaves_a_booking_closed_once_its_slot_is_taken and
+# test_reseeding_leaves_a_booking_closed_once_a_newer_one_holds_its_requirement above, and the
+# link a booking no longer replaced loses by
+# test_reseeding_clears_the_link_of_a_booking_no_longer_replaced.
 
 
 @pytest.mark.story("1", ac=3)
@@ -584,47 +570,73 @@ def test_seed_constants_match_database(db: Session):
         (Events.SPRING_FAIR, "PLANNING"),
         (Events.GARDEN_FAIR, "PLANNING"),
         (Events.LEADERSHIP_RETREAT, "PLANNING"),
+        (Events.CLOSURE_CONFIRMED, "CONFIRMED"),
+        (Events.CLOSURE_PLANNING, "PLANNING"),
+        (Events.CLOSURE_REPLACED, "PLANNING"),
         (Events.BAYFRONT_SHOWCASE, "PLANNING"),
     ):
         assert (
             db.execute(text("SELECT status FROM events WHERE id = :id"), {"id": event_id}).scalar()
             == status
         )
-    # Story 12.6's e2e bookings: each marked, bar the maker faire's requirement booking, with the
-    # closure of its day; the product showcase's is pending, the heritage walk's was cancelled with
-    # its event (c8) and the rest approved.
-    for booking_id, status, is_marked in (
-        (Bookings.LANTERN_SHOWCASE_FOYER, "APPROVED", True),
-        (Bookings.MAKER_FAIRE_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.MAKER_FAIRE_ADDITIONAL_FOYER, "APPROVED", True),
-        (Bookings.SPRING_EXPO_FOYER, "APPROVED", True),
-        (Bookings.AWARDS_EVENING_FOYER, "APPROVED", True),
-        (Bookings.PITCH_NIGHT_FOYER, "APPROVED", True),
-        (Bookings.NEIGHBOURHOOD_SUMMIT_FOYER, "APPROVED", True),
-        (Bookings.HERITAGE_WALK_FOYER, "CANCELLED", True),
-        (Bookings.PRODUCT_SHOWCASE_FOYER, "PENDING", True),
-        (Bookings.ROBOTICS_OPEN_HOUSE_FOYER, "APPROVED", True),
-        (Bookings.WELLNESS_EXPO_FOYER, "APPROVED", True),
-        (Bookings.CRAFT_MARKET_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.CRAFT_MARKET_ADDITIONAL_FOYER, "APPROVED", True),
-        (Bookings.HARVEST_FAIR_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.HARVEST_FAIR_ADDITIONAL_FOYER, "APPROVED", True),
-        (Bookings.OPEN_STUDIOS_HARBOUR, "APPROVED", False),
-        (Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER, "PENDING", True),
-        (Bookings.NIGHT_BAZAAR_SEMINAR_ROOM, "APPROVED", False),
-        (Bookings.NIGHT_BAZAAR_ADDITIONAL_FOYER, "PENDING", True),
-        (Bookings.SPRING_FAIR_FOYER, "APPROVED", True),
-        (Bookings.GARDEN_FAIR_PENDING, "PENDING", False),
-        (Bookings.GARDEN_FAIR_WITHDRAWN, "WITHDRAWN", False),
+    # Story 12.6's e2e bookings as story 9.5's migration left them: the ones a closure marked are
+    # now ended - the approved cancelled with the cause VENUE_UNAVAILABLE, the pending rejected,
+    # each with the closure's reason - bar the heritage walk's, released with its cancelled event;
+    # the rest are as they were.
+    closed = ("CANCELLED", "VENUE_UNAVAILABLE", "MAINTENANCE")
+    rejected_by_closure = ("REJECTED", None, "MAINTENANCE")
+    event_cancelled = ("CANCELLED", "EVENT_CANCELLED", None)
+    for booking_id, expected in (
+        (Bookings.LANTERN_SHOWCASE_FOYER, closed),
+        (Bookings.MAKER_FAIRE_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.MAKER_FAIRE_ADDITIONAL_FOYER, closed),
+        (Bookings.SPRING_EXPO_FOYER, closed),
+        (Bookings.AWARDS_EVENING_FOYER, closed),
+        (Bookings.PITCH_NIGHT_FOYER, closed),
+        (Bookings.NEIGHBOURHOOD_SUMMIT_FOYER, closed),
+        (Bookings.HERITAGE_WALK_FOYER, event_cancelled),
+        (Bookings.PRODUCT_SHOWCASE_FOYER, rejected_by_closure),
+        (Bookings.ROBOTICS_OPEN_HOUSE_FOYER, closed),
+        (Bookings.WELLNESS_EXPO_FOYER, closed),
+        (Bookings.CRAFT_MARKET_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.CRAFT_MARKET_ADDITIONAL_FOYER, closed),
+        (Bookings.HARVEST_FAIR_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.HARVEST_FAIR_ADDITIONAL_FOYER, closed),
+        (Bookings.OPEN_STUDIOS_HARBOUR, ("APPROVED", None, None)),
+        (Bookings.OPEN_STUDIOS_REPLACEMENT_FOYER, rejected_by_closure),
+        (Bookings.NIGHT_BAZAAR_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.NIGHT_BAZAAR_ADDITIONAL_FOYER, rejected_by_closure),
+        (Bookings.SPRING_FAIR_FOYER, closed),
+        (Bookings.GARDEN_FAIR_PENDING, ("PENDING", None, None)),
+        (Bookings.GARDEN_FAIR_WITHDRAWN, ("WITHDRAWN", None, None)),
+        # Story 9.5's own block: the two a closure of 12 June ends, and the replaced pair.
+        (Bookings.CLOSURE_CONFIRMED_SEMINAR_ROOM, ("APPROVED", None, None)),
+        (Bookings.CLOSURE_PLANNING_SEMINAR_ROOM, ("PENDING", None, None)),
+        (Bookings.CLOSURE_REPLACED_ORIGINAL, ("CANCELLED", "REPLACED", None)),
+        (Bookings.CLOSURE_REPLACED_REPLACEMENT, ("APPROVED", None, None)),
     ):
         row = db.execute(
-            text(
-                "SELECT status, venue_unavailable_marked_at IS NOT NULL AS is_marked"
-                " FROM venue_bookings WHERE id = :id"
-            ),
+            text("SELECT status, release_cause, closure_reason FROM venue_bookings WHERE id = :id"),
             {"id": booking_id},
         ).one()
-        assert (row.status, row.is_marked) == (status, is_marked)
+        assert tuple(row) == expected
+    # Story 9.5: the replaced pair is linked both ways, and the confirmed event's hold is complete.
+    linked = db.execute(
+        text("SELECT replaced_by_booking_id FROM venue_bookings WHERE id = :id"),
+        {"id": Bookings.CLOSURE_REPLACED_ORIGINAL},
+    ).scalar()
+    assert linked == Bookings.CLOSURE_REPLACED_REPLACEMENT
+    assert (
+        db.execute(
+            text("SELECT replaces_booking_id FROM venue_bookings WHERE id = :id"),
+            {"id": Bookings.CLOSURE_REPLACED_REPLACEMENT},
+        ).scalar()
+        == Bookings.CLOSURE_REPLACED_ORIGINAL
+    )
+    assert db.execute(
+        text("SELECT hold_completed_at IS NOT NULL FROM venue_bookings WHERE id = :id"),
+        {"id": Bookings.CLOSURE_CONFIRMED_SEMINAR_ROOM},
+    ).scalar()
     for period_id in (
         Unavailability.MAINTENANCE_SEMINAR_ROOM_AHEAD,
         Unavailability.FOYER_LANTERN_SHOWCASE,

@@ -1,5 +1,13 @@
 """Story 12.6 - Request a replacement venue for an affected booking
 
+Retired by 9.5 (CL-193, 1 Nov 2026), kept as history: a venue closure now ends the bookings it
+covers, so nothing is marked and no replacement is requested. A booking already replaced still
+shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
+normal pending request once its original closes (9.5 AC8, CL-194).
+
+The tests that remain cover 12.6 AC3 and AC8 (an approved change that unfits an original that
+has a replacement raised before 9.5, pending or approved) and 12.5 AC11.
+
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
     coordinator selects "Find a replacement venue" on the event page. The catalogue opens
@@ -101,11 +109,10 @@ from tests.support.replacement import (
     BOOKINGS_PATH,
     approve,
     column,
-    created,
     hall,
     make_scenario,
     notifications_of,
-    replace,
+    request_replacement,
 )
 from tests.support.seed import Users
 
@@ -155,7 +162,7 @@ def test_a_change_that_unfits_a_flagged_original_releases_its_pending_replacemen
     releases any booking it unfits. Neither is "Replaced by" anything, and the audit and Venue
     Staff's notices are 19.2's."""
     scene = make_scenario(db, additional=True)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     request = _raise_later_start(login_as, db, scene.event)
 
     approval = _approve_change(login_as(Users.COORDINATOR), request)
@@ -198,7 +205,7 @@ def test_an_attendance_rise_keeps_a_flagged_original_and_its_pending_replacement
     releases neither the original nor its pending replacement, so the replacement can still be
     approved in its place and nothing is shown as replaced meanwhile."""
     scene = make_scenario(db, additional=True)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     request = _raise_attendance(login_as, db, scene.event, 80)
 
     approval = _approve_change(login_as(Users.COORDINATOR), request)
@@ -245,7 +252,7 @@ def test_a_requirement_needs_a_venue_again_once_the_change_released_both(login_a
     is taken as 12.5 takes it for any requirement that needs one - the one-per-requirement index
     sees no live booking, and the replacement's carve-out is gone with it."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     request = _raise_requirement_layout(login_as, db, scene, "THEATRE")
     assert _approve_change(login_as(Users.COORDINATOR), request).status_code == 200
     assert _booking(db, scene.original.id).status == BookingStatus.CANCELLED
@@ -271,7 +278,7 @@ def test_an_original_released_alone_leaves_its_pending_replacement_covering_the_
     does): the replacement's carve-out ends with it, so the requirement is covered by the
     replacement and a normal request is refused, naming it; the original is not "Replaced by"."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     replacement_id = uuid.UUID(body["id"])
     assert column(db, replacement_id, "replaces_live_original") is True
 
@@ -292,6 +299,8 @@ def test_an_original_released_alone_leaves_its_pending_replacement_covering_the_
     assert column(db, original.id, "replaced_by_booking_id") is None
     assert _booking(db, replacement_id).status == BookingStatus.PENDING
     assert column(db, replacement_id, "replaces_live_original") is False
+    # CL-194 (8), 9.5 AC8: the link goes with the carve-out, so it is a normal pending request.
+    assert column(db, replacement_id, "replaces_booking_id") is None
     refused = login_as(Users.COORDINATOR).post(
         BOOKINGS_PATH,
         json={
@@ -310,7 +319,7 @@ def test_approving_the_replacement_of_an_original_released_by_a_change_still_wor
     notice has no "it replaces was released" sentence, the original keeps what 19.2 left, and no
     "replaced" notice or audit exists."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     chloe = db.get(User, Users.COORDINATOR.id)
     assert service.release_booking(
         db,

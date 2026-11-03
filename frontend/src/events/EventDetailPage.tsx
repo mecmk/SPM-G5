@@ -48,14 +48,15 @@ import {
 import {
   APPROVED_BOOKING_STATUS,
   bookingOutcomeLabels,
+  CANCELLED_BY_CLOSURE_MESSAGE,
   CANCELLED_BY_COORDINATOR_MESSAGE,
   EXPIRED_BOOKING_STATUS,
   closedAt,
   closingReason,
-  FIND_ANOTHER_LABEL,
-  FIND_REPLACEMENT_LABEL,
+  closureReasonLine,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
+  isCancelledByClosure,
   isCancelledByCoordinator,
   isReleasedBySafetyReview,
   openHoldExpiry,
@@ -66,7 +67,6 @@ import {
   replacementRequestedLine,
   replacesLine,
   turnaroundLine,
-  VENUE_UNAVAILABLE_LABEL,
 } from '../shared/bookingStatus'
 import {
   ACTIVE_EVENT_STATUSES,
@@ -98,10 +98,6 @@ import { useLoaded } from '../shared/useLoaded'
 import {
   canRequestVenueFor,
   firstRequirementNeedingVenue,
-  isMarked,
-  offersWayToAnotherVenue,
-  isReplaceable,
-  replacementSearchFor,
   requirementName,
   unnamedRequirementLabel,
   venueSearchFor,
@@ -109,7 +105,7 @@ import {
 import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
-import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE, VENUE_UNAVAILABLE_NOTE } from './bookingOutcome'
+import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE } from './bookingOutcome'
 import { OrganiserBookingsSection } from './OrganiserBookingsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { ReassignDialog } from './ReassignDialog'
@@ -131,6 +127,7 @@ const NO_BOOKINGS_SECTION_STATUSES: readonly EventStatus[] = ['REJECTED', 'CANCE
 function bookingMessage(event: EventDetail, booking: BookingOutcome): string {
   if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_MESSAGE
   if (isCancelledByCoordinator(booking)) return CANCELLED_BY_COORDINATOR_MESSAGE
+  if (isCancelledByClosure(booking)) return CANCELLED_BY_CLOSURE_MESSAGE
   if (
     booking.status === 'CANCELLED' &&
     event.cancelled_at !== null &&
@@ -576,20 +573,18 @@ export function EventDetailPage() {
                 status: updated.status,
                 decided_at: updated.decided_at,
                 decision_reason: updated.decision_reason,
-                // A closed booking holds nothing, so nothing marks it any more (9.4 AC3).
-                venue_unavailable_marked_at: null,
               }
             }
             // Story 12.6 AC5: withdrawing a replacement ends the original's "Replacement
-            // requested", which brings its Find a replacement venue back.
+            // requested".
             return booking.id === pendingWithdraw.replaces_booking_id
               ? { ...booking, pending_replacement_venue_name: null }
               : booking
           }),
       )
       setPendingWithdraw(null)
-      // Story 12.6 AC12: a withdrawn replacement, or a withdrawn marked booking, may have been what
-      // stopped the safety review, so its blockers are read again.
+      // A withdrawn request may have been what stopped the safety review, so its blockers are
+      // read again.
       getEventSafety(eventId).then(setSafety, () => {})
     } catch (err) {
       setWithdrawError(formatApiError(err))
@@ -637,8 +632,6 @@ export function EventDetailPage() {
                   cancelled_at: updated.cancelled_at,
                   release_cause: updated.release_cause,
                   release_reason: updated.release_reason,
-                  // A closed booking holds nothing, so nothing marks it any more (9.4 AC3).
-                  venue_unavailable_marked_at: null,
                 }
               : booking,
           ),
@@ -737,11 +730,6 @@ export function EventDetailPage() {
     bookings !== null &&
     event.venue_requirements.length > 0 &&
     firstRequirementNeedingVenue(event, bookings) === null
-  /** Story 12.6 AC4: while a booking is marked "Venue unavailable" the event is not all booked, and
-   *  no venue is left to find for a requirement that needs none: the way on is the marked booking's
-   *  own Find a replacement venue (or Find another venue), so the header offers neither. */
-  const hasMarkedBooking = bookings !== null && bookings.some(isMarked)
-  const isHeaderFindHidden = isEveryRequirementCovered && hasMarkedBooking
   /** Fix f2.7.4 (story 2.7 AC17, AC19): "No venue requirements", saved before the fix, still
    *  stands once a request is past its decision - an event approved with it keeps the paths for
    *  none (AC19). Before then it no longer does: such a request cannot be submitted or approved
@@ -1047,7 +1035,7 @@ export function EventDetailPage() {
           <section className="card stack" aria-labelledby="venue-requirements-heading">
             <div className="card-heading">
               <h2 id="venue-requirements-heading">Venue requirements</h2>
-              {canFindVenue && !isHeaderFindHidden && (
+              {canFindVenue && (
                 <Link
                   to={findVenuePath(event, bookings ?? [])}
                   className={
@@ -1225,15 +1213,6 @@ export function EventDetailPage() {
                           </strong>
                         </p>
                       )}
-                      {/* Story 9.4 AC3: its venue was marked unavailable for part of this booking;
-                          the booking stays here for reference and the event needs another venue. */}
-                      {booking.venue_unavailable_marked_at !== null && (
-                        <p>
-                          <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
-                          <br />
-                          <span className="small muted">{VENUE_UNAVAILABLE_NOTE}</span>
-                        </p>
-                      )}
                       {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
                       {openHold && (
                         <p>
@@ -1280,6 +1259,12 @@ export function EventDetailPage() {
                           {formatDateTime(booking.hold_expires_at)}
                         </p>
                       )}
+                      {/* Story 9.5 AC2: a booking a venue closure cancelled says why, and the
+                          closure's description, which the organiser's section leaves out. */}
+                      {closureReasonLine(booking) !== null && <p>{closureReasonLine(booking)}</p>}
+                      {booking.closure_description !== null && (
+                        <p className="small muted">{booking.closure_description}</p>
+                      )}
                       {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
                           <venue>" above, which is also its reason, so it is not said twice. */}
                       {closingReason(booking) !== null &&
@@ -1323,10 +1308,10 @@ export function EventDetailPage() {
                     </div>
                   )}
                   {/* Story 12.8 AC1/AC8: only the event's own assigned coordinator may cancel, and
-                   *  only an approved booking, with no replacement pending (AC7), before the
+                   *  only an approved booking (a replacement still pending from before story 9.5 does not
+                   *  stop it, AC7), before the
                    *  cut-off (AC4) - mirrors the backend's own checks. */}
                   {booking.status === APPROVED_BOOKING_STATUS &&
-                    booking.pending_replacement_venue_name === null &&
                     !isBookingCancelClosed &&
                     isAssignedCoordinator && (
                       <div className="cluster">
@@ -1344,19 +1329,6 @@ export function EventDetailPage() {
                         </button>
                       </div>
                     )}
-                  {/* Story 12.6 AC1/AC9: a marked booking offers the way to another venue, to the
-                   *  event's assigned coordinator while it can take a booking (AC8): a replacement
-                   *  for an approved one, the catalogue's Switch for a pending one. */}
-                  {offersWayToAnotherVenue(booking) && canFindVenue && isAssignedCoordinator && (
-                    <div className="cluster">
-                      <Link
-                        to={venueSearchPath(replacementSearchFor(event, booking))}
-                        className="button button-sm"
-                      >
-                        {isReplaceable(booking) ? FIND_REPLACEMENT_LABEL : FIND_ANOTHER_LABEL}
-                      </Link>
-                    </div>
-                  )}
                 </div>
               )
             })}

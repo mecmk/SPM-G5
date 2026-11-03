@@ -17,7 +17,6 @@ import { PageHeader } from '../components/PageHeader'
 import { Pagination } from '../components/Pagination'
 import { QueueSearchBar } from '../components/QueueSearchBar'
 import { ReplacementNote } from '../components/ReplacementNote'
-import { Chip } from '../components/Chip'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { ERROR_REGISTRY } from '../errors/registry'
@@ -31,13 +30,14 @@ import {
   APPROVED_BOOKING_STATUS,
   closedAt,
   closingReason,
+  closureReasonLine,
+  isCancelledByClosure,
   releasedByLabel,
   EXPIRED_BOOKING_STATUS,
   HOLD_EXPIRED_LABEL,
   HOLD_EXPIRES_LABEL,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
-  VENUE_UNAVAILABLE_LABEL,
   withBookingMoved,
   type BookingStatusTabKey,
 } from '../shared/bookingStatus'
@@ -397,10 +397,6 @@ export function BookingRequestsPage() {
                     <div className="cluster">
                       <StatusBadge status={entry.status} />
                       <span className="small muted mono">{shortReference(entry.id)}</span>
-                      {/* Story 9.4 AC3: its venue is unavailable for part of the request. */}
-                      {entry.venue_unavailable_marked_at !== null && (
-                        <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
-                      )}
                     </div>
                     <div className="item-card-capacity">
                       <div>{formatDate(entry.starts_at)}</div>
@@ -428,7 +424,6 @@ export function BookingRequestsPage() {
                   <ReplacementNote
                     replacesVenueName={entry.replaces_venue_name}
                     approvalReleasesVenueName={entry.approval_releases_venue_name}
-                    originalIsMarked={entry.original_is_marked}
                   />
 
                   <div className="fact-grid">
@@ -477,25 +472,28 @@ export function BookingRequestsPage() {
                     </div>
                   )}
 
-                  {closingReason(entry) !== null && (
+                  {/* Story 9.5 AC2: a booking a venue closure cancelled says why - "Cancelled: the
+                      venue closed", the reason, the closure's description; a request it rejected
+                      has its decision reason, "Venue closed: <reason>", and the description. */}
+                  {(closingReason(entry) !== null || isCancelledByClosure(entry)) && (
                     <div className="subtle-block">
                       {releasedByLabel(entry) !== null && (
                         <p>
                           <strong>{releasedByLabel(entry)}</strong>
                         </p>
                       )}
-                      <p className="fact-label">{bookingOutcomeLabels(entry).why}</p>
-                      <p>{closingReason(entry)}</p>
+                      {closureReasonLine(entry) !== null && <p>{closureReasonLine(entry)}</p>}
+                      {closingReason(entry) !== null && (
+                        <>
+                          <p className="fact-label">{bookingOutcomeLabels(entry).why}</p>
+                          <p>{closingReason(entry)}</p>
+                        </>
+                      )}
+                      {entry.closure_description !== null && (
+                        <p className="small muted">{entry.closure_description}</p>
+                      )}
                     </div>
                   )}
-
-                  {entry.status === PENDING_BOOKING_STATUS &&
-                    entry.venue_unavailable_marked_at !== null && (
-                      <p id={`unavailable-${entry.id}`} className="small muted">
-                        This venue is unavailable for part of this request. It cannot be approved
-                        while the closure stands.
-                      </p>
-                    )}
 
                   <div className="item-card-footer">
                     {entry.status === PENDING_BOOKING_STATUS && (
@@ -503,12 +501,6 @@ export function BookingRequestsPage() {
                         <button
                           type="button"
                           className="brand button-sm"
-                          disabled={entry.venue_unavailable_marked_at !== null}
-                          aria-describedby={
-                            entry.venue_unavailable_marked_at !== null
-                              ? `unavailable-${entry.id}`
-                              : undefined
-                          }
                           onClick={() => askToApprove(entry)}
                         >
                           Approve

@@ -118,33 +118,6 @@ class BookingSwitchIn(BaseModel):
         return None if stripped == "" else stripped
 
 
-class BookingReplacementIn(BaseModel):
-    """Story 12.6 AC2: the venue asked for as the replacement of the booking in the address, whose
-    venue Venue Staff made unavailable. The event, the venue requirement (or none, for an
-    additional venue), the period and the attendance are the original's own, so none is sent; the
-    venue is, with story 11.1's justification when it does not suit, read as ``BookingRequestIn``
-    reads it.
-
-    The setup and teardown default to the original's: a replacement carries what the original
-    carried unless the request sends its own, and a ``0`` sent is a choice, not an omission. Each
-    is whole minutes up to ``TURNAROUND_MAX_MINUTES``, as for any request (12.1 AC5).
-    """
-
-    venue_id: uuid.UUID
-    suitability_override_reason: str | None = Field(
-        default=None, max_length=SUITABILITY_OVERRIDE_REASON_MAX_LENGTH
-    )
-    setup_minutes: StrictInt | None = Field(default=None, ge=0, le=TURNAROUND_MAX_MINUTES)
-    teardown_minutes: StrictInt | None = Field(default=None, ge=0, le=TURNAROUND_MAX_MINUTES)
-
-    @field_validator("suitability_override_reason", mode="before")
-    @classmethod
-    def _blank_reason_is_none(cls, value: object) -> object:
-        """Story 11.1 AC7: an empty or whitespace-only justification is no justification."""
-        stripped = _strip(value)
-        return None if stripped == "" else stripped
-
-
 class BookingRejection(BaseModel):
     """13.2.1 AC2: a reason is mandatory - blank or whitespace-only does not count. Mirrors
     events.schemas.EventRejection (story 4.5)."""
@@ -245,18 +218,15 @@ class BookingOut(BaseModel):
     hold_expiry_change_reason: str | None
     hold_expiry_changed_by: HoldExpiryChangedBy | None
     hold_expiry_changed_at: datetime | None
-    # Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed"; None
-    # when unmarked, and always None once the booking is no longer pending or approved.
-    venue_unavailable_marked_at: datetime | None = Field(validation_alias="venue_unavailable_mark")
     # Story 12.6 AC2/AC3: the booking this one replaces and the one that replaced it, and what
-    # Venue Staff read before approving a replacement (AC3, AC6): the venue replaced, the venue
-    # approval will release - only while it still holds its venue - and whether the original is
-    # still marked. All None for a booking that replaces and is replaced by nothing.
+    # Venue Staff read before approving a replacement (AC3): the venue replaced and the venue
+    # approval will release - only while it still holds its venue. All None for a booking that
+    # replaces and is replaced by nothing, and for a replacement whose original has closed
+    # (story 9.5 AC8).
     replaces_booking_id: uuid.UUID | None
     replaced_by_booking_id: uuid.UUID | None
     replaces_venue_name: str | None
     approval_releases_venue_name: str | None
-    original_is_marked: bool | None
     decided_by_id: uuid.UUID | None
     decided_at: datetime | None
     decision_reason: str | None
@@ -266,6 +236,9 @@ class BookingOut(BaseModel):
     # Story 21.3 AC2: how a cancelled booking was released and why; None otherwise.
     release_cause: str | None
     release_reason: str | None
+    # Story 9.5 AC2: the reason (a code) and description of the venue closure that ended it.
+    closure_reason: str | None
+    closure_description: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -334,20 +307,19 @@ class BookingQueueEntry(BaseModel):
     held_until: datetime
     venue_operating_hours_start: time | None
     venue_operating_hours_end: time | None
-    # Story 9.4 AC3: the mark, for Venue Staff deciding the request (AC7); None when unmarked.
-    venue_unavailable_marked_at: datetime | None
-    # Story 12.6 AC3, AC6: for a replacement, the venue it replaces, the venue approving it will
-    # release (only while that booking still holds its venue) and whether the original is still
-    # marked; None for any other request.
+    # Story 12.6 AC3: for a replacement, the venue it replaces and the venue approving it will
+    # release (only while that booking still holds its venue); None for any other request.
     replaces_venue_name: str | None
     approval_releases_venue_name: str | None
-    original_is_marked: bool | None
     # Story 12.6 AC3: when a released original was released - its replacement's approval, shown as
     # "Closed at" in place of its own earlier approval; None for any other request.
     released_at: datetime | None
     # Story 21.3 AC8: how a cancelled booking was released and why, for the Cancelled tab.
     release_cause: str | None
     release_reason: str | None
+    # Story 9.5 AC2: the reason (a code) and description of the venue closure that ended it.
+    closure_reason: str | None
+    closure_description: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingQueueEntry:
@@ -378,13 +350,13 @@ class BookingQueueEntry(BaseModel):
             held_until=booking.held_until,
             venue_operating_hours_start=booking.venue.operating_hours_start,
             venue_operating_hours_end=booking.venue.operating_hours_end,
-            venue_unavailable_marked_at=booking.venue_unavailable_mark,
             replaces_venue_name=booking.replaces_venue_name,
             approval_releases_venue_name=booking.approval_releases_venue_name,
-            original_is_marked=booking.original_is_marked,
             released_at=booking.released_at,
             release_cause=booking.release_cause,
             release_reason=booking.release_reason,
+            closure_reason=booking.closure_reason,
+            closure_description=booking.closure_description,
         )
 
 
@@ -424,8 +396,7 @@ class OrganiserBooking(BaseModel):
     venue, where, for which requirement, when (with its setup and teardown) and its status. Venue
     Staff's reasons and the hold's history in ``BookingOutcome`` are internal, so they are left
     out. AC7 (CL-184): the hold's expiry and completion, so an open hold does not read as
-    confirmed, and when the booking was marked under story 9.4 - but not who changed the expiry,
-    or why."""
+    confirmed - but not who changed the expiry, or why."""
 
     id: uuid.UUID
     venue_name: str
@@ -439,8 +410,6 @@ class OrganiserBooking(BaseModel):
     status: str
     hold_expires_at: datetime | None
     hold_completed_at: datetime | None
-    # None when unmarked, and once the booking is closed (``venue_unavailable_mark``).
-    venue_unavailable_marked_at: datetime | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> OrganiserBooking:
@@ -458,7 +427,6 @@ class OrganiserBooking(BaseModel):
             status=booking.status,
             hold_expires_at=booking.hold_expires_at,
             hold_completed_at=booking.hold_completed_at,
-            venue_unavailable_marked_at=booking.venue_unavailable_mark,
         )
 
 
@@ -497,9 +465,6 @@ class BookingOutcome(BaseModel):
     hold_expiry_change_reason: str | None
     hold_expiry_changed_by: HoldExpiryChangedBy | None
     hold_expiry_changed_at: datetime | None
-    # Story 9.4 AC3: when the booking was marked "Venue unavailable - alternative needed", for
-    # the event page; None when unmarked, and always None once the booking is closed.
-    venue_unavailable_marked_at: datetime | None
     # Story 12.6 AC2-AC4: the booking this one replaces and the one that replaced it, and their
     # venues, for the event page: "Replaces <venue>" on a replacement, "Replaced by <venue>" on an
     # original released by an approved one (never for a replacement that was not approved, AC8),
@@ -515,6 +480,9 @@ class BookingOutcome(BaseModel):
     # Story 21.3 AC2: how a cancelled booking was released and why, for the event page.
     release_cause: str | None
     release_reason: str | None
+    # Story 9.5 AC2: the reason (a code) and description of the venue closure that ended it.
+    closure_reason: str | None
+    closure_description: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -545,7 +513,6 @@ class BookingOutcome(BaseModel):
                 else HoldExpiryChangedBy.model_validate(booking.hold_expiry_changed_by)
             ),
             hold_expiry_changed_at=booking.hold_expiry_changed_at,
-            venue_unavailable_marked_at=booking.venue_unavailable_mark,
             replaces_booking_id=booking.replaces_booking_id,
             replaced_by_booking_id=booking.replaced_by_booking_id,
             replaces_venue_name=booking.replaces_venue_name,
@@ -554,4 +521,6 @@ class BookingOutcome(BaseModel):
             released_at=booking.released_at,
             release_cause=booking.release_cause,
             release_reason=booking.release_reason,
+            closure_reason=booking.closure_reason,
+            closure_description=booking.closure_description,
         )

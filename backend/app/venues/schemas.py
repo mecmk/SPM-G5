@@ -327,10 +327,6 @@ class VenueSearchQuery(BaseModel):
     include_withdrawn: bool = False
     # Story 11.1 AC1: the event venues are being found for. Judges each result; filters nothing.
     event: uuid.UUID | None = None
-    # Story 12.6 AC1: a venue the results never hold - the unavailable one a replacement is being
-    # found for. Part of the search's scope, not one of its filters: whatever else is filtered, the
-    # period included, it stays out, and the removal hints never offer to bring it back.
-    exclude_venue: uuid.UUID | None = None
     # f11.1.1 (11.1 AC1): the event's venue requirement selected in the catalogue's banner (story
     # 8.4), judged against. None judges the event's attendance alone, as for an additional venue
     # (story 12.5 AC5). Read only with ``event``; filters nothing either.
@@ -482,6 +478,9 @@ class VenueUnavailabilityCreate(BaseModel):
     ends_at: AwareDatetime
     reason: str
     description: str | None = None
+    # Story 9.5 AC1 (D21): the bookings the preview listed and Venue Staff confirmed. Saving ends
+    # only these; a booking it would end that is not here refuses the save.
+    confirmed_booking_ids: list[uuid.UUID] = Field(default_factory=list)
 
     @field_validator("reason")
     @classmethod
@@ -504,6 +503,9 @@ class VenueUnavailabilityUpdate(BaseModel):
     reason: str | None = None
     description: str | None = None
     end_now: Literal[True] | None = None
+    # Story 9.5 AC1 (D21, D22): the bookings the preview of this edit listed and Venue Staff
+    # confirmed; it names a booking only if the edit adds time. Not a field to change.
+    confirmed_booking_ids: list[uuid.UUID] = Field(default_factory=list)
 
     @field_validator("reason")
     @classmethod
@@ -517,7 +519,7 @@ class VenueUnavailabilityUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _check_what_was_sent(self) -> VenueUnavailabilityUpdate:
-        sent = self.model_fields_set
+        sent = self.model_fields_set - {"confirmed_booking_ids"}
         if not sent:
             raise ValueError(NOTHING_TO_CHANGE_MESSAGE)
         if "end_now" in sent and self.end_now is None:
@@ -563,6 +565,3 @@ class AffectedBookingOut(BaseModel):
     status: str
     held_from: datetime
     held_until: datetime
-    # True when the booking already carries the mark, from any of the venue's periods - so an
-    # edit's preview can tell the bookings it newly reaches from those already marked.
-    already_marked: bool

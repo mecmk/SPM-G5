@@ -278,9 +278,6 @@ export interface VenueSearchQuery {
    * catalogue's banner (story 8.4). Without it, the event's attendance alone, as for an additional
    * venue (story 12.5 AC5). Sent only with `event`. */
   requirement?: string
-  /** Story 12.6 AC1: a venue the results never hold - the unavailable one a replacement is being
-   * found for. */
-  exclude_venue?: string
 }
 
 /** Mirrors `Criterion` in backend/app/venues/suitability.py: what a failed criterion is about. */
@@ -370,7 +367,6 @@ export function searchVenues(query: VenueSearchQuery): Promise<VenueSearchResult
   if (query.include_withdrawn) params.set('include_withdrawn', 'true')
   if (query.event) params.set('event', query.event)
   if (query.requirement) params.set('requirement', query.requirement)
-  if (query.exclude_venue) params.set('exclude_venue', query.exclude_venue)
   return api<VenueSearchResult>(`/venues/search?${params}`)
 }
 
@@ -452,9 +448,9 @@ export interface UnavailabilityInput {
   description: string | null
 }
 
-/** Mirrors `AffectedBookingOut` (story 9.4 AC2): a pending or approved booking whose held period
- * (setup and teardown included) overlaps a period about to be saved. `already_marked` is true
- * when it already carries the venue-unavailable mark. */
+/** Mirrors `AffectedBookingOut` (story 9.4 AC2, story 9.5 AC1): a pending or approved booking whose
+ * held period (setup and teardown included) overlaps a period about to be saved; saving rejects a
+ * pending request and cancels an approved booking. */
 export interface AffectedBooking {
   booking_id: string
   event_id: string
@@ -462,32 +458,46 @@ export interface AffectedBooking {
   status: string
   held_from: string
   held_until: string
-  already_marked: boolean
 }
 
-/** Story 9.4 AC2: the bookings a period from `startsAt` to `endsAt` would affect, to show before
- * Venue Staff save. Reads only. */
+/** Story 9.4 AC2, story 9.5 AC1: the bookings a period from `startsAt` to `endsAt` would reject or
+ * cancel, to show before Venue Staff save. With `periodId` the range is an edit of that period and
+ * only what it newly covers is listed (D22). Reads only. */
 export function fetchAffectedBookings(
   venueId: string,
   startsAt: string,
   endsAt: string,
+  periodId?: string,
 ): Promise<AffectedBooking[]> {
   const params = new URLSearchParams({ starts_at: startsAt, ends_at: endsAt })
+  if (periodId) params.set('period_id', periodId)
   return api<AffectedBooking[]>(`/venues/${venueId}/unavailability/affected-bookings?${params}`, {
     errorCodes: { 404: 'VENUE_NOT_FOUND' },
   })
 }
 
-/** Story 9.4 AC1/AC5: mark a venue unavailable. Bookings in the way do not stop it being saved. */
+/** Story 9.5 AC1: `body` with the ids of the bookings the save was confirmed to end, left out when
+ * there are none, so a save that ends nothing sends what it always sent. */
+function withConfirmed<T extends object>(body: T, confirmedBookingIds: string[]) {
+  return confirmedBookingIds.length === 0
+    ? body
+    : { ...body, confirmed_booking_ids: confirmedBookingIds }
+}
+
+/** Story 9.4 AC1/AC5, story 9.5 AC1: mark a venue unavailable. `confirmedBookingIds` are the bookings
+ * the preview listed and Venue Staff confirmed; saving rejects or cancels each. A booking it would
+ * end that is not among them refuses the save with a 409 (`UNAVAILABILITY_NEEDS_CONFIRMATION`)
+ * whose detail carries the fresh list (`bookingsInRefusal`). */
 export function addUnavailability(
   venueId: string,
   venueName: string,
   input: UnavailabilityInput,
+  confirmedBookingIds: string[],
 ): Promise<Unavailability> {
   return api<Unavailability>(`/venues/${venueId}/unavailability`, {
     method: 'POST',
-    body: input,
-    errorCodes: { 404: 'VENUE_NOT_FOUND' },
+    body: withConfirmed(input, confirmedBookingIds),
+    errorCodes: { 404: 'VENUE_NOT_FOUND', 409: 'UNAVAILABILITY_NEEDS_CONFIRMATION' },
     notify: {
       title: 'Time blocked off',
       message: `${venueName} is closed for the period you chose.`,
@@ -496,15 +506,20 @@ export function addUnavailability(
   })
 }
 
-/** Story 9.4 AC6: change a period's start, end, reason or description - only the fields given. */
+/** Story 9.4 AC6, story 9.5 AC1: change a period's start, end, reason or description - only the
+ * fields given. `confirmedBookingIds` are the bookings the edit's preview listed, which an edit
+ * that adds time ends; as for `addUnavailability`. A 409 here is not always that refusal (the
+ * period may have ended, or started), so it carries no code of its own: the caller tells the
+ * refusal by its detail (`bookingsInRefusal`). */
 export function editUnavailability(
   venueId: string,
   periodId: string,
   changes: Partial<UnavailabilityInput>,
+  confirmedBookingIds: string[],
 ): Promise<Unavailability> {
   return api<Unavailability>(`/venues/${venueId}/unavailability/${periodId}`, {
     method: 'PATCH',
-    body: changes,
+    body: withConfirmed(changes, confirmedBookingIds),
     errorCodes: { 404: 'UNAVAILABILITY_NOT_FOUND' },
     notify: {
       title: 'Unavailability changed',
@@ -539,4 +554,11 @@ export function removeUnavailability(venueId: string, periodId: string): Promise
       importance: 'important',
     },
   })
+}
+
+/** Story 9.5 AC1: the fresh list a refused save carries (`UNAVAILABILITY_NEEDS_CONFIRMATION`), or
+ * null when `detail` is not one. */
+export function bookingsInRefusal(detail: unknown): AffectedBooking[] | null {
+  if (detail === null || typeof detail !== 'object' || !('bookings' in detail)) return null
+  return Array.isArray(detail.bookings) ? (detail.bookings as AffectedBooking[]) : null
 }

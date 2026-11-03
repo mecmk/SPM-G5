@@ -216,6 +216,18 @@ def get_venue_calendar(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
 
+def _needs_confirmation(exc: service.ClosureNeedsConfirmation) -> HTTPException:
+    """Story 9.5 AC1 (D21): a 409 whose ``detail`` is the sentence and the fresh list the save
+    would end, for the page to show again - the one refusal here that carries data."""
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        {
+            "message": str(exc),
+            "bookings": [booking.model_dump(mode="json") for booking in exc.bookings],
+        },
+    )
+
+
 @router.get(
     "/{venue_id}/unavailability/affected-bookings",
     response_model=list[AffectedBookingOut],
@@ -226,15 +238,25 @@ def list_affected_bookings(
     db: DbSession,
     starts_at: Annotated[AwareDatetime, Query()],
     ends_at: Annotated[AwareDatetime, Query()],
+    period_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[AffectedBookingOut]:
-    """Story 9.4 AC2/AC9: the pending and approved bookings a period from ``starts_at`` to
-    ``ends_at`` would affect, for Venue Staff to see before they save. Reads only."""
+    """Story 9.4 AC2/AC9, story 9.5 AC1: the pending and approved bookings a period from
+    ``starts_at`` to ``ends_at`` would reject or cancel, for Venue Staff to see before they save.
+    With ``period_id``, the range is an edit of that period and only what it newly covers is
+    listed (D22). Reads only."""
     try:
         return service.list_affected_bookings(
-            db, venue_id, starts_at=starts_at, ends_at=ends_at, now=datetime.now(UTC)
+            db,
+            venue_id,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            now=datetime.now(UTC),
+            period_id=period_id,
         )
     except service.VenueNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
+    except service.UnavailabilityNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, UNAVAILABILITY_NOT_FOUND_MESSAGE) from None
     except service.InvalidDateRange as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
@@ -262,6 +284,8 @@ def add_unavailability(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.DescriptionRequired as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.ClosureNeedsConfirmation as exc:
+        raise _needs_confirmation(exc) from None
     return VenueUnavailabilityOut.from_period(period)
 
 
@@ -296,6 +320,8 @@ def edit_unavailability(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.PeriodStartLocked as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    except service.ClosureNeedsConfirmation as exc:
+        raise _needs_confirmation(exc) from None
     return VenueUnavailabilityOut.from_period(period)
 
 

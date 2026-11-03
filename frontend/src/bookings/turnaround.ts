@@ -27,10 +27,6 @@ export interface DurationDraft {
 export const TURNAROUND_HINT =
   'How long the venue is needed before the event starts and after it ends. Both stay 0 unless you enter more.'
 
-/** Story 12.6 AC2: the same, for a replacement, whose fields start from the booking it replaces. */
-export const REPLACEMENT_TURNAROUND_HINT =
-  'How long the venue is needed before the event starts and after it ends. Copied from the booking it replaces; change them if needed.'
-
 /** f12.1.2 (story 12.1 AC1): setup and teardown are 0 until the coordinator enters more. */
 export const ZERO_DURATION: DurationDraft = { days: '0', hours: '0', minutes: '0' }
 

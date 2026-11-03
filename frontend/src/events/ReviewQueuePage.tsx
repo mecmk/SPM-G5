@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { formatApiError, mediaUrl } from '../api/client'
-import { listAssignedEvents, type AssignedEventEntry, type AssignedEventList } from '../api/events'
+import { listAssignedEvents, type AssignedEventEntry } from '../api/events'
 import { EmptyState } from '../components/EmptyState'
 import { EventCard, EventCardGrid } from '../components/EventCard'
 import { EventStatusBadge } from '../components/EventStatusBadge'
@@ -8,7 +8,6 @@ import { PageHeader } from '../components/PageHeader'
 import { Tabs, type TabItem } from '../components/Tabs'
 import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_INBOX_PATH, eventPath } from '../routes'
-import { replacementRequestedLine, VENUE_UNAVAILABLE_LABEL } from '../shared/bookingStatus'
 import { eventStatusTab, EVENT_STATUS_TABS, type EventStatusTabKey } from '../shared/eventStatus'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
@@ -16,12 +15,6 @@ import { useLoaded } from '../shared/useLoaded'
 const BACK_TO_INBOX = { from: EVENTS_INBOX_PATH, fromLabel: 'Events inbox' }
 
 type SortKey = 'submitted_at' | 'starts_at'
-
-/** Story 12.6 AC11: the tab of the events with a booking marked "Venue unavailable", beside the
- *  statuses'. Its count and its list come from the server, so they are right whichever page is
- *  loaded: the status tabs' own are counted in the browser over the pages loaded so far. */
-const VENUE_UNAVAILABLE_TAB = 'VENUE_UNAVAILABLE'
-type InboxTabKey = EventStatusTabKey | typeof VENUE_UNAVAILABLE_TAB
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'submitted_at', label: 'Submission date' },
@@ -72,90 +65,41 @@ export function ReviewQueuePage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   // Each list has its own Load more, so each keeps its own failure: one list's is not the other's.
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
-  const [unavailableLoadMoreError, setUnavailableLoadMoreError] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('submitted_at')
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<InboxTabKey>('ALL')
-  // Story 12.6 AC11: the Venue unavailable tab's own list, asked of the server when it opens.
-  const [unavailable, setUnavailable] = useState<AssignedEventList | null>(null)
-  const [unavailableError, setUnavailableError] = useState<string | null>(null)
-  const isUnavailableTab = tab === VENUE_UNAVAILABLE_TAB
-
-  useEffect(() => {
-    if (!isUnavailableTab) return undefined
-    let cancelled = false
-    listAssignedEvents(0, true)
-      .then((first) => {
-        if (!cancelled) setUnavailable(first)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setUnavailableError(formatApiError(err))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isUnavailableTab])
-
-  /** Story 12.6 AC11: opening the Venue unavailable tab starts its list afresh - an earlier failed
-   *  load's alert is not this load's, and the tab shows its loading state until the list answers. */
-  function openTab(next: InboxTabKey) {
-    // Pressing the tab that is already open changes nothing, so nothing is fetched again.
-    if (next === tab) return
-    if (next === VENUE_UNAVAILABLE_TAB) {
-      setUnavailableError(null)
-      setUnavailableLoadMoreError(null)
-      setUnavailable(null)
-    }
-    setTab(next)
-  }
-
-  const shownList = isUnavailableTab ? unavailable : list
+  const [tab, setTab] = useState<EventStatusTabKey>('ALL')
   const items = useMemo(() => list?.items ?? [], [list])
-  const shownItems = useMemo(() => shownList?.items ?? [], [shownList])
-  const unavailableCount =
-    unavailable?.venue_unavailable_count ?? list?.venue_unavailable_count ?? 0
-  const tabs = useMemo<TabItem<InboxTabKey>[]>(
-    () => [
-      ...EVENT_STATUS_TABS.map((item) => ({
+  const tabs = useMemo<TabItem<EventStatusTabKey>[]>(
+    () =>
+      EVENT_STATUS_TABS.map((item) => ({
         key: item.key,
         label: `${item.label} (${item.key === 'ALL' ? items.length : items.filter((entry) => eventStatusTab(entry.status) === item.key).length})`,
       })),
-      { key: VENUE_UNAVAILABLE_TAB, label: `Venue unavailable (${unavailableCount})` },
-    ],
-    [items, unavailableCount],
+    [items],
   )
   const shownEntries = useMemo(() => {
     const byTab =
-      tab === 'ALL' || tab === VENUE_UNAVAILABLE_TAB
-        ? shownItems
-        : shownItems.filter((entry) => eventStatusTab(entry.status) === tab)
+      tab === 'ALL' ? items : items.filter((entry) => eventStatusTab(entry.status) === tab)
     return byTab.filter((entry) => matchesSearch(entry, search)).sort(byField(sort))
-  }, [shownItems, tab, search, sort])
+  }, [items, tab, search, sort])
 
   const handleLoadMore = useCallback(async () => {
-    if (shownList === null) return
-    const setError = isUnavailableTab ? setUnavailableLoadMoreError : setLoadMoreError
+    if (list === null) return
     setIsLoadingMore(true)
-    setError(null)
+    setLoadMoreError(null)
     try {
-      const next = await listAssignedEvents(shownList.items.length, isUnavailableTab)
-      const more = (current: AssignedEventList | null) =>
+      const next = await listAssignedEvents(list.items.length)
+      setList((current) =>
         current === null
           ? current
-          : {
-              ...current,
-              items: withoutRepeats(current.items, next.items),
-              total: next.total,
-              venue_unavailable_count: next.venue_unavailable_count,
-            }
-      if (isUnavailableTab) setUnavailable(more)
-      else setList(more)
+          : { ...current, items: withoutRepeats(current.items, next.items), total: next.total },
+      )
     } catch (err) {
-      setError(formatApiError(err))
+      setLoadMoreError(formatApiError(err))
     } finally {
       setIsLoadingMore(false)
     }
-  }, [shownList, isUnavailableTab, setList])
+  }, [list, setList])
 
   function clearSearch() {
     setSearch('')
@@ -178,7 +122,7 @@ export function ReviewQueuePage() {
 
       {list !== null && (
         <div className="stack">
-          <Tabs tabs={tabs} activeKey={tab} onChange={openTab} />
+          <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
 
           <div className="filter-bar">
             <label className="filter-grow">
@@ -202,22 +146,9 @@ export function ReviewQueuePage() {
             </label>
           </div>
 
-          {isUnavailableTab && unavailableError !== null && (
-            <p role="alert" className="error">
-              {unavailableError}
-            </p>
-          )}
-          {isUnavailableTab && unavailable === null && unavailableError === null && (
-            <LoadingState label="Loading events with an unavailable venue…" />
-          )}
-          {isUnavailableTab && unavailable !== null && unavailable.items.length === 0 && (
-            <EmptyState>No event of yours has a booking marked as unavailable.</EmptyState>
-          )}
-          {!isUnavailableTab && items.length === 0 && (
-            <EmptyState>No events are assigned to you yet.</EmptyState>
-          )}
+          {items.length === 0 && <EmptyState>No events are assigned to you yet.</EmptyState>}
 
-          {shownItems.length > 0 && shownEntries.length === 0 && (
+          {items.length > 0 && shownEntries.length === 0 && (
             <EmptyState>
               No requests match your search.{' '}
               <button type="button" className="link" onClick={clearSearch}>
@@ -242,27 +173,21 @@ export function ReviewQueuePage() {
                     entry.submitted_at
                       ? `Submitted ${formatDateTime(entry.submitted_at)}`
                       : 'Submission date not recorded',
-                    // Story 12.6 AC11: what a marked event needs, or which venue is asked for.
-                    ...(entry.pending_replacement_venue_name !== null
-                      ? [replacementRequestedLine(entry.pending_replacement_venue_name)]
-                      : entry.is_venue_unavailable
-                        ? [VENUE_UNAVAILABLE_LABEL]
-                        : []),
                   ]}
                 />
               ))}
             </EventCardGrid>
           )}
 
-          {(isUnavailableTab ? unavailableLoadMoreError : loadMoreError) && (
+          {loadMoreError && (
             <p role="alert" className="error">
-              {isUnavailableTab ? unavailableLoadMoreError : loadMoreError}
+              {loadMoreError}
             </p>
           )}
-          {shownList !== null && shownList.items.length < shownList.total && (
+          {list.items.length < list.total && (
             <div className="load-more">
               <p className="small muted">
-                Showing {shownList.items.length} of {shownList.total} events
+                Showing {list.items.length} of {list.total} events
               </p>
               <button
                 type="button"

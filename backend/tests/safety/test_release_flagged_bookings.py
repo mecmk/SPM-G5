@@ -1417,7 +1417,6 @@ def test_a_signed_out_visitor_cannot_release(client, db: Session, two_booked: Sc
     [
         (Users.VENUE_STAFF, "post", "reject", {"decision_reason": "No."}),
         (Users.COORDINATOR, "post", "withdraw", None),
-        (Users.COORDINATOR, "post", "replacements", {"venue_id": str(Venues.BOARDROOM)}),
         (Users.COORDINATOR, "post", "switch", {"venue_id": str(Venues.BOARDROOM)}),
         (
             Users.VENUE_STAFF,
@@ -1426,7 +1425,7 @@ def test_a_signed_out_visitor_cannot_release(client, db: Session, two_booked: Sc
             {"hold_expires_at": FAR_FUTURE.isoformat(), "hold_expiry_change_reason": "Later."},
         ),
     ],
-    ids=["reject", "withdraw", "replacement", "switch", "hold-expiry"],
+    ids=["reject", "withdraw", "switch", "hold-expiry"],
 )
 def test_nobody_can_reopen_a_released_booking(
     login_as, db: Session, two_booked: Scene, user, method, tail, body

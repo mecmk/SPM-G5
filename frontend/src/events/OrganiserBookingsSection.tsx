@@ -1,14 +1,8 @@
 import { useCallback } from 'react'
 import { listBookingsForOwnEvent } from '../api/bookings'
-import { Chip } from '../components/Chip'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import {
-  HOLD_EXPIRES_LABEL,
-  openHoldExpiry,
-  turnaroundLine,
-  VENUE_UNAVAILABLE_LABEL,
-} from '../shared/bookingStatus'
+import { HOLD_EXPIRES_LABEL, openHoldExpiry, turnaroundLine } from '../shared/bookingStatus'
 import {
   ADDITIONAL_VENUE,
   formatDate,
@@ -18,7 +12,7 @@ import {
 } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
-import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE, VENUE_UNAVAILABLE_NOTE } from './bookingOutcome'
+import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE } from './bookingOutcome'
 
 export interface OrganiserBookingsSectionProps {
   eventId: string
@@ -33,8 +27,8 @@ export interface OrganiserBookingsSectionProps {
  * decisions or who changed a hold. Organisers hold `bookings:read_own`, not `bookings:read`.
  *
  * CL-184: AC4 a booking over more than one day names both dates, as the event's schedule does
- * (f7.1.1); AC7 an open hold reads as held, not confirmed, with when it expires, and a booking
- * marked under 9.4 says so; AC9 the section is flagged when the safety review flags venue bookings.
+ * (f7.1.1); AC7 an open hold reads as held, not confirmed, with when it expires; AC9 the section
+ * is flagged when the safety review flags venue bookings.
  */
 export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookingsSectionProps) {
   const loadBookings = useCallback(() => listBookingsForOwnEvent(eventId), [eventId])
@@ -117,13 +111,6 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
                   <Icon name={bookingOutcome.icon} size={18} />
                   <div>
                     <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
-                    {booking.venue_unavailable_marked_at !== null && (
-                      <p>
-                        <Chip tone="warning" label={VENUE_UNAVAILABLE_LABEL} />
-                        <br />
-                        <span className="small muted">{VENUE_UNAVAILABLE_NOTE}</span>
-                      </p>
-                    )}
                     {openHold && (
                       <p>
                         <span className="fact-label">{HOLD_EXPIRES_LABEL}</span>

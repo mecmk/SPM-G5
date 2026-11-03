@@ -1,5 +1,14 @@
 """Story 12.6 - Request a replacement venue for an affected booking
 
+Retired by 9.5 (CL-193, 1 Nov 2026), kept as history: a venue closure now ends the bookings it
+covers, so nothing is marked and no replacement is requested. A booking already replaced still
+shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
+normal pending request once its original closes (9.5 AC8, CL-194).
+
+The tests that remain cover 12.6 AC3 and AC8 (approving a replacement raised before 9.5, which
+releases its original, and "Replaced by <venue>" shown only for an approved one) and, tagged
+9.5 AC8, approving one whose original has closed.
+
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
     coordinator selects "Find a replacement venue" on the event page. The catalogue opens
@@ -78,10 +87,8 @@ import pytest
 from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
-from app.auth.models import User
-from app.bookings import schemas as booking_schemas
 from app.bookings import service
-from app.bookings.models import BookingStatus, VenueBooking, marked_booking_conditions
+from app.bookings.models import BookingStatus, VenueBooking
 from app.common.audit import AuditLog
 from app.notifications.service import NotificationType
 from tests.support.factories import make_unavailability, make_user
@@ -90,12 +97,10 @@ from tests.support.replacement import (
     add_pending_replacement,
     approve,
     column,
-    created,
-    end_the_closure,
     make_scenario,
     notifications_of,
     purge,
-    replace,
+    request_replacement,
     set_status,
 )
 from tests.support.seed import Users
@@ -117,7 +122,7 @@ def _listed(client, scene) -> dict:
 @pytest.mark.story("12.6", ac=3)
 def test_approving_a_replacement_cancels_the_original_in_one_transaction(login_as, db):
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     approved_by, approved_at = scene.original.decided_by_id, scene.original.decided_at
 
     response = approve(login_as(Users.VENUE_STAFF), body["id"])
@@ -144,7 +149,7 @@ def test_a_refused_approval_leaves_the_original_approved(login_as, db, why):
     """The release is part of the approval, not a step before it: when the approval is refused the
     original is as it was and the replacement still pending."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     extra = {}
     if why == "expiry_in_the_past":
         extra = {"hold_expires_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat()}
@@ -168,7 +173,7 @@ def test_a_refused_approval_leaves_the_original_approved(login_as, db, why):
 @pytest.mark.story("12.6", ac=3)
 def test_the_approval_notice_says_the_original_was_released(login_as, db):
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
 
     approve(login_as(Users.VENUE_STAFF), body["id"])
 
@@ -187,7 +192,7 @@ def test_other_venue_staff_are_told_the_original_was_released_and_the_organiser_
 ):
     colleague = make_user(db, role="VENUE_STAFF")
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     before = len(notifications_of(db, colleague.id, event_id=scene.event.id))
 
     approve(login_as(Users.VENUE_STAFF), body["id"])
@@ -212,7 +217,7 @@ def test_other_venue_staff_are_told_the_original_was_released_and_the_organiser_
 @pytest.mark.story("12.6", ac=3)
 def test_the_release_is_audited(login_as, db):
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
 
     approve(login_as(Users.VENUE_STAFF), body["id"])
 
@@ -230,7 +235,7 @@ def test_the_release_is_audited(login_as, db):
 def test_a_reassigned_coordinator_is_told_of_the_approval(login_as, db):
     """The approval notice goes to whoever holds the event when Venue Staff decide (20.1 AC4)."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     scene.event.assigned_coordinator_id = Users.COORDINATOR_2.id
     db.flush()
 
@@ -254,7 +259,7 @@ def test_a_reassigned_coordinator_is_told_of_the_approval(login_as, db):
 @pytest.mark.parametrize("state", ["pending", "rejected", "withdrawn", "approved"])
 def test_the_event_list_shows_replaced_by_only_for_an_approved_replacement(login_as, db, state):
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     if state == "rejected":
         login_as(Users.VENUE_STAFF).post(
             f"{BOOKINGS_PATH}/{body['id']}/reject", json={"decision_reason": "Not free."}
@@ -278,7 +283,7 @@ def test_replaced_by_stays_once_an_approved_replacement_later_closes(login_as, d
     """Which booking replaced the original is a fact of the approval: it does not depend on the
     replacement still being approved."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     assert approve(login_as(Users.VENUE_STAFF), body["id"]).status_code == 200
     set_status(db, uuid.UUID(body["id"]), later)
 
@@ -294,10 +299,10 @@ def test_two_approvals_at_once_release_the_original_once(engine):
     original; the other finds it no longer pending."""
     with Session(engine) as session:
         scene = make_scenario(session)
+        replacement_id = uuid.UUID(request_replacement(session, scene)["id"])
         session.commit()
         original_id, event_id = scene.original.id, scene.event.id
         venue_ids = [scene.original_venue.id, scene.alternative.id]
-        alternative_id = scene.alternative.id
     start = threading.Barrier(2)
 
     def approve_it(replacement_id) -> str:
@@ -316,16 +321,6 @@ def test_two_approvals_at_once_release_the_original_once(engine):
             return "approved"
 
     try:
-        with Session(engine) as session:
-            actor = session.get(User, Users.COORDINATOR.id)
-            original = service.get_booking_for_decision(session, original_id)
-            replacement = service.request_replacement_booking(
-                session,
-                original,
-                booking_schemas.BookingReplacementIn(venue_id=alternative_id),
-                actor=actor,
-            )
-            replacement_id = replacement.id
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = [pool.submit(approve_it, replacement_id) for _ in range(2)]
             outcomes = sorted(future.result(timeout=30) for future in futures)
@@ -349,7 +344,7 @@ def test_a_released_original_carries_the_time_it_was_released(login_as, db):
     approval, which its decided_at still is: the outcome carries the release time, derived from
     the replacement that released it, and only for an original that was released."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     before = _listed(login_as(Users.COORDINATOR), scene)
     assert before[str(scene.original.id)]["released_at"] is None
 
@@ -368,7 +363,7 @@ def test_an_additional_venues_replacement_releases_its_original_when_approved(lo
     original is CANCELLED and linked, so it leaves the Venue unavailable tab and stops blocking the
     safety review - the one-per-requirement index never comes into it."""
     scene = make_scenario(db, additional=True)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
 
     assert approve(login_as(Users.VENUE_STAFF), body["id"]).status_code == 200
 
@@ -379,15 +374,6 @@ def test_an_additional_venues_replacement_releases_its_original_when_approved(lo
     )
     assert str(column(db, original.id, "replaced_by_booking_id")) == body["id"]
     assert _outcome_of(db, uuid.UUID(body["id"])).status == BookingStatus.APPROVED
-    db.expire_all()
-    assert (
-        db.scalar(
-            select(func.count())
-            .select_from(VenueBooking)
-            .where(VenueBooking.event_id == scene.event.id, *marked_booking_conditions())
-        )
-        == 0
-    )
 
 
 @pytest.mark.story("12.6", ac=3)
@@ -397,7 +383,7 @@ def test_an_approval_locks_the_original_before_the_replacement(login_as, db):
     could deadlock with them. ``get_booking_for_approval`` locks the original, then the
     replacement. (19.2 takes the event's row before either; approval takes no event row.)"""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     replacement_id = uuid.UUID(body["id"])
     locked: list[list[uuid.UUID]] = []
 
@@ -422,7 +408,7 @@ def test_the_approve_endpoint_locks_the_original_before_the_replacement(login_as
     break without touching ``get_booking_for_approval``: its locks of a booking by id - the sweep
     that opens every booking endpoint locks by time - are the original's, then the replacement's."""
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     replacement_id = uuid.UUID(body["id"])
     staff = login_as(Users.VENUE_STAFF)
     locked: list[list[uuid.UUID]] = []
@@ -447,18 +433,6 @@ def test_the_approve_endpoint_locks_the_original_before_the_replacement(login_as
 
 
 # --- AC6: approved after the unavailability ended ------------------------------------------------
-@pytest.mark.story("12.6", ac=6)
-def test_approving_a_replacement_after_the_mark_cleared_still_replaces_the_original(login_as, db):
-    scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
-    end_the_closure(login_as, scene)
-    assert column(db, scene.original.id, "venue_unavailable_marked_at") is None
-
-    response = approve(login_as(Users.VENUE_STAFF), body["id"])
-
-    assert response.status_code == 200, response.text
-    assert _outcome_of(db, scene.original.id).status == BookingStatus.CANCELLED
-    assert str(column(db, scene.original.id, "replaced_by_booking_id")) == body["id"]
 
 
 # --- AC8: never approved, never "replaced" -------------------------------------------------------
@@ -466,32 +440,37 @@ def test_approving_a_replacement_after_the_mark_cleared_still_replaces_the_origi
 def test_a_never_approved_replacement_is_not_shown_as_replacing_when_both_are_cancelled(
     login_as, db
 ):
-    """The event is cancelled and both bookings end CANCELLED, as a cancellation would leave
-    them. The replacement was never approved, so nothing says the original was replaced."""
+    """12.6 AC8 and CL-194 (8). Both bookings end CANCELLED, the original first, while the
+    replacement is still pending: closing the original cleared the replacement's link to it, so
+    when the replacement is cancelled in turn it is not shown as having replaced anything, and the
+    original never reads "Replaced by" it, as the replacement was never approved."""
     scene = make_scenario(db)
     replacement = add_pending_replacement(db, scene)
     set_status(db, scene.original.id, BookingStatus.CANCELLED)
     set_status(db, replacement.id, BookingStatus.CANCELLED)
+    assert column(db, replacement.id, "replaces_booking_id") is None
 
     listed = _listed(login_as(Users.COORDINATOR), scene)
 
     assert listed[str(scene.original.id)]["replaced_by_venue_name"] is None
-    assert listed[str(replacement.id)]["replaces_venue_name"] == scene.original_venue.name
+    assert listed[str(replacement.id)]["replaces_venue_name"] is None
 
 
 # --- AC3: the original closed first ------------------------------------------------------------
-@pytest.mark.story("12.6", ac=3)
+@pytest.mark.story("9.5", ac=8)
 @pytest.mark.parametrize("closed_as", [BookingStatus.EXPIRED, BookingStatus.CANCELLED])
 def test_approving_a_replacement_whose_original_is_already_closed_approves_alone(
     login_as, db, closed_as
 ):
-    """The original lapsed (12.7) or was cancelled by another path while the replacement waited:
-    the approval is the replacement's alone. Nothing is released, nothing says it was, and Venue
-    Staff are told of no release."""
+    """The original lapsed (12.7), was cancelled by a closure (9.5) or by another path while the
+    replacement waited: the replacement is a normal pending request, its link to the original
+    gone (CL-194 (8)), and its approval is its own alone. Nothing is released, nothing says it
+    was, and Venue Staff are told of no release (D12)."""
     colleague = make_user(db, role="VENUE_STAFF")
     scene = make_scenario(db)
-    body = created(replace(login_as(Users.COORDINATOR), scene.original.id, scene.alternative))
+    body = request_replacement(db, scene)
     set_status(db, scene.original.id, closed_as)
+    assert column(db, uuid.UUID(body["id"]), "replaces_booking_id") is None
     reason_before = _outcome_of(db, scene.original.id).decision_reason
     before = len(notifications_of(db, colleague.id, event_id=scene.event.id))
 

@@ -213,6 +213,7 @@ def test_accepted_tab_lists_events_whose_latest_review_approved_them(safety_clie
     assert _ids(safety_client, "ACCEPTED") == [
         *(str(event) for event in EARLIER_ACCEPTED),
         str(Events.FOOD_FESTIVAL),
+        str(Events.CLOSURE_CONFIRMED),
     ]
 
 
@@ -227,7 +228,8 @@ def test_declined_tab_lists_events_sent_back_and_not_yet_resent(safety_client):
 def test_all_tab_lists_every_tab_oldest_first(safety_client):
     """By when each last entered the check: c8's earlier ones, night walk 4 Oct, food festival
     5 Oct 09:00, data summit 5 Oct 12:00, concert 10 Oct, book fair 11 Oct, cyber clinic 12 Oct,
-    AI workshop 13 Oct.
+    AI workshop 13 Oct; story 9.5's alumni brunch, approved with no entry into the check on record,
+    last.
     """
     assert _ids(safety_client, tab=None) == [
         *(str(event) for event in EARLIER_ACCEPTED),
@@ -238,6 +240,7 @@ def test_all_tab_lists_every_tab_oldest_first(safety_client):
         str(Events.BOOK_FAIR),
         str(Events.CYBER_CLINIC),
         str(Events.AI_WORKSHOP),
+        str(Events.CLOSURE_CONFIRMED),
     ]
 
 
@@ -249,6 +252,7 @@ def test_each_entry_says_which_tab_it_belongs_to(safety_client):
         **{str(event): "ACCEPTED" for event in EARLIER_ACCEPTED},
         str(Events.NIGHT_WALK): "DECLINED",
         str(Events.FOOD_FESTIVAL): "ACCEPTED",
+        str(Events.CLOSURE_CONFIRMED): "ACCEPTED",
         str(Events.HARBOUR_CONCERT): "PENDING",
         str(Events.BOOK_FAIR): "PENDING",
         str(Events.DATA_SUMMIT): "DECLINED",

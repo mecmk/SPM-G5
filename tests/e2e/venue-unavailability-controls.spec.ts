@@ -14,9 +14,10 @@
  * 9.4 responsive: both pages are usable at 1280x720 and 390x844, which is the DoD's line and not
  *         an AC, so those two tests are titled for it.
  *
- * Nothing about 9.4's rules changes - the overlap, the marking, what End now and Remove do - so
- * the steps that add, edit, end and remove are venue-unavailability.spec.ts's, which reaches them
- * through the Edit venue page. This file only says where the controls are and are not.
+ * Nothing about 9.4's rules changes - the overlap, what End now and Remove do - so the steps that
+ * add, edit, end and remove are venue-unavailability.spec.ts's, which reaches them through the
+ * Edit venue page. What a saved closure does to the bookings it covers is 9.5's (CL-193), which
+ * replaced 9.4 AC3, AC4, AC6 (the marks) and AC10. This file only says where the controls are and are not.
  *
  * It makes its own closure, on the Garden Atrium (no booking; 9.4's venue for this), on a day
  * venue-unavailability.spec.ts leaves alone, and its tests run in order since the later ones read

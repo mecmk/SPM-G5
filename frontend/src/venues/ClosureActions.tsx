@@ -100,7 +100,7 @@ export function ClosureActions({ venueId, closure, now, onEdit, onChanged }: Clo
         >
           <p>
             The venue is available again from now. The closure stays on the calendar up to this
-            moment, and bookings it no longer overlaps stop being flagged.
+            moment, and the bookings it already ended stay ended.
           </p>
         </ConfirmDialog>
       )}
@@ -114,8 +114,8 @@ export function ClosureActions({ venueId, closure, now, onEdit, onChanged }: Clo
           onCancel={cancel}
         >
           <p>
-            This closure has not started, so it is removed from the calendar, and bookings it no
-            longer overlaps stop being flagged.
+            This closure has not started, so it is removed from the calendar, and the bookings it
+            already ended stay ended.
           </p>
         </ConfirmDialog>
       )}
