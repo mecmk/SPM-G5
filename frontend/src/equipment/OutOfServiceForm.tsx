@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { RequiredMark } from '../components/RequiredMark'
 import { ERROR_REGISTRY } from '../errors/registry'
 import {
+  CANCEL,
   formatSchedule,
   inputToInstant,
   instantToInput,
@@ -391,7 +392,7 @@ export function OutOfServiceForm({
           </button>
           {editing !== null && (
             <button type="button" className="secondary" disabled={isSaving} onClick={onCancel}>
-              Cancel
+              {CANCEL}
             </button>
           )}
         </div>

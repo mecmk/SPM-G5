@@ -23,7 +23,13 @@ import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { KEPT_FOR_RECORD_STATUSES } from '../shared/equipmentStatus'
 import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
-import { formatDateTime, inputToInstant, instantToInput, shortReference } from '../shared/format'
+import {
+  CANCEL,
+  formatDateTime,
+  inputToInstant,
+  instantToInput,
+  shortReference,
+} from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
@@ -854,7 +860,7 @@ export function ChangeRequestsSection({
               {isSending ? 'Sending…' : 'Send change request'}
             </button>
             <button type="button" className="secondary" disabled={isSending} onClick={closeForm}>
-              Cancel
+              {CANCEL}
             </button>
           </div>
         </form>

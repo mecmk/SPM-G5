@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { CANCEL } from '../shared/format'
 
 export interface ConfirmDialogProps {
   title: string
@@ -43,7 +44,7 @@ export function ConfirmDialog({
   onCancel,
   tone = 'danger',
   canConfirm = true,
-  cancelLabel = 'Cancel',
+  cancelLabel = CANCEL,
   errorId,
   className,
 }: ConfirmDialogProps) {
