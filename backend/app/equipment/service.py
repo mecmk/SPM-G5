@@ -2078,10 +2078,13 @@ def _singapore_midnight(day: date) -> datetime:
 
 
 def hold_window(from_date: date | None, to_date: date | None) -> HoldWindow:
-    """AC3: the moments a range from ``from_date`` to ``to_date``, both days included, covers."""
+    """AC3: the moments a range from ``from_date`` to ``to_date``, both days included, covers. A
+    range ending on the last day there is (``date.max``) has no midnight after it, so it is open at
+    its end, as a range with no end is."""
+    is_open_ended = to_date is None or to_date == date.max
     return HoldWindow(
         starts_at=None if from_date is None else _singapore_midnight(from_date),
-        ends_at=None if to_date is None else _singapore_midnight(to_date + timedelta(days=1)),
+        ends_at=None if is_open_ended else _singapore_midnight(to_date + timedelta(days=1)),
     )
 
 

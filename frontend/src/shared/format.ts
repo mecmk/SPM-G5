@@ -114,10 +114,17 @@ export function nowAsInput(): string {
 
 const DATE_INPUT = /^\d{4}-\d{2}-\d{2}$/
 
-/** Story 17.3 AC3: whether the server can read a date picker's value as a day. A picker can hold a
- *  year of five or six digits, which the server cannot. */
+/** Story 17.3 AC3: whether the server can read a value as a day: a picker's, or one from the page
+ *  address. A picker can hold a year of five or six digits, which the server cannot, and an
+ *  address can hold a day its month does not have, which `Date.parse` rolls into the next month,
+ *  so the day must read back as itself. */
 export function isReadableDate(inputValue: string): boolean {
-  return DATE_INPUT.test(inputValue) && !Number.isNaN(Date.parse(inputValue))
+  if (!DATE_INPUT.test(inputValue)) return false
+  const parsed = Date.parse(inputValue)
+  return (
+    !Number.isNaN(parsed) &&
+    new Date(parsed).toISOString().slice(0, 'YYYY-MM-DD'.length) === inputValue
+  )
 }
 
 /** Today in Singapore as a date picker's value ("2026-11-18"), e.g. for its `min`. */

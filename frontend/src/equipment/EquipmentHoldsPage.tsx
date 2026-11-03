@@ -121,6 +121,8 @@ interface HoldFiltersFormProps {
  * Story 17.3 AC3 - the schedule's filters: a type, and a range of days from and to. Show holds
  * applies them, once the form's own checks pass: each problem is announced (`role="alert"`) and
  * tied to its date, focus goes to the first, and nothing is sent. Clear filters shows every hold.
+ * A type the address names but the list does not offer - one the server refused, or any while the
+ * types load - is still what Show holds sends, so the box offers it, by its code.
  */
 function HoldFiltersForm({ applied, types, onApply, onClear }: HoldFiltersFormProps) {
   const ids = useId()
@@ -130,6 +132,7 @@ function HoldFiltersForm({ applied, types, onApply, onClear }: HoldFiltersFormPr
   const today = todayAsDateInput()
   const problems = isChecked ? problemsOf(values, unfinished, today) : null
   const problemId = (field: keyof Problems) => `${ids}-${field}-problem`
+  const isTypeOffered = values.type === ALL_TYPES || types.some((kind) => kind.code === values.type)
 
   function set(field: keyof EquipmentHoldFilters, value: string) {
     setValues((current) => ({ ...current, [field]: value }))
@@ -168,6 +171,7 @@ function HoldFiltersForm({ applied, types, onApply, onClear }: HoldFiltersFormPr
         Equipment type
         <select value={values.type} onChange={(e) => set('type', e.target.value)}>
           <option value={ALL_TYPES}>All types</option>
+          {!isTypeOffered && <option value={values.type}>{values.type}</option>}
           {types.map((kind) => (
             <option key={kind.code} value={kind.code}>
               {kind.name}
