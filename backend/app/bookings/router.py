@@ -2,7 +2,7 @@
 (story 13.1), searched and ordered (story 13.3), approval and rejection (stories 13.2, 13.2.1),
 the read endpoints 13.2 AC3 / 13.2.1 AC4 need to make the outcome visible to the requesting
 coordinator, withdrawing a request (story 12.2), an approved booking's hold expiry (story 12.7),
-a replacement for an approved booking whose venue became unavailable (story 12.6), and an
+the approval of a replacement raised before story 9.5 removed that request (story 12.6), and an
 organiser's read-only view of their own event's bookings (fix f7.1.2), and the coordinator
 cancelling an approved booking (story 12.8).
 
@@ -35,7 +35,6 @@ from app.bookings.schemas import (
     BookingQueueStatus,
     BookingReferenceData,
     BookingRejection,
-    BookingReplacementIn,
     BookingRequestIn,
     BookingStatusCounts,
     BookingSwitchIn,
@@ -315,8 +314,8 @@ def cancel_booking(
     """Story 12.8 AC1-AC9: the assigned coordinator cancels an approved booking with a reason - the
     release, Venue Staff's notice and any return to Planning together. Refused (422) without a
     reason, (403) for anyone but the event's assigned coordinator (AC8), (409) for a booking that
-    is not approved (AC8), one with a replacement pending (AC7) and once the event is within 24
-    hours of its set-up time (AC4), and (404) for an unknown booking.
+    is not approved (AC8) and once the event is within 24 hours of its set-up time (AC4), and (404)
+    for an unknown booking.
     """
     try:
         booking = service.cancel_booking(db, booking_id, payload, actor=actor)
@@ -326,66 +325,8 @@ def cancel_booking(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
     except service.BookingNotApproved as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.ReplacementPending as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.CancellingClosed as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    return BookingOut.model_validate(booking)
-
-
-@router.post(
-    "/{booking_id}/replacements", response_model=BookingOut, status_code=status.HTTP_201_CREATED
-)
-def request_replacement_booking(
-    booking_id: uuid.UUID,
-    payload: BookingReplacementIn,
-    db: DbSession,
-    actor: Annotated[CurrentUser, CanRequest],
-) -> BookingOut:
-    """Story 12.6 AC2: asks for another venue as the replacement of an approved booking whose venue
-    Venue Staff made unavailable - a new PENDING request linked to it, the original and the
-    event left as they are (AC4); its setup and teardown are the original's unless sent. AC9:
-    refused (403) for anyone but the event's assigned coordinator, (409) for a booking that is
-    not approved and still marked - a pending one is switched instead - and for an event that
-    takes no booking, a cancelled one included (AC8), and (404) for an unknown booking. AC10: one
-    pending replacement per original (409, naming its venue) and never the original's own venue
-    (409). As for any new request: (409, or 422 for a venue that does not suit without a
-    justification, AC7) when the new venue cannot take it.
-    """
-    try:
-        original = service.get_booking_for_switch(db, booking_id)
-    except service.BookingNotFound:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, BOOKING_NOT_FOUND_MESSAGE) from None
-    try:
-        booking = service.request_replacement_booking(db, original, payload, actor=actor)
-    except service.VenueNotFound:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, VENUE_NOT_FOUND_MESSAGE) from None
-    except service.NotAssignedCoordinator as exc:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
-    except service.EventNotBookable as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.BookingNotReplaceable as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.VenueNotBookable as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.ReplacementAtOriginalVenue as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.ReplacementAlreadyPending as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.RequirementAlreadyRequested as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.VenueHeld as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.VenueBlocked as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.VenueClosed as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.SetupStartsInThePast as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.HoldPeriodStarted as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
-    except service.JustificationRequired as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     return BookingOut.model_validate(booking)
 
 

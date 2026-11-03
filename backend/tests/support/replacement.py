@@ -78,7 +78,6 @@ def make_scenario(
     db: Session,
     *,
     status: str = BookingStatus.APPROVED,
-    marked: bool = True,
     additional: bool = False,
     event_status: str = EventStatus.PLANNING,
     coordinator_id: uuid.UUID = Users.COORDINATOR.id,
@@ -88,8 +87,8 @@ def make_scenario(
     """The scene of 12.6: a Planning event for 40 people, assigned to Chloe, 10:00-16:00 in
     Singapore ``days`` from now, with one booking of a venue of its own - 30 minutes of setup and
     teardown, approved with its hold running until two days before - for its one requirement
-    ("Main hall"), or an additional venue with ``additional``. ``marked`` is the 9.4 mark.
-    ``alternative`` is a second venue that suits the requirement and is free for the period."""
+    ("Main hall"), or an additional venue with ``additional``. ``alternative`` is a second venue
+    that suits the requirement and is free for the period."""
     starts_at, ends_at = when(days, 2), when(days, 8)
     event = make_event(
         db,
@@ -118,7 +117,6 @@ def make_scenario(
         "teardown_minutes": TEARDOWN_MINUTES,
         "expected_attendance": 40,
         "required_layout_code": None if additional else "CLASSROOM",
-        "venue_unavailable_marked_at": datetime.now(UTC) - timedelta(hours=1) if marked else None,
     }
     if is_approved:
         fields |= {
@@ -143,13 +141,6 @@ def make_scenario(
         alternative=hall(db),
         starts_at=starts_at,
         ends_at=ends_at,
-    )
-
-
-def replace(client, original_id: uuid.UUID, venue: Venue, **extra):
-    """``POST /bookings/{id}/replacements``: ask for ``venue`` to replace the booking."""
-    return client.post(
-        f"{BOOKINGS_PATH}/{original_id}/replacements", json={"venue_id": str(venue.id), **extra}
     )
 
 
@@ -200,6 +191,14 @@ def add_pending_replacement(
     return db.get(VenueBooking, row)
 
 
+def request_replacement(db: Session, scenario: Scenario, venue: Venue | None = None) -> dict:
+    """A pending replacement for the scenario's original, as ``POST /bookings/{id}/replacements``
+    left one before story 9.5 removed that route (D2): the row in SQL, returned as the
+    ``{"id": ...}`` body the tests read. The replacement a request raised before 9.5 leaves
+    behind is all that is left of the feature, so a test that needs one writes it."""
+    return {"id": str(add_pending_replacement(db, scenario, venue=venue).id)}
+
+
 def column(db: Session, booking_id: uuid.UUID, name: str):
     """One column of a booking, read in SQL after the trigger has written it, so the value is the
     database's and not a session's stale one."""
@@ -220,25 +219,6 @@ def set_status(db: Session, booking_id: uuid.UUID, status: str) -> None:
         {"id": booking_id, "status": status},
     )
     db.expire_all()
-
-
-def end_the_closure(login_as, scene: Scenario) -> None:
-    """Venue Staff close the original's venue over the booking and then remove that closure, as
-    9.4 AC6 allows while it has not started: the booking's mark clears. Leaves the session signed
-    in as Venue Staff."""
-    staff = login_as(Users.VENUE_STAFF)
-    url = f"/venues/{scene.original_venue.id}/unavailability"
-    period = staff.post(
-        url,
-        json={
-            "starts_at": (scene.starts_at - timedelta(days=1)).isoformat(),
-            "ends_at": (scene.ends_at + timedelta(days=1)).isoformat(),
-            "reason": "MAINTENANCE",
-            "description": "Floor resurfacing",
-        },
-    )
-    assert period.status_code == 201, period.text
-    assert staff.delete(f"{url}/{period.json()['id']}").status_code == 204
 
 
 def notifications_of(db: Session, recipient_id: uuid.UUID, *, event_id: uuid.UUID) -> list:

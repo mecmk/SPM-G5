@@ -1,5 +1,14 @@
 """Story 12.6 - Request a replacement venue for an affected booking
 
+Retired by 9.5 (CL-193, 1 Nov 2026), kept as history: a venue closure now ends the bookings it
+covers, so nothing is marked and no replacement is requested. A booking already replaced still
+shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
+normal pending request once its original closes (9.5 AC8, CL-194).
+
+The tests that remain cover 12.6 AC2, AC3 and AC10 (the replacement's link and the database
+rules behind it, including the carve-out) and, tagged 9.5 AC8, the trigger that clears the link
+when the original stops holding.
+
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
     coordinator selects "Find a replacement venue" on the event page. The catalogue opens
@@ -204,20 +213,25 @@ def test_a_second_pending_replacement_of_one_original_is_refused_by_the_database
     assert "uq_venue_bookings_one_pending_replacement" in str(refused.value.orig)
 
 
-@pytest.mark.story("12.6", ac=10)
+@pytest.mark.story("9.5", ac=8)
 @pytest.mark.parametrize(
     "stops_as", [BookingStatus.EXPIRED, BookingStatus.CANCELLED, BookingStatus.WITHDRAWN]
 )
-def test_the_trigger_clears_the_carve_out_when_the_original_stops_holding(db, stops_as):
-    """By any path: the pending replacement then counts as the requirement's request, so the index
-    refuses a normal one beside it."""
+def test_the_trigger_clears_the_carve_out_and_the_link_when_the_original_stops_holding(
+    db, stops_as
+):
+    """By any path (a closure, a hold expiry, 12.8's cancel, 6.2): the pending replacement loses
+    the link to its original as well as the carve-out (CL-194 (8)), so it is a normal pending
+    request for the requirement and the index refuses a second one beside it."""
     scene = make_scenario(db)
     replacement = add_pending_replacement(db, scene)
     assert column(db, replacement.id, "replaces_live_original") is True
+    assert column(db, replacement.id, "replaces_booking_id") == scene.original.id
 
     set_status(db, scene.original.id, stops_as)
 
     assert column(db, replacement.id, "replaces_live_original") is False
+    assert column(db, replacement.id, "replaces_booking_id") is None
     with pytest.raises(IntegrityError) as refused:
         make_booking(
             db,
@@ -248,7 +262,7 @@ def test_the_trigger_leaves_the_carve_out_while_the_original_still_holds(db):
     assert column(db, replacement.id, "replaces_live_original") is True
 
 
-@pytest.mark.story("12.6", ac=10)
+@pytest.mark.story("9.5", ac=8)
 def test_the_trigger_touches_only_the_closed_originals_replacements(db):
     closing, staying = make_scenario(db), make_scenario(db)
     closed_one = add_pending_replacement(db, closing)
@@ -257,4 +271,6 @@ def test_the_trigger_touches_only_the_closed_originals_replacements(db):
     set_status(db, closing.original.id, BookingStatus.EXPIRED)
 
     assert column(db, closed_one.id, "replaces_live_original") is False
+    assert column(db, closed_one.id, "replaces_booking_id") is None
     assert column(db, other.id, "replaces_live_original") is True
+    assert column(db, other.id, "replaces_booking_id") == staying.original.id

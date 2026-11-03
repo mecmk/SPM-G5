@@ -8,37 +8,36 @@
  *      the month grid's chip names the reason, or the description for Other.
  * AC5  An end not after the start is refused in the form, before anything is sent.
  * AC2  Before Save, the bookings the closure would affect are listed; Save waits for the list and
- *      is blocked when it cannot be had; Save still goes through with bookings in the way.
- * AC3  A flagged booking reads "Venue unavailable – alternative needed" on its event's page, and
- *      on its request's page whatever its status.
+ *      is blocked when it cannot be had. (Extended by 9.5 AC1, CL-193: the list asks for a
+ *      confirmation; tests/e2e/venue-closure-ends-bookings.spec.ts.)
+ * AC3  (Replaced by 9.5 AC2 and AC3, CL-193: a closure ends the bookings it covers instead of
+ *      flagging them.)
  * AC6  A closure is edited, then ended, from the day it falls on, each action saying what it does;
  *      an ended one shows as "Ended", muted, with no actions;
  *      editing one that was removed meanwhile says so.
- * AC7  Venue Staff's request page and queue card say a flagged request is unavailable, and
- *      Approve is held back.
+ * AC7  A request a closure covers cannot be approved while it stands; the backend refuses it
+ *      (backend/tests/venues/test_venue_unavailability.py), and no longer marks it.
  * AC9  Only Venue Staff see the Block off time card; the coordinator and the Safety Officer see
  *      the calendar, on the venue's details page, and no way to change it.
  *
- * The rules - the reasons and the Other description, what overlaps, the event's return to
- * Planning, who is told, the refusal to approve, the races - are backend cases:
- * backend/tests/venues/test_venue_unavailability.py. This file is the flow a person clicks.
+ * The rules - the reasons and the Other description, what overlaps, the refusal to approve, the
+ * races - are backend cases: backend/tests/venues/test_venue_unavailability.py. What a saved
+ * closure does to the bookings it covers is story 9.5's. This file is the flow a person clicks.
  *
  * Seed (backend/db/seed/020_sample_data.sql), dedicated to this spec so a closure cannot touch
- * any other spec's calendar or approvals: Garden Atrium has no booking; Harbour Pavilion holds the
- * Community Choir Showcase's pending request (14 Oct 2028, 18:00-21:00); Sunrise Studio holds the
- * Neighbourhood Art Market's (21 Oct 2028, 10:00-16:00). The tests that add a closure over a
- * booking leave it flagged, so they run once, each on its own venue.
+ * any other spec's calendar or approvals: Garden Atrium has no booking. Harbour Pavilion and
+ * Sunrise Studio hold the Community Choir Showcase's and the Neighbourhood Art Market's pending
+ * requests, which no spec closes over any more.
  *
- * The calendar opens on the current month, and the seeded bookings are in October 2028, so those
- * tests pin the page's own clock to 10 October 2028. Only the browser's Date moves; the server
+ * The calendar opens on the current month, so the tests pin the page's own clock to 10 October
+ * 2028. Only the browser's Date moves; the server
  * keeps real time, which is why a closure over October 2028 is still "not started" for it. The
  * test that ends a closure needs one already started by the server's clock, so it keeps the real
  * one and works on today.
  */
-import { expect, test, type Browser, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Browser, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
-  EVENTS,
   VENUES,
   corsHeaders,
   inFuture,
@@ -84,24 +83,18 @@ interface SaveOptions {
   /** The form's own button, "Save closure" whether it adds or edits, so the Edit venue page has
    *  one Save changes - the venue's. */
   saveName?: string
-  /** The confirmation's button, which says what the form says: "Block off time" or "Edit blocked-off time". */
-  confirmName?: string
-  /** Read the confirmation, if it comes, before it is confirmed. */
-  onDialog?: (dialog: Locator) => Promise<void>
 }
 
 /**
- * Save the form and, when it would newly flag a booking, confirm the dialog. Called once the
- * affected list is showing, so whether the dialog comes is known: a booking already marked (a
- * retry, or another closure over it) is not newly flagged and asks nothing. Waits for the save to
- * land, so what follows reads the saved state.
+ * Save the form and, when it would end a booking, confirm the dialog (story 9.5 AC1). Called once
+ * the affected list is showing, so whether the dialog comes is known: it comes whenever the list
+ * names a booking. Waits for the save to land, so what follows reads the saved state.
  */
 async function saveClosure(page: Page, options: SaveOptions = {}) {
-  const { saveName = 'Save closure', confirmName = 'Block off time', onDialog } = options
+  const { saveName = 'Save closure' } = options
   const save = blockOff(page).getByRole('button', { name: saveName })
   await expect(save).toBeEnabled()
-  const hasBookings = (await blockOff(page).getByRole('listitem').count()) > 0
-  const wouldFlag = hasBookings && (await blockOff(page).getByText('Already marked').count()) === 0
+  const wouldFlag = (await blockOff(page).getByRole('listitem').count()) > 0
   const landed = page.waitForResponse(
     (response) =>
       /\/unavailability(\/[^/]+)?$/.test(new URL(response.url()).pathname) &&
@@ -109,9 +102,10 @@ async function saveClosure(page: Page, options: SaveOptions = {}) {
   )
   await save.click()
   if (wouldFlag) {
-    const dialog = page.getByRole('dialog')
-    await onDialog?.(dialog)
-    await dialog.getByRole('button', { name: confirmName }).click()
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Save and end these bookings' })
+      .click()
   }
   expect((await landed).ok()).toBe(true)
 }
@@ -164,26 +158,6 @@ async function fillClosure(page: Page, form: ClosureForm) {
   if (form.reason) await section.getByLabel('Reason').selectOption({ label: form.reason })
   // Every block off needs a description, so a case that is not about one gets a plain one.
   await section.getByLabel('Description').fill(form.description ?? DEFAULT_DESCRIPTION)
-}
-
-/**
- * A request's card in Venue Staff's queue, by the short id on it. The queue pages by ten and the
- * database is shared with specs that raise requests of their own, so the card may be on a later
- * page: press Next until it shows.
- */
-async function queueCard(page: Page, shortId: string) {
-  const card = page.getByRole('listitem').filter({ hasText: `#${shortId}` })
-  const pager = page.getByRole('navigation', { name: 'Pages' })
-  await expect(page.getByRole('heading', { name: 'Booking Requests' })).toBeVisible()
-  await expect(page.getByRole('listitem').first()).toBeVisible()
-  for (let turned = 0; turned < 20; turned += 1) {
-    if ((await card.count()) > 0) break
-    const next = pager.getByRole('button', { name: 'Next' })
-    if ((await pager.count()) === 0 || (await next.isDisabled())) break
-    await next.click()
-    await page.waitForLoadState('networkidle')
-  }
-  return card
 }
 
 /** A page signed in as `email` in a context of its own; close it with `page.context().close()`. */
@@ -276,118 +250,6 @@ test('9.4 AC2: Save waits for the affected bookings, and a failed check blocks i
   await blockOff(page).getByRole('button', { name: 'Check again' }).click()
   await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
   await expect(save).toBeEnabled()
-})
-
-test('9.4 AC2 and AC3: an edit that reaches a booking lists it, asks first, and the approved request shows the flag', async ({
-  page,
-}) => {
-  await page.clock.setFixedTime(PINNED_NOW)
-  await signIn(page, ACCOUNTS.venueStaff)
-
-  // Approve the choir showcase's request, so the closure hits an approved booking. A retry finds
-  // it approved already: look under Approved first.
-  await page.goto('/venue-staff/booking-requests')
-  await page.getByRole('tab', { name: /^Approved/ }).click()
-  if ((await (await queueCard(page, '00000020')).count()) === 0) {
-    await page.getByRole('tab', { name: /^Pending/ }).click()
-    const card = await queueCard(page, '00000020')
-    await card.getByRole('button', { name: 'Approve' }).click()
-    const approve = page.getByRole('dialog', { name: 'Approve this booking?' })
-    await approve.getByLabel('Hold expires').fill('2028-10-12T09:00')
-    await approve.getByRole('button', { name: 'Approve' }).click()
-    await expect(approve).not.toBeVisible()
-  }
-
-  // A closure that stops short of the booking: nothing is affected, and it saves.
-  await openVenue(page, VENUES.harbourPavilion)
-  const description = uniqueName('Pavilion roof')
-  await fillClosure(page, {
-    starts: '2028-10-12T08:00',
-    ends: '2028-10-13T08:00',
-    reason: 'Renovation',
-    description,
-  })
-  await expect(blockOff(page).getByText('No bookings are affected.')).toBeVisible()
-  await saveClosure(page)
-
-  // Editing it to run over the booking lists the booking before Save, and asks first.
-  await dayButton(page, /^12 October 2028/).click()
-  await page
-    .getByRole('listitem')
-    .filter({ hasText: description })
-    .getByRole('button', { name: 'Edit' })
-    .click()
-  await blockOff(page).getByLabel('Ends').fill('2028-10-15T20:00')
-  await expect(blockOff(page).getByRole('region', { name: 'Affected bookings' })).toContainText(
-    'Community Choir Showcase',
-  )
-  await saveClosure(page, {
-    confirmName: 'Edit blocked-off time',
-    onDialog: async (dialog) => {
-      await expect(
-        page.getByRole('dialog', { name: 'Edit blocked-off time at Harbour Pavilion' }),
-      ).toBeVisible()
-      await expect(dialog).toContainText('Community Choir Showcase')
-      await expect(dialog).toContainText(
-        'Confirmed or awaiting their safety check go back to Planning',
-      )
-    },
-  })
-  await dayButton(page, /^14 October 2028/).click()
-  await expect(dayList(page, /14 Oct 2028/)).toContainText('Unavailable – Renovation')
-
-  // AC3: the approved request's own page carries the flag, and no "cannot be approved" sentence.
-  await page.goto('/venue-staff/booking-requests')
-  await page.getByRole('tab', { name: /^Approved/ }).click()
-  const approved = await queueCard(page, '00000020')
-  await approved.getByRole('link', { name: 'View details' }).click()
-  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  const notice = page
-    .getByRole('status')
-    .filter({ hasText: 'Venue unavailable – alternative needed' })
-  await expect(notice).toBeVisible()
-  await expect(notice).not.toContainText('cannot be approved while the closure stands')
-})
-
-test('9.4 AC3 and AC7: a flagged booking reads "alternative needed" on its event, and Venue Staff cannot approve it', async ({
-  page,
-  browser,
-}) => {
-  await page.clock.setFixedTime(PINNED_NOW)
-  await signIn(page, ACCOUNTS.venueStaff)
-  await openVenue(page, VENUES.sunriseStudio)
-  await fillClosure(page, {
-    starts: '2028-10-21T09:00',
-    ends: '2028-10-21T17:00',
-    reason: 'Safety concern',
-  })
-  await expect(blockOff(page).getByRole('region', { name: 'Affected bookings' })).toContainText(
-    'Neighbourhood Art Market',
-  )
-  await saveClosure(page)
-  await expect(dayButton(page, /^21 October 2028/)).toBeVisible()
-
-  // AC3: the coordinator's event page flags the booking.
-  const coordinator = await signedInPage(browser, ACCOUNTS.coordinator)
-  await coordinator.goto(`/events/${EVENTS.artMarket}`)
-  await expect(coordinator.getByText('Venue unavailable – alternative needed')).toBeVisible()
-  await coordinator.context().close()
-
-  // AC7: Venue Staff's queue card carries the marker and holds Approve back.
-  await page.goto('/venue-staff/booking-requests')
-  const card = await queueCard(page, '00000021')
-  await expect(card).toContainText('Venue unavailable')
-  await expect(card.getByRole('button', { name: 'Approve' })).toBeDisabled()
-
-  // ... and so does the request's own page, with a notice saying why.
-  await card.getByRole('link', { name: 'View details' }).click()
-  await expect(page).toHaveURL(/\/venue-staff\/booking-requests\/[^/]+$/)
-  // The request page's notice has the status role; the queue's card text does not, so this waits
-  // for the page itself and not for the queue it was opened from.
-  await expect(
-    page.getByRole('status').filter({ hasText: /unavailable for part of this request/ }),
-  ).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Approve' })).toBeDisabled()
 })
 
 test('9.4 AC6: a closure in force is edited, then ended, and an ended one shows no actions', async ({
@@ -741,6 +603,13 @@ test('9.4 AC6: an edit the server refuses says why in the form, and the calendar
 
   await expect(blockOff(page).getByRole('alert')).toHaveText('This period has already ended.')
   await reloaded
+
+  // The failed change is reported under its own title, with the backend's sentence: the edit's
+  // 409s are not all the bookings-changed refusal of story 9.5 AC1.
+  const failure = page.getByRole('status').filter({ hasText: 'This period has already ended.' })
+  await expect(failure).toBeVisible()
+  await expect(failure).toContainText('Conflicting change')
+  await expect(failure).not.toContainText('Bookings changed')
 })
 
 test('9.4 AC6: a closure whose start has seconds is edited by the field that changed, and nothing else', async ({

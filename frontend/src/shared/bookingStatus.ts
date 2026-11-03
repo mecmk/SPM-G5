@@ -1,4 +1,5 @@
 import type { Booking, BookingStatus, BookingStatusCounts } from '../api/bookings'
+import { UNAVAILABILITY_REASON_NAMES } from '../api/venues'
 import { formatTime, NONE } from './format'
 
 export type BookingStatusTabKey =
@@ -9,19 +10,10 @@ export type BookingStatusTabKey =
 export const PENDING_BOOKING_STATUS: BookingStatus = 'PENDING'
 export const APPROVED_BOOKING_STATUS: BookingStatus = 'APPROVED'
 
-/** Story 9.4 AC3: how every page names a booking whose venue was marked unavailable for part of
- * its held period - the event's page, Venue Staff's queue card and the request's own page. */
-export const VENUE_UNAVAILABLE_LABEL = 'Venue unavailable – alternative needed'
-
-/** Story 12.6 AC1/AC9: the event page's way to a replacement for an approved marked booking, and
- * for a marked pending one (which is switched to another venue, 12.5) the way to the catalogue. */
-export const FIND_REPLACEMENT_LABEL = 'Find a replacement venue'
-export const FIND_ANOTHER_LABEL = 'Find another venue'
-
-/** Story 12.6 AC2-AC4: how every page words a replacement - on the replacement ("Replaces"), on
- * the original once an approved replacement released it ("Replaced by"), on the original while one
- * is pending, and in the banner for a marked requirement. AC3: what Venue Staff are told approving
- * will release; AC1: the banner of the catalogue opened to replace a booking. */
+/** Story 12.6 AC2-AC4, kept by story 9.5 AC7: how every page words a replacement raised before
+ * 9.5 - on the replacement ("Replaces"), on the original once an approved replacement released it
+ * ("Replaced by"), and on the original while one is pending. AC3: what Venue Staff are told
+ * approving will release. */
 export function replacesLine(venueName: string): string {
   return `Replaces ${venueName}`
 }
@@ -31,24 +23,9 @@ export function replacedByLine(venueName: string): string {
 export function replacementRequestedLine(venueName: string): string {
   return `Replacement requested: ${venueName}`
 }
-export function venueUnavailableLine(venueName: string): string {
-  return `Venue unavailable: ${venueName}`
-}
 export function approvalReleasesLine(venueName: string): string {
   return `Approving this releases ${venueName}`
 }
-export function replacingLine(venueName: string): string {
-  return `Replacing ${venueName}`
-}
-/** Story 12.6 AC10: what the catalogue says for an address that names a booking which already has
- *  a replacement pending, so no second one is offered. */
-export function replacementAlreadyRequestedLine(venueName: string): string {
-  return `${replacementRequestedLine(venueName)}. Withdraw it from the event page before asking for another.`
-}
-/** Story 12.6 AC1/AC9: what the catalogue says for an address that names a booking which is not
- *  an approved, marked booking any more, so it replaces nothing. */
-export const NO_LONGER_REPLACEABLE_LINE = 'That booking is no longer waiting for a replacement.'
-
 /** Story 21.3 AC2: how the event page and Venue Staff's pages say a booking the Safety Officer's
  * finding named was released, and what the event page adds to that. */
 export const RELEASED_BY_SAFETY_REVIEW_LABEL = 'Released by the safety review'
@@ -71,11 +48,34 @@ export function isCancelledByCoordinator(booking: Pick<Booking, 'release_cause'>
   return booking.release_cause === 'COORDINATOR_CANCELLED'
 }
 
-/** Story 21.3 AC2, story 12.8 AC2: the line naming who released a closed booking, for the two
- * releases that record why in their own words; null for any other booking. */
+/** Story 9.5 AC2: how the event page and Venue Staff's pages say a booking a venue closure
+ * cancelled was released, and what the event page adds to that. */
+export const CANCELLED_BY_CLOSURE_LABEL = 'Cancelled: the venue closed'
+export const CANCELLED_BY_CLOSURE_MESSAGE =
+  'A closure of the venue cancelled this booking, so the venue is free for other events.'
+
+/** Story 9.5 AC2: whether a venue closure cancelled this booking. */
+export function isCancelledByClosure(booking: Pick<Booking, 'release_cause'>): boolean {
+  return booking.release_cause === 'VENUE_UNAVAILABLE'
+}
+
+/** Story 9.5 AC2: "Reason: Maintenance", the closure's reason as the calendar names it, for a
+ * booking a closure cancelled; null for any other. A request a closure rejected says its reason
+ * as its decision reason, "Venue closed: Maintenance". */
+export function closureReasonLine(
+  booking: Pick<Booking, 'release_cause' | 'closure_reason'>,
+): string | null {
+  if (!isCancelledByClosure(booking) || booking.closure_reason === null) return null
+  return `Reason: ${UNAVAILABILITY_REASON_NAMES[booking.closure_reason]}`
+}
+
+/** Story 21.3 AC2, story 12.8 AC2, story 9.5 AC2: the line naming who released a closed booking,
+ * for the releases that record why in their own words or by their closure; null for any other
+ * booking. */
 export function releasedByLabel(booking: Pick<Booking, 'release_cause'>): string | null {
   if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_LABEL
   if (isCancelledByCoordinator(booking)) return CANCELLED_BY_COORDINATOR_LABEL
+  if (isCancelledByClosure(booking)) return CANCELLED_BY_CLOSURE_LABEL
   return null
 }
 
@@ -85,6 +85,7 @@ export function releasedByLabel(booking: Pick<Booking, 'release_cause'>): string
 export function closingReason(
   booking: Pick<Booking, 'decision_reason' | 'release_cause' | 'release_reason'>,
 ): string | null {
+  if (isCancelledByClosure(booking)) return null
   return releasedByLabel(booking) !== null ? booking.release_reason : booking.decision_reason
 }
 
@@ -194,7 +195,7 @@ export const BOOKING_STATUS_TABS: { key: BookingStatusTabKey; label: string; hin
   {
     key: 'CANCELLED',
     label: 'Cancelled',
-    hint: 'Released because the event was cancelled, a change to it no longer fit, a replacement venue was approved, a safety review released it, or the coordinator cancelled it. Read-only.',
+    hint: 'Released because the event was cancelled, a change to it no longer fit, a replacement venue was approved, a safety review released it, the coordinator cancelled it, or the venue closed. Read-only.',
   },
 ]
 
