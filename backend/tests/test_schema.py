@@ -625,6 +625,7 @@ def test_seed_constants_match_database(db: Session):
         ).one()
         assert (row.status, row.is_marked) == (status, is_marked)
     for period_id in (
+        Unavailability.MAINTENANCE_SEMINAR_ROOM_AHEAD,
         Unavailability.FOYER_LANTERN_SHOWCASE,
         Unavailability.FOYER_NEIGHBOURHOOD_SUMMIT,
     ):
