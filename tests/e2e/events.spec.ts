@@ -175,6 +175,39 @@ test('7.1 AC4/AC8: a two-day booking names both dates, and the section goes once
   await expect(organiserBookings(page)).toHaveCount(0)
 })
 
+/** f21.3.1: the date block of the coordinator's Venue booking card for the venue's booking. */
+function coordinatorCardSchedule(page: Page, venue: string) {
+  return page
+    .getByRole('region', { name: 'Venue booking', exact: true })
+    .locator('.booking-outcome-card')
+    .filter({ hasText: venue })
+    .locator('.booking-outcome-schedule')
+}
+
+test("f21.3.1 / 12.1 AC3: the coordinator's card names both dates of a multi-day booking", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.leadershipRetreat}`)
+
+  // Only the date text is read: the card's status changes once the test above cancels this event,
+  // and with fullyParallel this one can run before or after it.
+  await expect(coordinatorCardSchedule(page, 'Sunrise Studio')).toHaveText(
+    'Wed, 9 May 2029, 09:00 – Thu, 10 May 2029, 17:00',
+  )
+})
+
+test("f21.3.1: a one-day booking's card reads as before", async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  // The seeded Grand Hall booking, 25 Nov 2026 09:00-18:00: the date and the times in two pieces,
+  // and no second date. Only this block is read, as the line under it repeats the times.
+  const schedule = coordinatorCardSchedule(page, 'Grand Hall')
+  const items = schedule.locator('.booking-outcome-schedule-item')
+  await expect(items).toHaveText(['Wed, 25 Nov 2026', '09:00–18:00'])
+})
+
 test('7.1 AC1: a draft with no dates or attendance shows clear empty states', async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser)
   await page.goto(`/events/${EVENTS.draft}`)
