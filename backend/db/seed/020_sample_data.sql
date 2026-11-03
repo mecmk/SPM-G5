@@ -3258,6 +3258,7 @@ FROM (VALUES
     ('33333333-0000-0000-0000-000000000006', '/images/events/forum.jpg'),  -- Diversity & Inclusion Forum
     ('33333333-0000-0000-0000-000000012667', '/images/events/forum.jpg'),  -- Neighbourhood Summit
     ('33333333-0000-0000-0000-000000000014', '/images/events/forum.jpg'),  -- New Year Town Hall
+    ('33333333-0000-0000-0000-000000009507', '/images/events/forum.jpg'),  -- Product Forum
     ('33333333-0000-0000-0000-000000000009', '/images/events/forum.jpg'),  -- Product Roadmap Townhall
     ('33333333-0000-0000-0000-000000000018', '/images/events/forum.jpg'),  -- Quarterly Partner Briefing
     ('33333333-0000-0000-0000-000000012801', '/images/events/forum.jpg'),  -- Riverside Product Briefing
@@ -3266,6 +3267,7 @@ FROM (VALUES
     ('33333333-0000-0000-0000-000000000049', '/images/events/workshop.jpg'),  -- Applied AI Workshop
     ('33333333-0000-0000-0000-000000000030', '/images/events/workshop.jpg'),  -- Coastal Resilience Workshop
     ('33333333-0000-0000-0000-000000000050', '/images/events/workshop.jpg'),  -- Coding Bootcamp Day
+    ('33333333-0000-0000-0000-000000009504', '/images/events/workshop.jpg'),  -- Partner Workshop Afternoon
     ('33333333-0000-0000-0000-000000000019', '/images/events/workshop.jpg'),  -- Robotics Hands-on Workshop
     ('33333333-0000-0000-0000-000000012678', '/images/events/workshop.jpg'),  -- Robotics Open House
     -- Training, clinics and one-to-one sessions
@@ -3297,6 +3299,7 @@ FROM (VALUES
     ('33333333-0000-0000-0000-000000000026', '/images/events/gala.jpg'),  -- Year-End Partner Gala
     -- Mixers, breakfasts and networking
     ('33333333-0000-0000-0000-000000000017', '/images/events/networking.jpg'),  -- Alumni Homecoming Weekend
+    ('33333333-0000-0000-0000-000000009501', '/images/events/networking.jpg'),  -- Alumni Networking Brunch
     ('33333333-0000-0000-0000-000000000022', '/images/events/networking.jpg'),  -- Fintech Leaders Breakfast
     ('33333333-0000-0000-0000-000000000004', '/images/events/networking.jpg'),  -- Rooftop Networking Night
     ('33333333-0000-0000-0000-000000000041', '/images/events/networking.jpg'),  -- Startup Founders Fireside
