@@ -46,7 +46,7 @@ from app.auth.models import User
 from app.common.audit import AuditLog
 from app.config import settings
 from app.venues import service
-from app.venues.models import Venue
+from app.venues.models import Venue, VenueImage
 from tests.support.factories import venue_payload
 from tests.support.seed import Users, Venues
 
@@ -76,6 +76,15 @@ NOT_VENUE_STAFF = [
 def upload_dir(tmp_path: Path, monkeypatch) -> Path:
     monkeypatch.setattr(settings, "upload_dir", tmp_path)
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def venues_without_pictures(db: Session) -> None:
+    """The sample data gives each venue a picture served by the frontend. These tests count and
+    order the pictures a venue holds, so they start from venues with none (rolled back with the
+    test)."""
+    db.execute(delete(VenueImage))
+    db.flush()
 
 
 def _padded(header: bytes, size: int) -> bytes:

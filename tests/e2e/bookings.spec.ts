@@ -716,6 +716,7 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
   const booking = {
     venue_id: '00000000-0000-0000-0000-000000000000',
     venue_location: 'Level 1',
+    venue_cover_image_url: null,
     starts_at: '2026-11-20T01:00:00Z',
     ends_at: '2026-11-20T09:00:00Z',
     setup_minutes: 60,
