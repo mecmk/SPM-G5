@@ -1406,16 +1406,19 @@ def _notify_venue_staff_of_closure_rejection(
         )
 
 
-# The name safety/service.py gives a booking that is for no requirement.
-_ADDITIONAL_VENUE_LABEL = "Additional venue"
+# What a booking that is for no requirement is called in a sentence (safety/service.py names it
+# "Additional venue" in a label).
+_ADDITIONAL_VENUE_PHRASE = "an additional venue"
 
 
-def _ended_line(booking: VenueBooking, outcome: str) -> str:
-    """Story 9.5 AC4: a booking a closure ended as the notice lists it - the requirement it is for
-    (or "Additional venue"), its booked times and what happened to it: ``Main hall (on Tue 3 Mar
-    2027 from 10:00 to 12:00) was cancelled``."""
-    label = booking.requirement_label or _ADDITIONAL_VENUE_LABEL
-    return f"{label} ({_describe_held_period(booking.starts_at, booking.ends_at)}) {outcome}"
+def _ended_line(booking: VenueBooking, *, noun: str, outcome: str) -> str:
+    """Story 9.5 AC4: a booking a closure ended as the notice lists it - the booking (or, for a
+    request, the request) for the requirement it is for, or for an additional venue, its booked
+    times and what happened to it: ``the booking for Main hall (on Tue 3 Mar 2027 from 10:00 to
+    12:00) was cancelled``."""
+    label = booking.requirement_label or _ADDITIONAL_VENUE_PHRASE
+    when = _describe_held_period(booking.starts_at, booking.ends_at)
+    return f"the {noun} for {label} ({when}) {outcome}"
 
 
 def _notify_event_of_closure(
@@ -1505,7 +1508,7 @@ def end_bookings_for_closure(
                 _notify_venue_staff_of_closure_rejection(
                     db, booking, actor=actor, reason_name=reason_name
                 )
-                ended.append(_ended_line(booking, "request was rejected"))
+                ended.append(_ended_line(booking, noun="request", outcome="was rejected"))
             elif release_booking(
                 db,
                 booking,
@@ -1517,7 +1520,7 @@ def end_bookings_for_closure(
                 closure=closure,
             ):
                 cancelled += 1
-                ended.append(_ended_line(booking, "was cancelled"))
+                ended.append(_ended_line(booking, noun="booking", outcome="was cancelled"))
         is_returned = bool(cancelled) and events_service.return_event_to_planning(
             db,
             event,
