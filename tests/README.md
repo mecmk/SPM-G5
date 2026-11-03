@@ -30,7 +30,7 @@ One spec per story area. Each test title starts with its story and AC (`'1.1 AC2
 
 | Spec | Stories and ACs | Covers |
 | --- | --- | --- |
-| `e2e/health.spec.ts` | smoke | the sign-in page loads and the backend answers |
+| `e2e/health.spec.ts` | smoke; c16 | the sign-in page loads, with no developer tools on it |
 | `e2e/auth.spec.ts` | 1.1 AC1, AC2, AC4–AC6 | sign in and out, the sign-in lock |
 | `e2e/rbac.spec.ts` | 1.2 AC1–AC5; 21.1 AC1 | each role's sidebar and main page, blocked and retired addresses |
 | `e2e/event-request.spec.ts` | 2.1 AC1–AC11, AC13–AC17, AC19–AC22; 2.7 AC15 | raising and submitting an event request, and the largest numbers it accepts (f2.1.5) |
