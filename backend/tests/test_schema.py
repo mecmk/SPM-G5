@@ -370,6 +370,7 @@ def test_seed_constants_match_database(db: Session):
         {"id": Bookings.CLOSURE_CONFIRMED_SEMINAR_ROOM},
     ).scalar()
     for period_id in (
+        Unavailability.MAINTENANCE_SEMINAR_ROOM_AHEAD,
         Unavailability.FOYER_LANTERN_SHOWCASE,
         Unavailability.FOYER_NEIGHBOURHOOD_SUMMIT,
     ):
