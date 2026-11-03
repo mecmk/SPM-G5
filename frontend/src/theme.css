@@ -1,39 +1,213 @@
 /*
- * The "paper notebook" theme (UI refactor PR 1): the shared pieces restyled on top of App.css.
+ * The "paper notebook" theme (UI refactor, c15): the shared pieces and the page frame, restyled
+ * on top of App.css.
  * Loaded after App.css (main.tsx), so a rule here wins a tie with App.css's own. It changes how
- * things look and nothing else: no behaviour, no wording.
+ * things look and nothing else: no layout a test depends on, no behaviour, no wording.
  *
  * A one-class rule here beats App.css's one-class rules on the same element, not just its own
  * twin: .card's padding would reach .notice-block, and .button's .button-sm. Where an App.css
  * variant should keep its own value, say so beside the rule that would override it.
  *
  * Colour comes only from the tokens in index.css, as in App.css (frontend/STYLE.md, Styling).
- * The base text size stays 14px here; the page frame and type scale are the refactor's next PR.
  *
- * Type: Inter for everything a user reads or operates - labels, table headers, pills, nav - at
- * 12px or more. DM Serif Display stays on page titles (h1) only, and DM Mono only on numbers
- * that line up in columns (.mono).
+ * Type: Inter throughout, 16px body, bold headings with tight tracking, nothing under 12px. The
+ * serif stays on the wordmark alone, and DM Mono only on numbers that line up in columns (.mono).
  */
 
-/* ---------- headings ---------- */
+/* ---------- type ---------- */
 
+body {
+  font: 1rem/1.5rem var(--font-sans);
+}
+
+h1,
 h2,
 h3 {
   font-family: var(--font-sans);
-  font-weight: 600;
+}
+
+h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 3rem;
+  letter-spacing: -0.03em;
+}
+
+/* A phone steps the title down, so "Welcome, <name>" takes two lines rather than three. */
+@media (max-width: 640px) {
+  h1 {
+    font-size: 2rem;
+    line-height: 2.5rem;
+  }
 }
 
 h2 {
   font-size: 1.375rem;
+  font-weight: 700;
   line-height: 1.75rem;
+  letter-spacing: -0.011em;
 }
 
 h3 {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+  letter-spacing: -0.005em;
 }
 
-/* ---------- sidebar and phone bar ---------- */
+.page-subtitle {
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+/* ---------- the frame: a sticky top bar on a wide screen ---------- */
+
+/* From 1100px, the sidebar's three parts - wordmark, Main navigation, the signed-in user - lie in
+   one row across the top, at least 64px tall. Its links, their order, the bell, Collapse and Sign out are the
+   same elements as before; only where they sit changes. Narrower than 1100px the longest role's
+   links would not fit with their names, so the sidebar stays at the side down to 861px, and
+   App.css's phone bar takes over at 860px and under. The phone drawer reuses Sidebar, so this
+   is scoped to the frame's own copy (.app-shell > .sidebar). */
+@media (min-width: 1100px) {
+  /* Whatever is scrolled into view - a focused field, a link's target - stops below the sticky
+     bar instead of under it (WCAG 2.4.11, focus not obscured), even when its links take two rows. */
+  html {
+    scroll-padding-top: 6.5rem;
+  }
+
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .app-shell > .sidebar,
+  .app-shell > .sidebar.is-collapsed {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    flex-direction: row;
+    align-items: center;
+    gap: 1.5rem;
+    width: 100%;
+    height: auto;
+    min-height: 4rem;
+    padding: 0.5rem 1.5rem;
+    box-sizing: border-box;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-shell > .sidebar .sidebar-brand {
+    flex-shrink: 0;
+    align-items: center;
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .app-shell > .sidebar .sidebar-brand-actions {
+    margin: 0;
+  }
+
+  /* Collapsed, the bell and the toggle stay side by side, so the bar keeps its height. */
+  .app-shell > .sidebar.is-collapsed .sidebar-brand-actions {
+    flex-direction: row;
+  }
+
+  .app-shell > .sidebar .wordmark-tagline,
+  .app-shell > .sidebar .nav-group-label,
+  .app-shell > .sidebar .nav-group-divider {
+    display: none;
+  }
+
+  /* The links wrap rather than scroll: nothing clips a focused link's ring (WCAG 2.4.7), and a
+     role with more links than fit gets a second row instead of a link hidden past the edge. */
+  .app-shell > .sidebar .sidebar-nav {
+    display: flex;
+    flex: 1 1 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  /* The groups' links join one row and wrap one by one; the groups' labels are hidden above. */
+  .app-shell > .sidebar .nav-group {
+    display: contents;
+  }
+
+  /* Names alone, as the reference's bar has them, unless the bar is collapsed to icons. */
+  .app-shell > .sidebar:not(.is-collapsed) .sidebar-nav a > svg {
+    display: none;
+  }
+
+  .app-shell > .sidebar .sidebar-nav a {
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+    white-space: nowrap;
+  }
+
+  .app-shell > .sidebar .sidebar-nav a + a {
+    margin-top: 0;
+  }
+
+  .app-shell > .sidebar .sidebar-footer {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 1rem;
+    margin-left: auto;
+    padding: 0;
+    border-top: none;
+  }
+
+  .app-shell > .sidebar .sidebar-user {
+    padding: 0;
+    text-align: right;
+  }
+
+  .app-shell > .sidebar .sidebar-signout {
+    width: auto;
+    padding: 0.3125rem 0.625rem;
+    border: 1px solid var(--text-h);
+    border-radius: var(--radius-sm);
+    color: var(--text-h);
+  }
+
+  .app-main {
+    padding: 3rem 2rem 5rem;
+  }
+
+  /* The bell's panel opens under the bar at the bell's side, not at the old sidebar's edge. Where
+     Technical Support's links take two rows (1100-1279px) it overlaps the second row a little,
+     as a popover does; a lower top would leave a gap under everyone else's one-row bar. */
+  .notification-panel,
+  .notification-panel.is-sidebar-collapsed {
+    top: 4.5rem;
+    left: 1.5rem;
+    max-height: min(34rem, calc(100svh - 5.25rem));
+  }
+}
+
+/* Under 1440px the row tightens so the links stay on one row: narrower links first, then, under
+   1280px, the signed-in name, which the home page shows too. A second row is the last resort. */
+@media (min-width: 1100px) and (max-width: 1439px) {
+  .app-shell > .sidebar .sidebar-nav a {
+    padding: 0.5rem 0.625rem;
+  }
+
+  .app-shell > .sidebar,
+  .app-shell > .sidebar.is-collapsed {
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .app-shell > .sidebar .sidebar-user {
+    display: none;
+  }
+}
 
 .sidebar {
   background: var(--surface);
@@ -88,7 +262,23 @@ h3 {
   box-shadow: var(--shadow-nav);
 }
 
-/* ---------- page furniture ---------- */
+/* ---------- page furniture: a wider canvas, more air ---------- */
+
+.page {
+  max-width: 60rem;
+}
+
+.page-wide {
+  max-width: 76rem;
+}
+
+.page-header {
+  margin-bottom: 2.5rem;
+}
+
+.stack {
+  gap: 1.25rem;
+}
 
 .eyebrow {
   font-family: var(--font-sans);
@@ -138,6 +328,70 @@ h3 {
 .item-card,
 .event-card {
   border-radius: var(--radius-card);
+}
+
+/* The main page's tiles: 24px of air, and each icon on an accent chip, cycling through the
+   palette so the sections read as distinct at a glance. */
+.tile {
+  padding: 1.5rem;
+  gap: 0.75rem;
+}
+
+.tile-icon {
+  border-radius: var(--radius);
+  color: var(--pill-ink);
+  background: var(--pill-sky);
+}
+
+.tile-grid > .tile:nth-child(5n + 2) .tile-icon {
+  background: var(--pill-marigold);
+}
+
+.tile-grid > .tile:nth-child(5n + 3) .tile-icon {
+  background: var(--pill-coral);
+}
+
+.tile-grid > .tile:nth-child(5n + 4) .tile-icon {
+  background: var(--pill-green);
+}
+
+.tile-grid > .tile:nth-child(5n + 5) .tile-icon {
+  background: var(--pill-mocha);
+}
+
+/* An event's summary figures as accent cards: a soft tint each, no border, Inter numbers. A
+   .stat on its own (the event's status box) stays a white card. */
+.stat {
+  padding: 1.25rem 1.5rem;
+}
+
+.stat-grid > .stat {
+  border-color: transparent;
+  background: var(--info-bg);
+}
+
+.stat-grid > .stat:nth-child(4n + 2) {
+  background: var(--warning-bg);
+}
+
+.stat-grid > .stat:nth-child(4n + 3) {
+  background: var(--coral-bg);
+}
+
+.stat-grid > .stat:nth-child(4n + 4) {
+  background: var(--mocha-bg);
+}
+
+/* Grey falls just under AA on the coral and mocha tints; the body colour passes on all four. */
+.stat-grid > .stat .eyebrow,
+.stat-grid > .stat .muted {
+  color: var(--text);
+}
+
+.stat-value {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 /* Content cards rest flat: a hover darkens the edge instead of lifting the card. */
