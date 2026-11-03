@@ -566,6 +566,51 @@ def test_the_preview_of_an_edit_lists_only_the_added_slices(db, venue_staff_clie
 
 
 @pytest.mark.story("9.5", ac=1)
+def test_a_closure_moved_clear_of_its_old_dates_ends_only_what_its_new_dates_cover(
+    db, venue_staff_client
+):
+    """AC1 (D22): a closure that has not started moves to days 12-14; it covers those days only,
+    so a request on day 10, between the old end and the new start, is neither listed nor ended,
+    and one on day 13 is."""
+    venue = make_venue(db)
+    period = _period(db, venue.id, _day(5), _day(8))
+    between = _live(db, venue.id, _day(10))
+    inside = _live(db, venue.id, _day(13))
+
+    listed = _preview(venue_staff_client, venue.id, _day(12), _day(14), period_id=str(period.id))
+    moved = _edit(
+        venue_staff_client,
+        venue.id,
+        period.id,
+        inside,
+        starts_at=_day(12).isoformat(),
+        ends_at=_day(14).isoformat(),
+    )
+
+    assert _ids(listed) == {str(inside.id)}
+    assert moved.status_code == 200, moved.text
+    assert _stored(db, between.id).status == "PENDING"
+    assert _stored(db, inside.id).status == "REJECTED"
+
+
+@pytest.mark.story("9.5", ac=1)
+def test_a_closure_moved_earlier_clear_of_its_old_dates_lists_only_its_new_dates(
+    db, venue_staff_client
+):
+    """AC1 (D22): moved from days 10-12 to days 3-5, the preview lists the request on day 4 and
+    not the one on day 7, which neither range covers."""
+    venue = make_venue(db)
+    period = _period(db, venue.id, _day(10), _day(12))
+    between = _live(db, venue.id, _day(7))
+    inside = _live(db, venue.id, _day(4))
+
+    listed = _preview(venue_staff_client, venue.id, _day(3), _day(5), period_id=str(period.id))
+
+    assert _ids(listed) == {str(inside.id)}
+    assert str(between.id) not in _ids(listed)
+
+
+@pytest.mark.story("9.5", ac=1)
 def test_a_booking_already_under_way_is_previewed_and_ended(db, venue_staff_client):
     """AC1: its held period began an hour ago and ends in two, and it is still to come."""
     venue = make_venue(db)
