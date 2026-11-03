@@ -389,18 +389,11 @@ def test_the_sample_spreads_over_every_status_as_a_real_queue_does(db: Session):
         "WITHDRAWN": 2,
         "CANCELLED": 1,
     }
-    assert (
-        Counter((seeded.coordinator, seeded.status) for seeded in SEEDED)[
-            (Users.COORDINATOR, "PENDING")
-        ]
-        == 3
-    )
-    assert (
-        Counter((seeded.coordinator, seeded.status) for seeded in SEEDED)[
-            (Users.COORDINATOR_2, "PENDING")
-        ]
-        == 2
-    )
+    assert Counter(
+        db.get(Event, row.event_id).assigned_coordinator_id
+        for row in rows
+        if row.status == "PENDING"
+    ) == {Users.COORDINATOR.id: 3, Users.COORDINATOR_2.id: 2}
     assert {row.field_name for row in rows} == {"expected_attendance", "schedule"}
 
 
@@ -537,6 +530,36 @@ def test_reseeding_leaves_a_seeded_request_alone_once_its_field_has_a_newer_one(
 
     assert _status(db, seeded.id) == "WITHDRAWN"
     assert _status(db, newer) == "PENDING"
+
+
+@pytest.mark.story("19.2", ac=1)
+@pytest.mark.parametrize("seeded", [s for s in SEEDED if s.status == "PENDING"], ids=_IDS)
+def test_reseeding_does_not_add_a_seeded_request_whose_field_already_has_one(
+    db: Session, seeded: Seeded
+):
+    """A database made before c14 has none of these rows. Once its organiser has asked to change
+    the same field there, adding the seeded pending one would give the field two, which
+    uq_event_change_requests_pending_field refuses, and the seed would fail."""
+    conn = db.connection()
+    conn.execute(text("DELETE FROM event_change_requests WHERE id = :id"), {"id": seeded.id})
+    own = conn.execute(
+        text(
+            "INSERT INTO event_change_requests"
+            " (event_id, requested_by_id, field_name, proposed_value, reason)"
+            " VALUES (:event, :organiser, :field, '1', 'Asked before the seed.') RETURNING id"
+        ),
+        {"event": seeded.event_id, "organiser": seeded.organiser.id, "field": seeded.field},
+    ).scalar_one()
+
+    _reseed(db)
+
+    assert _status(db, own) == "PENDING"
+    assert (
+        conn.execute(
+            text("SELECT count(*) FROM event_change_requests WHERE id = :id"), {"id": seeded.id}
+        ).scalar_one()
+        == 0
+    )
 
 
 @pytest.mark.story("19.2", ac=1)

@@ -2812,12 +2812,18 @@ ON CONFLICT (id) DO NOTHING;
 -- its event has now, so it is not out of date; every approved one records the value before the
 -- change, and the event already has the new one.
 -- Like the rows above they are re-applied on every start, so a decision made on a seeded one in
--- the development database is undone by the next `npm run db:ready`. On a database where its field
--- has another pending request since, the row is left as it is: making it PENDING again would give
--- the field two, which uq_event_change_requests_pending_field refuses, and db:ready would fail.
+-- the development database is undone by the next `npm run db:ready`. Where its field has another
+-- pending request, the row is left as it is, and is not added to a database made before c14:
+-- making it PENDING would give the field two, which uq_event_change_requests_pending_field refuses,
+-- and db:ready would fail. The approved ones have no change history rows (story 7.4), so their
+-- events' Change history reads "No changes yet".
 -- ---------------------------------------------------------------------
 INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, current_value, proposed_value, reason, status,
-                                   decided_by_id, decided_at, decision_reason, created_at, updated_at) VALUES
+                                   decided_by_id, decided_at, decision_reason, created_at, updated_at)
+SELECT seed.id::uuid, seed.event_id::uuid, seed.requested_by_id::uuid, seed.field_name, seed.current_value,
+       seed.proposed_value, seed.reason, seed.status, seed.decided_by_id::uuid, seed.decided_at::timestamptz,
+       seed.decision_reason, seed.created_at::timestamptz, seed.updated_at::timestamptz
+FROM (VALUES
     ('19191919-0000-0000-0000-000000000023', '33333333-0000-0000-0000-000000000023', '11111111-0000-0000-0000-000000000002',
      'expected_attendance', '150', '180', 'Registrations are ahead of plan after the partner mailout.', 'PENDING',
      NULL, NULL, NULL, '2026-10-14 10:30+08', '2026-10-14 10:30+08'),
@@ -2882,12 +2888,14 @@ INSERT INTO event_change_requests (id, event_id, requested_by_id, field_name, cu
     ('19191919-0000-0000-0000-000000000109', '33333333-0000-0000-0000-000000000075', '11111111-0000-0000-0000-000000000002',
      'expected_attendance', '200', '250', 'Two more sponsors asked to bring running teams.', 'CANCELLED',
      NULL, NULL, NULL, '2026-10-05 10:20+08', '2026-10-12 09:00+08')
+) AS seed (id, event_id, requested_by_id, field_name, current_value, proposed_value, reason, status,
+           decided_by_id, decided_at, decision_reason, created_at, updated_at)
+WHERE NOT EXISTS (
+    SELECT 1 FROM event_change_requests AS newer
+    WHERE newer.event_id = seed.event_id::uuid AND newer.field_name = seed.field_name
+      AND newer.id <> seed.id::uuid AND newer.status = 'PENDING')
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, requested_by_id = EXCLUDED.requested_by_id, field_name = EXCLUDED.field_name,
     current_value = EXCLUDED.current_value, proposed_value = EXCLUDED.proposed_value, reason = EXCLUDED.reason,
     status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at
-WHERE NOT EXISTS (
-    SELECT 1 FROM event_change_requests AS newer
-    WHERE newer.event_id = EXCLUDED.event_id AND newer.field_name = EXCLUDED.field_name
-      AND newer.id <> EXCLUDED.id AND newer.status = 'PENDING');
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at;
