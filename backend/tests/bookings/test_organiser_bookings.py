@@ -47,6 +47,7 @@ from sqlalchemy.orm import Session
 from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
 from app.bookings.router import EVENT_NOT_FOUND_MESSAGE
 from app.events.models import Event, EventStatus
+from app.venues.models import VenueImage
 from tests.support.factories import make_booking, make_event, make_venue, make_venue_requirement
 from tests.support.seed import Bookings, Events, Users
 
@@ -63,6 +64,7 @@ _SAFE_FIELDS = {
     "id",
     "venue_name",
     "venue_location",
+    "venue_cover_image_url",
     "venue_requirement_name",
     "starts_at",
     "ends_at",
@@ -221,6 +223,28 @@ def test_only_the_organisers_fields_are_returned(organiser_client, db: Session):
     [entry] = organiser_client.get(_path(event.id)).json()
 
     assert set(entry) == _SAFE_FIELDS
+
+
+@pytest.mark.story("7.1", ac=1)
+def test_a_booking_carries_its_venues_first_picture(organiser_client, db: Session):
+    """The card shows the same picture as the venue's catalogue card, or none if it has none."""
+    event = _event(db)
+    with_picture = _booking(db, event, requirement="Main hall")
+    without_picture = _booking(db, event, requirement="Side room")
+    db.add_all(
+        [
+            VenueImage(venue_id=with_picture.venue_id, url="/images/venues/b.jpg", position=2),
+            VenueImage(venue_id=with_picture.venue_id, url="/images/venues/a.jpg", position=1),
+        ]
+    )
+    db.flush()
+    db.expire_all()
+
+    entries = organiser_client.get(_path(event.id)).json()
+
+    by_id = {entry["id"]: entry for entry in entries}
+    assert by_id[str(with_picture.id)]["venue_cover_image_url"] == "/images/venues/a.jpg"
+    assert by_id[str(without_picture.id)]["venue_cover_image_url"] is None
 
 
 # --- AC7: the hold ------------------------------------------------------------------------------

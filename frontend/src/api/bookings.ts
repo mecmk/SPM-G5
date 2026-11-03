@@ -401,6 +401,8 @@ export interface OrganiserBooking {
   id: string
   venue_name: string
   venue_location: string
+  /** The venue's first picture, as on its catalogue card; null when it has none. */
+  venue_cover_image_url: string | null
   /** Null for an additional venue (story 12.5 AC5). */
   venue_requirement_name: string | null
   starts_at: string
@@ -436,6 +438,8 @@ export interface BookingOutcome {
   venue_id: string
   venue_name: string
   venue_location: string
+  /** The venue's first picture, as on its catalogue card; null when it has none. */
+  venue_cover_image_url: string | null
   /** Story 12.5 AC2/AC4: the venue requirement the booking is for, so the event's page and the
    * catalogue's banner can tell which requirements are covered. Both null for an additional
    * venue (AC5). */
