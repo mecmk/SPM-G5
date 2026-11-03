@@ -396,7 +396,9 @@ class OrganiserBooking(BaseModel):
     venue, where, for which requirement, when (with its setup and teardown) and its status. Venue
     Staff's reasons and the hold's history in ``BookingOutcome`` are internal, so they are left
     out. AC7 (CL-184): the hold's expiry and completion, so an open hold does not read as
-    confirmed - but not who changed the expiry, or why."""
+    confirmed - but not who changed the expiry, or why. Fix f7.1.3 (AC10): why a booking the
+    safety review released, the coordinator cancelled or a venue closure cancelled was released -
+    the closure's reason, but not its description - and not who released it."""
 
     id: uuid.UUID
     venue_name: str
@@ -410,6 +412,12 @@ class OrganiserBooking(BaseModel):
     status: str
     hold_expires_at: datetime | None
     hold_completed_at: datetime | None
+    # Both None unless the booking was released (story 21.3 AC2, story 12.8 AC1). A closure's
+    # booking has release_cause VENUE_UNAVAILABLE and no release_reason; see closure_reason.
+    release_cause: str | None
+    release_reason: str | None
+    # None unless a venue closure cancelled it (story 9.5 AC2); its description is staff's only.
+    closure_reason: str | None
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> OrganiserBooking:
@@ -427,6 +435,9 @@ class OrganiserBooking(BaseModel):
             status=booking.status,
             hold_expires_at=booking.hold_expires_at,
             hold_completed_at=booking.hold_completed_at,
+            release_cause=booking.release_cause,
+            release_reason=booking.release_reason,
+            closure_reason=booking.closure_reason,
         )
 
 

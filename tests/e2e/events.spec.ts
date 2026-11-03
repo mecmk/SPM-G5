@@ -19,13 +19,16 @@
  * dates (AC4); an open hold is not shown as confirmed (AC7); there is no section on a Rejected or
  * Cancelled event, and it goes as soon as the organiser cancels (AC8); a safety review flagging
  * venue bookings flags the section (AC9). The sheet's AC5 and AC7, as 9.5 (CL-194) reworded them:
- * rejected, withdrawn, cancelled and expired bookings are not shown to the organiser, released
- * bookings (21.3) and those a venue closure cancelled (9.5) among the cancelled ones, which
- * showing is f7.1.3; an open hold is not shown as confirmed but as held until the event is
+ * rejected, withdrawn, cancelled and expired bookings are not shown to the organiser, except the
+ * cancelled ones AC10 names; an open hold is not shown as confirmed but as held until the event is
  * confirmed or the hold expires, with the expiry; and nothing is marked "Venue unavailable –
- * alternative needed" any more (9.5 AC7): a booking a closure ends is rejected or cancelled, so it
- * leaves this section, and the organiser learns of it from the closure's notice (9.5 AC4). The AC4/AC8 test
- * cancels the seeded Lakeside Leadership Retreat; the other events it reads are never changed.
+ * alternative needed" any more (9.5 AC7). The AC4/AC8 test cancels the seeded Lakeside Leadership
+ * Retreat; the other events it reads are never changed.
+ *
+ * f7.1.3 (AC10): a booking the safety review released, the coordinator cancelled or a venue
+ * closure cancelled stays in the section as a read-only Cancelled card saying which and why - the
+ * closure's reason, never its description. Which cancelled bookings are returned, and that who
+ * released them is not, is proven in test_organiser_bookings.py.
  *
  * f21.3.1 (12.1 AC3): the coordinator's Venue booking card names both dates of a booking over
  * more than one day, and a one-day booking reads as before. The two-day test reads only the venue
@@ -79,7 +82,10 @@ test('7.1 AC1: the organiser who owns the event sees its venue, accessibility an
   await page.goto(`/events/${EVENTS.approved}`)
 
   await expect(
-    page.getByRole('heading', { name: 'Nimbus Developer Conference', level: 1 }),
+    page.getByRole('heading', {
+      name: 'Nimbus Developer Conference',
+      level: 1,
+    }),
   ).toBeVisible()
   await expect(page.getByText('Planning').first()).toBeVisible()
   // exact: story 2.7 AC4 also lists the Main venue's "350 people" on this page.
@@ -179,6 +185,31 @@ test('7.1 AC4/AC8: a two-day booking names both dates, and the section goes once
   await expect(organiserBookings(page)).toHaveCount(0)
 })
 
+test('7.1 AC10: bookings the safety review released, the coordinator cancelled or a closure cancelled show as Cancelled, with why', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.partnerSummit}`)
+
+  const cards = organiserBookings(page).getByRole('listitem')
+  const released = cards.filter({ hasText: 'Seminar Room 2.1' })
+  await expect(released).toContainText('Cancelled')
+  await expect(released).toContainText('Released by the safety review')
+  await expect(released).toContainText('Move the breakout to a room with a second fire exit.')
+
+  const cancelled = cards.filter({ hasText: 'Grand Hall' })
+  await expect(cancelled).toContainText('Cancelled')
+  await expect(cancelled).toContainText('Cancelled by the coordinator')
+  await expect(cancelled).toContainText('The client moved the keynote to a webinar.')
+
+  const closed = cards.filter({ hasText: 'Exhibition Foyer' })
+  await expect(closed).toContainText('Cancelled: the venue closed')
+  await expect(closed.getByText('Reason: Maintenance', { exact: true })).toBeVisible()
+  await expect(closed).not.toContainText("Replacing the foyer's ceiling lights.")
+
+  await expect(organiserBookings(page).getByRole('button')).toHaveCount(0)
+})
+
 /**
  * f21.3.1: the details of one venue's card in the coordinator's Venue booking section - the
  * innermost block holding every text given. The card has no role or label of its own, so it is
@@ -244,9 +275,7 @@ test("7.1 AC1: a two-day event's heading line shows both dates", async ({ page }
   await signIn(page, ACCOUNTS.organiser)
   await page.goto(`/events/${EVENTS.planning}`)
 
-  await expect(
-    page.getByRole('heading', { name: 'Regional Sales Summit', level: 1 }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Regional Sales Summit', level: 1 })).toBeVisible()
   // The seeded summit runs 15 Dec 09:00 to 16 Dec 17:00. Matched with the organiser's name, as
   // only the heading line has it: the Main venue's line below shows the same period.
   await expect(

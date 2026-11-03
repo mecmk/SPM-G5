@@ -11,18 +11,23 @@ AC1 The organiser sees each approved or pending booking of their event (Q91, CL-
     cancelled, expired - hold nothing, so they are left out. Only those fields are returned.
 AC2 Another organiser's event, or one that does not exist, is not found; every other role is
     refused, and an organiser is still refused ``/bookings/for-event``.
-AC5 Rejected, withdrawn, cancelled and expired bookings are not shown to the organiser. Released
-    bookings (21.3) and bookings a venue closure cancelled (9.5) are among the cancelled ones;
-    showing them is f7.1.3. (f7.1.2, CL-183; 9.5, CL-194)
+AC5 Rejected, withdrawn, cancelled and expired bookings are not shown to the organiser, except
+    the cancelled ones AC10 names. (f7.1.2, CL-183; 9.5, CL-194; f7.1.3, CL-210)
 AC7 An approved booking whose hold is still open (12.7 AC1) is not shown as confirmed: it says the
     venue is held for the event until the event is confirmed or the hold expires, with the expiry
     date and time, as the coordinator's card does. Who changed the expiry, and why, is not shown.
     Nothing is marked "Venue unavailable – alternative needed" any more (9.5 AC7): a booking a
     venue closure ends is rejected or cancelled, so it leaves this section (AC5), and the
-    organiser learns of it from the closure's notice (9.5 AC4). A cancelled one shows again with
-    f7.1.3. (f7.1.2, CL-184; 9.5, CL-194)
+    organiser learns of it from the closure's notice (9.5 AC4). A cancelled one shows again as
+    AC10 says. (f7.1.2, CL-184; 9.5, CL-194)
+AC10 (f7.1.3, CL-210) A booking the safety review released (21.3), the coordinator cancelled
+    (12.8) or a venue closure cancelled (9.5) is returned too, Cancelled, with its cause and why:
+    the finding's required change or the coordinator's reason, or the closure's reason but not
+    its description. Who released it is not returned.
+AC11 A request a venue closure rejected stays hidden, and so does every other cancelled booking:
+    replaced (12.6), released by an approved change (19.2), or released with its event (6.2).
 
-AC4, AC8 and AC9 are how the page shows these bookings: tests/e2e/events.spec.ts.
+AC4, AC8, AC9 and AC10 are how the page shows these bookings: tests/e2e/events.spec.ts.
 
 Conflict cases do not apply: the endpoint only reads.
 
@@ -39,7 +44,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.orm import Session
 
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
 from app.bookings.router import EVENT_NOT_FOUND_MESSAGE
 from app.events.models import Event, EventStatus
 from tests.support.factories import make_booking, make_event, make_venue, make_venue_requirement
@@ -47,6 +52,9 @@ from tests.support.seed import Bookings, Events, Users
 
 _STARTS_AT = datetime(2027, 3, 15, 1, 0, tzinfo=UTC)
 _ENDS_AT = datetime(2027, 3, 15, 9, 0, tzinfo=UTC)
+
+# Story 9.5 AC2: the closure's description, which only staff see.
+_CLOSURE_DESCRIPTION = "Floor resurfacing"
 
 # Each requirement takes its own position on the event (uq_venue_requirements_event_position).
 _positions = itertools.count()
@@ -63,6 +71,9 @@ _SAFE_FIELDS = {
     "status",
     "hold_expires_at",
     "hold_completed_at",
+    "release_cause",
+    "release_reason",
+    "closure_reason",
 }
 
 
@@ -250,6 +261,112 @@ def test_who_changed_a_holds_expiry_and_why_are_not_returned(organiser_client, d
     [entry] = organiser_client.get(_path(event.id)).json()
 
     assert set(entry) == _SAFE_FIELDS
+
+
+# --- AC10, AC11: bookings released by the safety review, the coordinator or a venue closure ---
+def _released(db: Session, event: Event, cause: str, **overrides) -> VenueBooking:
+    """A booking of ``event`` that ``cause`` released, as ``release_booking`` leaves one."""
+    if cause == ReleaseCause.VENUE_UNAVAILABLE:
+        overrides.setdefault("closure_reason", "MAINTENANCE")
+        overrides.setdefault("closure_description", _CLOSURE_DESCRIPTION)
+    return _booking(
+        db,
+        event,
+        status=BookingStatus.CANCELLED,
+        requirement="Breakout room",
+        decided_by_id=Users.VENUE_STAFF.id,
+        decided_at=datetime.now(UTC) - timedelta(days=2),
+        cancelled_at=datetime.now(UTC) - timedelta(hours=1),
+        release_cause=cause,
+        released_by_id=Users.SAFETY_OFFICER.id,
+        **overrides,
+    )
+
+
+@pytest.mark.story("7.1", ac=10)
+@pytest.mark.parametrize(
+    ("cause", "reason"),
+    [
+        (ReleaseCause.SAFETY_REVIEW, "Move the breakout to a room with a second fire exit."),
+        (ReleaseCause.COORDINATOR_CANCELLED, "The client moved the breakout online."),
+    ],
+    ids=["safety review", "coordinator"],
+)
+def test_a_released_booking_is_shown_as_cancelled_with_its_reason(
+    organiser_client, db: Session, cause, reason
+):
+    event = _event(db)
+    live = _booking(db, event, requirement="Plenary hall")
+    released = _released(db, event, cause, release_reason=reason)
+
+    by_id = {entry["id"]: entry for entry in organiser_client.get(_path(event.id)).json()}
+
+    assert set(by_id) == {str(live.id), str(released.id)}
+    entry = by_id[str(released.id)]
+    assert entry["status"] == BookingStatus.CANCELLED
+    assert entry["release_cause"] == cause
+    assert entry["release_reason"] == reason
+    assert entry["closure_reason"] is None
+    assert by_id[str(live.id)]["release_cause"] is None
+
+
+@pytest.mark.story("7.1", ac=10)
+def test_a_booking_a_closure_cancelled_is_shown_with_the_closures_reason_only(
+    organiser_client, db: Session
+):
+    event = _event(db)
+    cancelled = _released(db, event, ReleaseCause.VENUE_UNAVAILABLE)
+
+    response = organiser_client.get(_path(event.id))
+
+    [entry] = response.json()
+    assert entry["id"] == str(cancelled.id)
+    assert entry["status"] == BookingStatus.CANCELLED
+    assert entry["release_cause"] == ReleaseCause.VENUE_UNAVAILABLE
+    assert entry["closure_reason"] == "MAINTENANCE"
+    assert entry["release_reason"] is None
+    assert _CLOSURE_DESCRIPTION not in response.text
+
+
+@pytest.mark.story("7.1", ac=10)
+def test_who_released_a_booking_is_not_returned(organiser_client, db: Session):
+    event = _event(db)
+    _released(db, event, ReleaseCause.SAFETY_REVIEW, release_reason="Add a second fire exit.")
+
+    [entry] = organiser_client.get(_path(event.id)).json()
+
+    assert set(entry) == _SAFE_FIELDS
+
+
+@pytest.mark.story("7.1", ac=11)
+@pytest.mark.parametrize(
+    "cause",
+    [ReleaseCause.REPLACED, ReleaseCause.CHANGE_APPROVED, ReleaseCause.EVENT_CANCELLED],
+)
+def test_a_booking_cancelled_any_other_way_stays_hidden(organiser_client, db: Session, cause):
+    event = _event(db)
+    live = _booking(db, event, requirement="Plenary hall")
+    _released(db, event, cause)
+
+    assert _ids(organiser_client.get(_path(event.id))) == {str(live.id)}
+
+
+@pytest.mark.story("7.1", ac=11)
+def test_a_request_a_closure_rejected_stays_hidden(organiser_client, db: Session):
+    """Story 9.5 AC2 rejects a pending request on a closed day and records the closure on it."""
+    event = _event(db)
+    live = _booking(db, event, requirement="Plenary hall")
+    _booking(
+        db,
+        event,
+        status=BookingStatus.REJECTED,
+        requirement="Breakout room",
+        decision_reason="Venue closed: Maintenance",
+        closure_reason="MAINTENANCE",
+        closure_description=_CLOSURE_DESCRIPTION,
+    )
+
+    assert _ids(organiser_client.get(_path(event.id))) == {str(live.id)}
 
 
 # --- AC2: only the event's own organiser -----------------------------------------------------

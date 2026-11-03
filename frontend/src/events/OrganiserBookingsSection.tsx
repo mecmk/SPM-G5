@@ -1,8 +1,21 @@
 import { useCallback } from 'react'
-import { listBookingsForOwnEvent } from '../api/bookings'
+import { listBookingsForOwnEvent, type OrganiserBooking } from '../api/bookings'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
-import { HOLD_EXPIRES_LABEL, openHoldExpiry, turnaroundLine } from '../shared/bookingStatus'
+import {
+  CANCELLED_BY_CLOSURE_MESSAGE,
+  CANCELLED_BY_COORDINATOR_MESSAGE,
+  closureReasonLine,
+  HOLD_EXPIRES_LABEL,
+  isCancelledByClosure,
+  isCancelledByCoordinator,
+  isReleasedBySafetyReview,
+  openHoldExpiry,
+  REASON_LABEL,
+  releasedByLabel,
+  RELEASED_BY_SAFETY_REVIEW_MESSAGE,
+  turnaroundLine,
+} from '../shared/bookingStatus'
 import {
   ADDITIONAL_VENUE,
   formatDate,
@@ -20,6 +33,16 @@ export interface OrganiserBookingsSectionProps {
   isFlagged: boolean
 }
 
+/** Fix f7.1.3 (AC10): a booking the safety review released, the coordinator cancelled or a venue
+ * closure cancelled says which, as the coordinator's card does; any other says what its status
+ * means. */
+function bookingMessage(booking: OrganiserBooking): string {
+  if (isReleasedBySafetyReview(booking)) return RELEASED_BY_SAFETY_REVIEW_MESSAGE
+  if (isCancelledByCoordinator(booking)) return CANCELLED_BY_COORDINATOR_MESSAGE
+  if (isCancelledByClosure(booking)) return CANCELLED_BY_CLOSURE_MESSAGE
+  return BOOKING_OUTCOME[booking.status].message
+}
+
 /**
  * Fix f7.1.2 (story 7.1 AC1): the organiser's read-only view of their event's approved and
  * pending venue bookings, drawn as the coordinator's Venue booking cards are - venue, the
@@ -29,6 +52,10 @@ export interface OrganiserBookingsSectionProps {
  * CL-184: AC4 a booking over more than one day names both dates, as the event's schedule does
  * (f7.1.1); AC7 an open hold reads as held, not confirmed, with when it expires; AC9 the section
  * is flagged when the safety review flags venue bookings.
+ *
+ * Fix f7.1.3 (AC10): a booking the safety review released, the coordinator cancelled or a venue
+ * closure cancelled stays as a Cancelled card saying which and why - the closure's reason, never
+ * its description - but not who.
  */
 export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookingsSectionProps) {
   const loadBookings = useCallback(() => listBookingsForOwnEvent(eventId), [eventId])
@@ -110,7 +137,20 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
                 <div className="booking-outcome-message">
                   <Icon name={bookingOutcome.icon} size={18} />
                   <div>
-                    <p>{openHold ? OPEN_HOLD_MESSAGE : bookingOutcome.message}</p>
+                    <p>{openHold ? OPEN_HOLD_MESSAGE : bookingMessage(booking)}</p>
+                    {releasedByLabel(booking) !== null && (
+                      <p>
+                        <strong>{releasedByLabel(booking)}</strong>
+                      </p>
+                    )}
+                    {booking.release_reason !== null && (
+                      <p>
+                        <span className="fact-label">{REASON_LABEL}</span>
+                        <br />
+                        {booking.release_reason}
+                      </p>
+                    )}
+                    {closureReasonLine(booking) !== null && <p>{closureReasonLine(booking)}</p>}
                     {openHold && (
                       <p>
                         <span className="fact-label">{HOLD_EXPIRES_LABEL}</span>

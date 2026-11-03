@@ -61,6 +61,7 @@ import {
   isReleasedBySafetyReview,
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
+  REASON_LABEL,
   releasedByLabel,
   RELEASED_BY_SAFETY_REVIEW_MESSAGE,
   replacedByLine,
@@ -879,7 +880,7 @@ export function EventDetailPage() {
               </div>
             </div>
             <div className="subtle-block">
-              <p className="fact-label">Reason</p>
+              <p className="fact-label">{REASON_LABEL}</p>
               <p>{event.cancellation_reason}</p>
             </div>
           </section>
@@ -1243,7 +1244,7 @@ export function EventDetailPage() {
                               {formatDateTime(booking.hold_expiry_changed_at)}
                             </span>
                             <br />
-                            <span className="fact-label">Reason</span>
+                            <span className="fact-label">{REASON_LABEL}</span>
                             <br />
                             {booking.hold_expiry_change_reason}
                           </p>
