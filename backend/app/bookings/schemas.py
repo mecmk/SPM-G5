@@ -412,7 +412,8 @@ class OrganiserBooking(BaseModel):
     status: str
     hold_expires_at: datetime | None
     hold_completed_at: datetime | None
-    # Both None unless the booking was released (story 21.3 AC2, story 12.8 AC1).
+    # Both None unless the booking was released (story 21.3 AC2, story 12.8 AC1). A closure's
+    # booking has release_cause VENUE_UNAVAILABLE and no release_reason; see closure_reason.
     release_cause: str | None
     release_reason: str | None
     # None unless a venue closure cancelled it (story 9.5 AC2); its description is staff's only.
