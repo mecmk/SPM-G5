@@ -10,6 +10,7 @@ import {
 import { mediaUrl } from '../api/client'
 import type { VenueImage } from '../api/venues'
 import { Icon } from '../components/Icon'
+import { CLOSE } from '../shared/format'
 
 export interface VenuePictureViewerProps {
   venueName: string
@@ -228,7 +229,7 @@ export function VenuePictureViewer({
           ref={closeButton}
           type="button"
           className="picture-viewer-close"
-          aria-label="Close"
+          aria-label={CLOSE}
           onClick={close}
         >
           <Icon name="close" size={20} />
