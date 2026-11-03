@@ -564,3 +564,43 @@ class Notifications:
             True,
         ),
     )
+
+
+def _cr(n: int) -> uuid.UUID:
+    return uuid.UUID(f"19191919-0000-0000-0000-{n:012d}")
+
+
+class ChangeRequests:
+    """c14: the sample change requests, a spread of every status as a real queue would hold, on
+    events no other test raises one on. The first six end in their event's number, the rest are
+    numbered from 101. Each asks to change the event's expected attendance or its schedule. A
+    coordinator's queue holds the pending ones first, then the record of the rest."""
+
+    # Pending. Chloe: Events.CUSTOMER_FORUM 150 to 180 people; Events.APPROVED_3 (Product Roadmap
+    # Townhall) 300 to 350; Events.APPROVED_4 (Founders Day) an hour later. Carl:
+    # Events.SALES_KICKOFF a day later; Events.PARTNER_GALA 180 to 220.
+    CUSTOMER_FORUM_ATTENDANCE = _cr(23)
+    ROADMAP_TOWNHALL_ATTENDANCE = _cr(101)
+    FIRESIDE_SCHEDULE = _cr(102)
+    SALES_KICKOFF_SCHEDULE = _cr(24)
+    PARTNER_GALA_ATTENDANCE = _cr(103)
+    # Approved. Chloe: Events.APPROVED_4 180 to the 200 it has now; Events.APPROVED_3 moved to the
+    # date it has now. Carl: Events.NOTICE_GALA (Nadia) 40 to the 60 it has now, the request the
+    # "Change approved" notification in Notifications names (before c14 a row that did not exist;
+    # its id keeps that notification's eeeeeeee prefix); Events.APPROVED_5 (Investor Demo Day)
+    # 80 to the 100 it has now.
+    FIRESIDE_ATTENDANCE = _cr(10)
+    ROADMAP_TOWNHALL_SCHEDULE = _cr(104)
+    NOTICE_GALA_ATTENDANCE = uuid.UUID("eeeeeeee-0000-0000-0000-000000020206")
+    DEMO_DAY_ATTENDANCE = _cr(105)
+    # Rejected, each with a reason. Chloe: Events.APPROVED_6 (Winter Charity Gala) 220 to 450.
+    # Carl: Events.APPROVED_7 (Alumni Homecoming) 100 to 250; Events.APPROVED_5 to an evening start.
+    CHARITY_GALA_ATTENDANCE = _cr(16)
+    HOMECOMING_ATTENDANCE = _cr(106)
+    DEMO_DAY_SCHEDULE = _cr(107)
+    # Withdrawn by their organiser: Omar's Events.FINTECH_BREAKFAST 45 to 60 (coordinator 2) and
+    # Olivia's Events.APPROVED_6 to a week later (coordinator 1).
+    FINTECH_BREAKFAST_ATTENDANCE = _cr(22)
+    CHARITY_GALA_SCHEDULE = _cr(108)
+    # Cancelled with its event, while pending (6.2 AC4): Omar's Events.CHARITY_FUN_RUN 200 to 250.
+    FUN_RUN_ATTENDANCE = _cr(109)
