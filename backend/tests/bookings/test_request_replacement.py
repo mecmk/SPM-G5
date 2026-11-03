@@ -5,6 +5,11 @@ covers, so nothing is marked and no replacement is requested. A booking already 
 shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
 normal pending request once its original closes (9.5 AC8, CL-194).
 
+The tests that remain cover 12.6 AC4, AC6, AC9 and AC10 (a pending replacement raised before 9.5:
+withdrawing it, the second request refused while it stands, and what a closed original leaves)
+and, tagged 9.5 AC8, the same once the original closes. The tests of raising a replacement went
+with the request.
+
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
     coordinator selects "Find a replacement venue" on the event page. The catalogue opens
