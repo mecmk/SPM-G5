@@ -1190,6 +1190,11 @@ def test_the_coordinator_and_the_organiser_are_each_told_once_naming_what_ended(
         description="Floor relaid",
     )
 
+    listed = [
+        (approved, "the booking for Main hall", "was cancelled"),
+        (pending, "the request for Breakout room", "was rejected"),
+        (additional, "the booking for an additional venue", "was cancelled"),
+    ]
     notices = _told(db, event.id)
     assert _recipients(notices) == sorted([Users.COORDINATOR.id, Users.ORGANISER.id])
     for notice in notices:
@@ -1199,12 +1204,16 @@ def test_the_coordinator_and_the_organiser_are_each_told_once_naming_what_ended(
             _on_singapore_date(starts_at),
             _on_singapore_date(ends_at),
             "Renovation",
-            _booked_line(approved, "the booking for Main hall", "was cancelled"),
-            _booked_line(pending, "the request for Breakout room", "was rejected"),
-            _booked_line(additional, "the booking for an additional venue", "was cancelled"),
+            *(_booked_line(*each) for each in listed),
             "It is back in Planning and needs a new safety check before it is confirmed again.",
         ):
             assert wanted in notice.message
+        # By booked start (Fri, Sat, Sun), not by booking id: ids are random.
+        positions = [
+            notice.message.index(_booked_line(booking, subject, outcome))
+            for booking, subject, outcome in listed
+        ]
+        assert positions == sorted(positions)
         assert (notice.related_entity_type, notice.related_entity_id) == ("event", event.id)
     by_recipient = {notice.recipient_id: notice.message for notice in notices}
     assert "Floor relaid" in by_recipient[Users.COORDINATOR.id]
