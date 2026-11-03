@@ -88,6 +88,7 @@ import {
   formatDateTime,
   formatSchedule,
   formatTime,
+  isMultiDay,
   NOT_YET_ASSIGNED,
 } from '../shared/format'
 import {
@@ -1145,7 +1146,7 @@ export function EventDetailPage() {
               const outcomeLabels = bookingOutcomeLabels(booking)
               const openHold = openHoldExpiry(booking)
               const forRequirement = bookedRequirementName(event, booking)
-              const isOverOneDay = formatDate(booking.starts_at) !== formatDate(booking.ends_at)
+              const isOverOneDay = isMultiDay(booking.starts_at, booking.ends_at)
               return (
                 <div
                   key={booking.id}

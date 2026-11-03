@@ -93,6 +93,15 @@ export function formatSchedule(startsAt: string, endsAt: string): string {
     : `${formatDateTime(startsAt)} – ${formatDateTime(endsAt)}`
 }
 
+/**
+ * Fix f13.1.5 (stories 7.1 AC4, 13.1 AC2, 13.2 AC1): whether a period runs over more than one
+ * day, so a page names both its dates (`formatSchedule`) rather than its first alone. The days
+ * compared are Singapore days, like every date here.
+ */
+export function isMultiDay(startsAt: string, endsAt: string): boolean {
+  return formatDate(startsAt) !== formatDate(endsAt)
+}
+
 export function formatDateTime(stamp: string): string {
   return `${formatDate(stamp)}, ${formatTime(stamp)}`
 }

@@ -22,6 +22,7 @@ import {
   formatDateTime,
   formatSchedule,
   formatTime,
+  isMultiDay,
 } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
@@ -84,7 +85,7 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
           {bookings.map((booking) => {
             const bookingOutcome = BOOKING_OUTCOME[booking.status]
             const openHold = openHoldExpiry(booking)
-            const isOverOneDay = formatDate(booking.starts_at) !== formatDate(booking.ends_at)
+            const isOverOneDay = isMultiDay(booking.starts_at, booking.ends_at)
             return (
               <li
                 key={booking.id}
