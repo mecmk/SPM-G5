@@ -84,7 +84,7 @@ export function SafetyChecksPage() {
         )}
 
         {entries !== null && entries.length > 0 && (
-          <ul className="stack">
+          <ul className="stack queue-list">
             {entries.map((entry) => (
               <li
                 key={entry.id}

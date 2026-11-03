@@ -41,8 +41,17 @@ export function shortReference(id: string): string {
   return `#${id.slice(-SHORT_ID_LENGTH).toUpperCase()}`
 }
 
+/** When a request was raised, on its queue card (6.2, 17.2, 19.2, 19.4). */
+export const REQUESTED_AT_LABEL = 'Requested at'
+
 /** Story 13.3 AC6: the link a search nothing matches offers, to list the whole tab again. */
 export const CLEAR_SEARCH = 'Clear search'
+
+/** The button that leaves a dialog or form without saving anything. */
+export const CANCEL = 'Cancel'
+
+/** The button or icon that dismisses a dialog or viewer with nothing left to decide. */
+export const CLOSE = 'Close'
 
 export function formatDate(stamp: string): string {
   return new Date(stamp).toLocaleDateString(LOCALE, {

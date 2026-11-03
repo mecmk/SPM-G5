@@ -9,6 +9,7 @@ import { Sidebar, type SidebarNavItem } from '../components/Sidebar'
 import { StatusBadge } from '../components/StatusBadge'
 import { Tabs } from '../components/Tabs'
 import { COMPONENT_GALLERY_PATH, EVENTS_MINE_PATH, HOME_PATH } from '../routes'
+import { CANCEL } from '../shared/format'
 
 const SAMPLE_NAV_ITEMS: SidebarNavItem[] = [
   { label: 'Components', to: COMPONENT_GALLERY_PATH },
@@ -136,7 +137,7 @@ export function ComponentGalleryPage() {
                       Reject
                     </button>
                     <button type="button" className="ghost button-sm">
-                      Cancel
+                      {CANCEL}
                     </button>
                   </div>
                 </div>

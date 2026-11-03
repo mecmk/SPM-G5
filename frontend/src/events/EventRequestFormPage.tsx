@@ -34,7 +34,7 @@ import {
   EQUIPMENT_LOCKED_HINT,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
-import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
+import { CANCEL, formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import { PHONE_MAX_LENGTH } from '../shared/phone'
 import { unnamedRequirementLabel } from '../shared/venueRequest'
 import {
@@ -1523,7 +1523,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                 </button>
               )}
               <Link to={backTo} className="button secondary">
-                Cancel
+                {CANCEL}
               </Link>
               <button
                 type="submit"
@@ -1547,7 +1547,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                 </p>
               )}
               <Link to={HOME_PATH} className="button secondary">
-                Cancel
+                {CANCEL}
               </Link>
               <button type="submit" className="secondary" disabled={isSaving}>
                 Save draft

@@ -60,7 +60,7 @@ class Permission(StrEnum):
     EVENTS_ASSIGN = "events:assign"
     EVENTS_EDIT_ROUTINE = "events:edit_routine"  # routine field edits (7.2)
     EVENTS_CANCEL = "events:cancel"  # the organiser cancels their own event (6.2)
-    EVENT_CHANGE_REQUESTS_CREATE = "event_change_requests:create"  # organiser (19.1)
+    EVENT_CHANGE_REQUESTS_CREATE = "event_change_requests:create"  # organiser (19.1, 19.4)
     EVENT_CHANGE_REQUESTS_DECIDE = "event_change_requests:decide"  # coordinator (19.x)
 
     # --- Venue bookings (12.x, 13.x, 14.x) ---

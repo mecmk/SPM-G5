@@ -24,6 +24,12 @@ AC8 Only Technical Support Staff can accept or decline. Other roles are refused,
     the API.
 AC9 If two staff decide the same request at the same moment, only the first decision is saved and
     the second sees the current status. A double-click decides once.
+AC10 Accepting or declining a request notifies the event's assigned coordinator, naming the
+    event, the equipment and the quantity, with the reason for a decline. While that
+    coordinator has an unread equipment decision notice for the event, the next decision
+    replaces it with one notice listing every decision in it plus the new one, oldest first,
+    which comes to the top of their list as unread. Once they have read it, the next decision
+    starts a new notice.
 
 A decision is a resource (backend/STYLE.md: a URL names a resource), so it is created with
 ``POST /equipment-requests/{id}/decision``; a second one on the same request is refused. The
@@ -32,7 +38,8 @@ itself never holds a runtime number (backend/STYLE.md).
 
 The coordinator seeing Accepted, or Declined with the reason, on the event page (AC1, AC2), the
 Accepted tab (AC1), a blank reason blocked before any request is sent (AC4) and a double-click on
-Accept (AC9) are proven at e2e: tests/e2e/equipment-decisions.spec.ts.
+Accept (AC9) and the coordinator finding two decisions in one notice, which opens the event
+(AC10), are proven at e2e: tests/e2e/equipment-decisions.spec.ts.
 
 Every case uses a fresh equipment type (``make_equipment_type``), so a test owns its whole stock,
 on factory events dated October 2027, clear of every seeded hold.
@@ -45,20 +52,23 @@ Excluded, with reason:
 
 from __future__ import annotations
 
+import queue
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.common.audit import AuditLog
+from app.coordination.models import EventCoordinatorAssignment
 from app.equipment import schemas, service
 from app.events.models import (
     EquipmentReservation,
@@ -67,6 +77,8 @@ from app.events.models import (
     EventEquipmentRequest,
     EventStatus,
 )
+from app.notifications.models import Notification
+from app.notifications.service import NotificationType, notify
 from tests.support.factories import (
     make_equipment_item,
     make_equipment_out_of_service,
@@ -79,6 +91,7 @@ from tests.support.seed import Users
 TECH_SUPPORT_ROLE = "TECH_SUPPORT_STAFF"
 PENDING, ACCEPTED, DECLINED = "PENDING", "ACCEPTED", "DECLINED"
 RESERVED, RELEASED = "RESERVED", "RELEASED"
+DECIDED = "EQUIPMENT_DECIDED"
 REASON = "Every unit is booked for a client roadshow that week."
 
 SGT = timezone(timedelta(hours=8))
@@ -880,3 +893,480 @@ def test_two_staff_deciding_at_once_save_only_the_first_decision(engine):
         assert [hold.status for hold in holds] == [
             RESERVED if item.status == ACCEPTED else RELEASED
         ]
+
+
+# --- AC10: the coordinator is told, in one notice while it is unread ------------------------------
+def _notices(db: Session, event_id: uuid.UUID) -> list[Notification]:
+    """Every equipment decision notice about the event, oldest first."""
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(Notification)
+            .where(Notification.event_id == event_id, Notification.notification_type == DECIDED)
+            .order_by(Notification.created_at, Notification.id)
+        ).all()
+    )
+
+
+def _accepted_line(item: EventEquipmentRequest) -> str:
+    return f"Theo Tech accepted {item.quantity} × {item.equipment_type.name}."
+
+
+def _declined_line(item: EventEquipmentRequest, reason: str = REASON) -> str:
+    return f"Theo Tech declined {item.quantity} × {item.equipment_type.name}. Reason: {reason}"
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=1)
+def test_accepting_tells_the_coordinator_the_event_the_equipment_and_the_quantity(tech_client, db):
+    item = _pending(db, quantity=3)
+    before = datetime.now(UTC)
+
+    response = _accept(tech_client, item.id)
+
+    assert response.status_code == 201, response.text
+    [notice] = _notices(db, item.event_id)
+    assert notice.recipient_id == Users.COORDINATOR.id
+    assert notice.title == f'Equipment update for "{item.event.name}"'
+    assert notice.message == _accepted_line(item)
+    assert "3 ×" in notice.message
+    assert (notice.related_entity_type, notice.related_entity_id) == ("event", item.event_id)
+    assert notice.read_at is None
+    assert before <= notice.created_at <= datetime.now(UTC)
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=1)
+def test_declining_tells_the_coordinator_the_trimmed_reason(tech_client, db):
+    item = _pending(db, quantity=2)
+
+    response = _decline(tech_client, item.id, f"   {REASON}   ")
+
+    assert response.status_code == 201, response.text
+    [notice] = _notices(db, item.event_id)
+    assert notice.recipient_id == Users.COORDINATOR.id
+    assert notice.title == f'Equipment update for "{item.event.name}"'
+    assert notice.message == _declined_line(item)
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=3)
+@pytest.mark.story("20.1", ac=5)
+@pytest.mark.parametrize("outcome", [ACCEPTED, DECLINED])
+def test_only_the_coordinator_is_told_of_a_decision(tech_client, db, outcome):
+    """Not the organiser (Q24), another coordinator, or Technical Support, who decided."""
+    item = _pending(db)
+
+    _accept(tech_client, item.id) if outcome == ACCEPTED else _decline(tech_client, item.id)
+
+    db.expire_all()
+    told = db.scalars(select(Notification).where(Notification.event_id == item.event_id)).all()
+    assert [notice.recipient_id for notice in told] == [Users.COORDINATOR.id]
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_each_decision_joins_the_unread_notice_oldest_first(tech_client, db):
+    event = _event(db)
+    first, second, third = (_pending(db, event=event) for _ in range(3))
+
+    _accept(tech_client, first.id)
+    [earlier] = _notices(db, event.id)
+    earlier_id, earlier_at = earlier.id, earlier.created_at
+    _decline(tech_client, second.id)
+    _accept(tech_client, third.id)
+
+    [notice] = _notices(db, event.id)
+    assert notice.message == "\n".join(
+        [_accepted_line(first), _declined_line(second), _accepted_line(third)]
+    )
+    assert notice.id != earlier_id
+    assert notice.created_at > earlier_at
+    assert notice.read_at is None
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_every_unread_notice_is_carried_over_oldest_first(tech_client, db):
+    """Decisions take the event's lock, so one notice is all they leave. Should two ever stand, for
+    instance written before a change to this rule, neither is lost and their order holds."""
+    item = _pending(db)
+    for message in ("Oldest.", "Newer."):
+        notify(
+            db,
+            recipient=db.get(User, Users.COORDINATOR.id),
+            actor=None,
+            notification_type=NotificationType.EQUIPMENT_DECIDED,
+            title="Equipment update",
+            message=message,
+            event_id=item.event_id,
+            commit=False,
+        )
+
+    _accept(tech_client, item.id)
+
+    [notice] = _notices(db, item.event_id)
+    assert notice.message == f"Oldest.\nNewer.\n{_accepted_line(item)}"
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_a_decision_brings_the_unread_notice_to_the_top_without_raising_the_count(login_as, db):
+    """A decision on A, then another event's notice above it, then a second decision on A: A's
+    notice is the newest again, and there are still two unread, not three."""
+    event_a, event_b = _event(db), _event(db)
+    first, second = _pending(db, event=event_a), _pending(db, event=event_a)
+    other = _pending(db, event=event_b)
+    tech = login_as(Users.TECH_SUPPORT)
+    _accept(tech, first.id)
+    _accept(tech, other.id)
+    _accept(tech, second.id)
+
+    coordinator = login_as(Users.COORDINATOR)
+    listed = coordinator.get("/notifications").json()
+    assert [row["event_id"] for row in listed[:2]] == [str(event_a.id), str(event_b.id)]
+    assert listed[0]["message"] == f"{_accepted_line(first)}\n{_accepted_line(second)}"
+    unread = db.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.event_id.in_([event_a.id, event_b.id]), Notification.read_at.is_(None))
+    )
+    assert unread == 2
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_a_notice_already_read_is_left_and_the_next_decision_starts_a_new_one(login_as, db):
+    event = _event(db)
+    first, second = _pending(db, event=event), _pending(db, event=event)
+    _accept(login_as(Users.TECH_SUPPORT), first.id)
+    [read] = _notices(db, event.id)
+    read_id = read.id
+    marked = login_as(Users.COORDINATOR).patch(f"/notifications/{read_id}", json={"is_read": True})
+    assert marked.status_code == 200, marked.text
+
+    _decline(login_as(Users.TECH_SUPPORT), second.id)
+
+    older, newer = _notices(db, event.id)
+    assert older.id == read_id
+    assert older.read_at is not None
+    assert older.message == _accepted_line(first)
+    assert newer.read_at is None
+    assert newer.message == _declined_line(second)
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_decisions_on_another_event_keep_a_notice_of_their_own(tech_client, db):
+    one, other = _pending(db), _pending(db)
+
+    _accept(tech_client, one.id)
+    _accept(tech_client, other.id)
+
+    assert [notice.message for notice in _notices(db, one.event_id)] == [_accepted_line(one)]
+    assert [notice.message for notice in _notices(db, other.event_id)] == [_accepted_line(other)]
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_a_decision_leaves_another_kind_of_unread_notice_alone(tech_client, db):
+    item = _pending(db)
+    short = notify(
+        db,
+        recipient=db.get(User, Users.COORDINATOR.id),
+        actor=None,
+        notification_type=NotificationType.EQUIPMENT_SHORT,
+        title="Equipment short",
+        message="Units are short.",
+        event_id=item.event_id,
+        commit=False,
+    )
+
+    _accept(tech_client, item.id)
+
+    db.expire_all()
+    assert db.get(Notification, short.id).message == "Units are short."
+    assert [notice.message for notice in _notices(db, item.event_id)] == [_accepted_line(item)]
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_an_item_decided_again_is_listed_again_the_latest_last(tech_client, db):
+    """New dates send an accepted item back to Pending (15.1 AC8), so it can be decided twice."""
+    item = _pending(db)
+    _accept(tech_client, item.id)
+    db.expire_all()
+    db.get(EventEquipmentRequest, item.id).status = PENDING
+    db.flush()
+
+    _decline(tech_client, item.id)
+
+    [notice] = _notices(db, item.event_id)
+    assert notice.message == f"{_accepted_line(item)}\n{_declined_line(item)}"
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=4)
+def test_after_a_reassignment_the_new_coordinator_is_told_and_the_old_notice_stays(login_as, db):
+    event = _event(db)
+    first, second = _pending(db, event=event), _pending(db, event=event)
+    db.add(
+        EventCoordinatorAssignment(
+            event_id=event.id, coordinator_id=Users.COORDINATOR.id, assigned_by_id=Users.LEAD.id
+        )
+    )
+    db.flush()
+    _accept(login_as(Users.TECH_SUPPORT), first.id)
+    reassigned = login_as(Users.LEAD).put(
+        f"/events/{event.id}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+    assert reassigned.status_code == 200, reassigned.text
+
+    _accept(login_as(Users.TECH_SUPPORT), second.id)
+
+    told = {notice.recipient_id: notice.message for notice in _notices(db, event.id)}
+    assert told == {
+        Users.COORDINATOR.id: _accepted_line(first),
+        Users.COORDINATOR_2.id: _accepted_line(second),
+    }
+
+
+def _refused_as_blank(login_as, db, item):
+    return _decline(login_as(Users.TECH_SUPPORT), item.id, "   ")
+
+
+def _refused_as_short(login_as, db, item):
+    make_equipment_out_of_service(
+        db, type_code=item.equipment_type.code, quantity=4, starts_at=START, ends_at=END
+    )
+    return _accept(login_as(Users.TECH_SUPPORT), item.id)
+
+
+def _refused_as_already_decided(login_as, db, item):
+    item.status = DECLINED
+    db.flush()
+    return _accept(login_as(Users.TECH_SUPPORT), item.id)
+
+
+def _refused_as_a_closed_event(login_as, db, item):
+    item.event.status = EventStatus.CANCELLED
+    db.flush()
+    return _accept(login_as(Users.TECH_SUPPORT), item.id)
+
+
+def _refused_to_another_role(login_as, db, item):
+    return _accept(login_as(Users.COORDINATOR), item.id)
+
+
+def _refused_when_signed_out(login_as, db, item):
+    client = login_as(Users.TECH_SUPPORT)
+    client.logout()
+    return _accept(client, item.id)
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=4)
+@pytest.mark.parametrize(
+    ("refuse", "status"),
+    [
+        (_refused_as_blank, 422),
+        (_refused_as_short, 409),
+        (_refused_as_already_decided, 409),
+        (_refused_as_a_closed_event, 409),
+        (_refused_to_another_role, 403),
+        (_refused_when_signed_out, 401),
+    ],
+)
+def test_a_refused_decision_leaves_the_unread_notice_as_it_was(login_as, db, refuse, status):
+    event = _event(db)
+    decided, refused = _pending(db, event=event), _pending(db, event=event)
+    _accept(login_as(Users.TECH_SUPPORT), decided.id)
+    [notice] = _notices(db, event.id)
+    notice_id = notice.id
+
+    response = refuse(login_as, db, refused)
+
+    assert response.status_code == status, response.text
+    [after] = _notices(db, event.id)
+    assert (after.id, after.message) == (notice_id, _accepted_line(decided))
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=4)
+@pytest.mark.parametrize("outcome", [ACCEPTED, DECLINED])
+def test_a_decision_that_fails_part_way_tells_nobody_and_keeps_the_unread_notice(
+    tech_client, db, monkeypatch, outcome
+):
+    """As AC3's test, by making the audit entry, the last step before the commit, raise."""
+    event = _event(db)
+    decided, failed = _pending(db, event=event), _pending(db, event=event)
+    _accept(tech_client, decided.id)
+    [notice] = _notices(db, event.id)
+    notice_id = notice.id
+    # Committed, so the first decision outlives the rollback of the failed request below.
+    db.commit()
+
+    def fail_to_record(*_args, **_kwargs):
+        raise _AuditFailed
+
+    monkeypatch.setattr(service, "record_audit", fail_to_record)
+
+    with pytest.raises(_AuditFailed):
+        _accept(tech_client, failed.id) if outcome == ACCEPTED else _decline(tech_client, failed.id)
+    db.rollback()
+
+    [after] = _notices(db, event.id)
+    assert (after.id, after.message) == (notice_id, _accepted_line(decided))
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_marking_a_replaced_notice_read_is_refused_and_leaves_the_new_one_unread(login_as, db):
+    """A panel opened before the second decision still names the first notice. Its mark, and a
+    "mark all as read" through it, must not reach a decision the coordinator has not seen."""
+    event = _event(db)
+    first, second = _pending(db, event=event), _pending(db, event=event)
+    tech = login_as(Users.TECH_SUPPORT)
+    _accept(tech, first.id)
+    [replaced] = _notices(db, event.id)
+    replaced_id = replaced.id
+    _accept(tech, second.id)
+
+    coordinator = login_as(Users.COORDINATOR)
+    marked = coordinator.patch(f"/notifications/{replaced_id}", json={"is_read": True})
+    marked_all = coordinator.patch(
+        "/notifications", json={"is_read": True, "through_id": str(replaced_id)}
+    )
+
+    assert (marked.status_code, marked_all.status_code) == (404, 404)
+    [notice] = _notices(db, event.id)
+    assert notice.read_at is None
+
+
+def _in_own_session(engine, attempt: Callable[[Session], str], pids: queue.Queue[int]) -> str:
+    """``attempt`` in a session of its own, as one request would run it, its database process id
+    put in ``pids`` first so a test can watch that session alone."""
+    with Session(engine) as session:
+        pids.put(session.execute(text("SELECT pg_backend_pid()")).scalar_one())
+        return attempt(session)
+
+
+def _waited_on_a_lock(engine, attempt: Future, pids: queue.Queue[int]) -> bool:
+    """Whether ``attempt``'s own session comes to wait on a lock. False if it finishes first, as
+    one that took no lock would: nothing holds it up."""
+    pid = pids.get(timeout=10)
+    deadline = time.monotonic() + 10
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        while time.monotonic() < deadline:
+            if attempt.done():
+                return False
+            waiting = conn.execute(
+                text("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = :pid"),
+                {"pid": pid},
+            ).scalar()
+            if waiting:
+                return True
+            time.sleep(0.01)
+    return False
+
+
+def _with_a_rival_under_way(engine, rival: Session, attempt: Callable[[Session], str]) -> str:
+    """Run ``attempt`` while ``rival`` holds what it needs, and let the rival commit once it is
+    waiting. Asserts the wait and returns what ``attempt`` returned."""
+    pids: queue.Queue[int] = queue.Queue()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        waiting = pool.submit(_in_own_session, engine, attempt, pids)
+        try:
+            assert _waited_on_a_lock(engine, waiting, pids)
+            rival.commit()
+        finally:
+            rival.close()  # inside the pool: leaving it waits for whatever this holds up
+        return waiting.result(timeout=10)
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=4)
+def test_a_decision_that_waits_on_a_reassignment_tells_the_new_coordinator(engine):
+    """The decision takes the event's row, which the reassignment holds. A read that took the lock
+    and joined the coordinator in one statement would come back with the old one."""
+    with _committed_pending_item(engine) as rows:
+        rival = Session(engine)
+        event_id = rival.scalar(
+            select(EventEquipmentRequest.event_id).where(EventEquipmentRequest.id == rows.item_id)
+        )
+        rival.execute(
+            update(Event)
+            .where(Event.id == event_id)
+            .values(assigned_coordinator_id=Users.COORDINATOR_2.id)
+        )
+
+        outcome = _with_a_rival_under_way(
+            engine, rival, _decider(rows.item_id, ACCEPTED, Users.TECH_SUPPORT.id)
+        )
+
+        assert outcome == ACCEPTED
+        with Session(engine) as session:
+            told = [notice.recipient_id for notice in _notices(session, event_id)]
+        assert told == [Users.COORDINATOR_2.id]
+
+
+@pytest.mark.story("16.1", ac=10)
+def test_a_notice_being_marked_read_stays_read_when_a_decision_waits_on_it(engine):
+    """The coordinator's mark lands first, so that notice is theirs to keep as read, and the
+    decision starts a new one. Without the row lock it would be replaced and show as unread."""
+    with _committed_pending_item(engine) as rows:
+        with Session(engine) as session:
+            first = session.get(EventEquipmentRequest, rows.item_id)
+            event_id = first.event_id
+            second_id = _pending(
+                session,
+                quantity=1,
+                event=session.get(Event, event_id),
+                equipment_type=first.equipment_type,
+            ).id
+            session.commit()
+            first_decision = _decider(rows.item_id, ACCEPTED, Users.TECH_SUPPORT.id)(session)
+        assert first_decision == ACCEPTED
+        rival = Session(engine)
+        rival.execute(
+            update(Notification)
+            .where(Notification.event_id == event_id)
+            .values(read_at=datetime.now(UTC))
+        )
+
+        outcome = _with_a_rival_under_way(
+            engine, rival, _decider(second_id, DECLINED, Users.TECH_SUPPORT.id)
+        )
+
+        assert outcome == DECLINED
+        with Session(engine) as session:
+            older, newer = _notices(session, event_id)
+            assert (older.read_at is None, newer.read_at is None) == (False, True)
+            assert "accepted" in older.message
+            assert "accepted" not in newer.message
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=6)
+def test_a_double_click_tells_the_coordinator_once(engine):
+    with _committed_pending_item(engine) as rows:
+        _race(engine, [_decider(rows.item_id, ACCEPTED, Users.TECH_SUPPORT.id)] * 2)
+
+        with Session(engine) as session:
+            item = session.get(EventEquipmentRequest, rows.item_id)
+            [notice] = _notices(session, item.event_id)
+            assert notice.message == _accepted_line(item)
+
+
+@pytest.mark.story("16.1", ac=10)
+@pytest.mark.story("20.1", ac=6)
+def test_two_staff_deciding_at_once_tell_the_coordinator_once(engine):
+    with _committed_pending_item(engine) as rows:
+        _race(
+            engine,
+            [
+                _decider(rows.item_id, ACCEPTED, Users.TECH_SUPPORT.id),
+                _decider(rows.item_id, DECLINED, rows.other_staff_id),
+            ],
+        )
+
+        with Session(engine) as session:
+            item = session.get(EventEquipmentRequest, rows.item_id)
+            [notice] = _notices(session, item.event_id)
+            assert "\n" not in notice.message

@@ -111,7 +111,7 @@ export function EquipmentRequestDetailPage() {
   }
 
   return (
-    <div className="page page-wide equipment-request-page">
+    <div className="page page-wide">
       <Link to={back.to} className="back-link">
         ← {back.label}
       </Link>

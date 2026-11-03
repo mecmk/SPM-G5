@@ -55,7 +55,7 @@ export function RoomLayoutsPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="page page-wide stack">
       <PageHeader
         title={PAGE_TITLE}
         subtitle={

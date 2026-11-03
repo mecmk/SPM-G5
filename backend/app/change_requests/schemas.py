@@ -175,7 +175,8 @@ class ChangeRequestOut(BaseModel):
 
 class ChangeRequestQueueEntryOut(ChangeRequestOut):
     """Story 19.2 AC1: a change request in the coordinator's queue - pending, or in their record of
-    decisions - with the event it is for, so the queue reads without opening each event."""
+    decisions - with the event it is for, so the queue reads without opening each event. Story
+    19.4 AC1 lists the organiser's own requests in the same shape."""
 
     event_name: str
     event_status: str

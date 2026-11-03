@@ -83,7 +83,13 @@ export function VenueDetailPage() {
       </div>
     )
   }
-  if (!venue) return <LoadingState label="Loading the venue…" />
+  if (!venue) {
+    return (
+      <div className="page page-wide">
+        <LoadingState label="Loading the venue…" />
+      </div>
+    )
+  }
   const coverUrl = venue.cover_image_url
 
   return (

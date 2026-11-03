@@ -16,7 +16,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import type { DayClosure } from '../components/venueCalendarDays'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { bookingRequestPath } from '../routes'
-import { formatDateTime, instantToInput, inputToInstant } from '../shared/format'
+import { CANCEL, formatDateTime, instantToInput, inputToInstant } from '../shared/format'
 import {
   BLOCK_OFF_LABEL,
   EDIT_BLOCK_OFF_LABEL,
@@ -370,7 +370,7 @@ export function VenueUnavailabilitySection({
             Save closure
           </button>
           <button type="button" className="secondary" onClick={close} disabled={isSaving}>
-            Cancel
+            {CANCEL}
           </button>
         </div>
         {period !== null && !isPreviewCurrent && (
