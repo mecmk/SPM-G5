@@ -508,7 +508,9 @@ export function addUnavailability(
 
 /** Story 9.4 AC6, story 9.5 AC1: change a period's start, end, reason or description - only the
  * fields given. `confirmedBookingIds` are the bookings the edit's preview listed, which an edit
- * that adds time ends; as for `addUnavailability`. */
+ * that adds time ends; as for `addUnavailability`. A 409 here is not always that refusal (the
+ * period may have ended, or started), so it carries no code of its own: the caller tells the
+ * refusal by its detail (`bookingsInRefusal`). */
 export function editUnavailability(
   venueId: string,
   periodId: string,
@@ -518,7 +520,7 @@ export function editUnavailability(
   return api<Unavailability>(`/venues/${venueId}/unavailability/${periodId}`, {
     method: 'PATCH',
     body: withConfirmed(changes, confirmedBookingIds),
-    errorCodes: { 404: 'UNAVAILABILITY_NOT_FOUND', 409: 'UNAVAILABILITY_NEEDS_CONFIRMATION' },
+    errorCodes: { 404: 'UNAVAILABILITY_NOT_FOUND' },
     notify: {
       title: 'Unavailability changed',
       message: 'The period was changed.',

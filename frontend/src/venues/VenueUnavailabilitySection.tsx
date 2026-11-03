@@ -221,10 +221,7 @@ export function VenueUnavailabilitySection({
       setSaveError(formatApiError(err))
       // A booking was raised since the list was shown: the refusal carries the fresh list, which
       // replaces it, and the confirmation reopens on it.
-      const fresh =
-        err instanceof ApiError && err.code === 'UNAVAILABILITY_NEEDS_CONFIRMATION'
-          ? bookingsInRefusal(err.detail)
-          : null
+      const fresh = err instanceof ApiError ? bookingsInRefusal(err.detail) : null
       if (fresh !== null && previewKey !== null) {
         setPreview({ key: previewKey, bookings: fresh, error: null })
         setIsConfirming(true)
