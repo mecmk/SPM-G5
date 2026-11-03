@@ -2018,6 +2018,63 @@ ON CONFLICT (id) DO UPDATE SET
     reserved_at = EXCLUDED.reserved_at, notes = EXCLUDED.notes, released_quantity = 0, released_at = NULL;
 
 -- ---------------------------------------------------------------------
+-- Story 16.1 AC10 (fix f16.1.1): tests/e2e/equipment-decisions.spec.ts. Technical Support decides
+-- this event's two items, and its coordinator (coordinator 2) finds both in one notice. An event
+-- of its own, because a decision on another item of the same event, by a spec running alongside,
+-- would replace the notice under the click. Organiser 2 and coordinator 2, whose events only
+-- tests/events/test_my_event_requests.py lists in full, and it names this one; March 2030, so no
+-- other spec or backend test shares its period.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, venue_none_required, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000016110', '11111111-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+     'Volunteer Thank-You Evening', 'Staff appreciation', 'A short evening of talks and a film for the year''s volunteers.', '2030-03-13 18:00+08', '2030-03-13 21:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000004', 'Tower A', TRUE, TRUE, 'Omar Organiser', 'organiser@nimbus.example', '+65 6222 3344',
+     '2026-10-20 09:00+08', '2026-10-20 12:00+08', '11111111-0000-0000-0000-000000000004')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    venue_none_required = EXCLUDED.venue_none_required,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
+
+INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity, technical_notes, status, status_notes, created_by_id, submitted_by_id, submitted_at, decided_by_id, decided_at) VALUES
+    ('66666666-0000-0000-0000-000000016111', '33333333-0000-0000-0000-000000016110', '77777777-0000-0000-0000-000000000001', 1, 'For the talks', 'PENDING', NULL,
+     '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-20 13:00+08', NULL, NULL),
+    ('66666666-0000-0000-0000-000000016112', '33333333-0000-0000-0000-000000016110', '77777777-0000-0000-0000-000000000006', 1, 'Recording the talks', 'PENDING', NULL,
+     '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-20 13:00+08', NULL, NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
+    technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
+    created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
+    submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+
+INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
+    ('eeeeeeee-0000-0000-0000-000000016111', '33333333-0000-0000-0000-000000016110', '66666666-0000-0000-0000-000000016111', '77777777-0000-0000-0000-000000000001', 1,
+     '2030-03-13 18:00+08', '2030-03-13 21:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000004', '2026-10-20 13:00+08', 'Held for the coordinator''s equipment request.'),
+    ('eeeeeeee-0000-0000-0000-000000016112', '33333333-0000-0000-0000-000000016110', '66666666-0000-0000-0000-000000016112', '77777777-0000-0000-0000-000000000006', 1,
+     '2030-03-13 18:00+08', '2030-03-13 21:00+08', 'RESERVED', '11111111-0000-0000-0000-000000000004', '2026-10-20 13:00+08', 'Held for the coordinator''s equipment request.')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, equipment_request_id = EXCLUDED.equipment_request_id,
+    equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, status = EXCLUDED.status, reserved_by_id = EXCLUDED.reserved_by_id,
+    reserved_at = EXCLUDED.reserved_at, notes = EXCLUDED.notes, released_quantity = 0, released_at = NULL;
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0000-000000016113', '33333333-0000-0000-0000-000000016110', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000004', '2026-10-20 12:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO event_coordinator_assignments (id, event_id, coordinator_id, assigned_by_id, assigned_at) VALUES
+    ('aaaaaaaa-0000-0000-0000-000000016114', '33333333-0000-0000-0000-000000016110', '11111111-0000-0000-0000-000000000004', '11111111-0000-0000-0000-000000000004', '2026-10-20 09:00+08')
+ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------
 -- Story 20.2: an organiser who owns the notification bell's e2e spec.
 -- Nadia Notice belongs to no organisation and no action by another spec reaches her, so her
 -- unread count (7) changes only as tests/e2e/notifications.spec.ts reads her notifications, in
