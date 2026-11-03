@@ -1085,6 +1085,58 @@ test('2.1 AC14: a picture can be replaced and removed while the request is a dra
   await expect(page.getByRole('img', { name: 'Cover picture preview' })).toHaveCount(0)
 })
 
+test('2.1 AC14: the picture cannot be changed while a save is still uploading one', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await page.getByLabel('Event name').fill(uniqueName('Uploading'))
+  await choosePicture(page, 'first.png')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page).toHaveURL(EDIT_PATH)
+  const preview = page.getByRole('img', { name: 'Cover picture preview' })
+  await expect(preview).toBeVisible()
+
+  let finishUpload = () => {}
+  const isUploadHeld = new Promise<void>((resolve) => (finishUpload = resolve))
+  await page.route('**/cover-image', async (route) => {
+    if (route.request().method() === 'PUT') await isUploadHeld
+    await route.fallback()
+  })
+  await choosePicture(page, 'second.png')
+  await saveEdits(page)
+
+  const removePicture = page.getByRole('button', { name: 'Remove picture' })
+  await expect(removePicture).toBeDisabled()
+  await expect(page.getByLabel('Choose cover picture')).toBeDisabled()
+  const uploading = await preview.getAttribute('src')
+  const dropped = await page.evaluateHandle((base64) => {
+    const data = new DataTransfer()
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+    data.items.add(new File([bytes], 'third.png', { type: 'image/png' }))
+    return data
+  }, PNG_BYTES.toString('base64'))
+  const zone = page.getByRole('group', { name: 'Cover picture drop area' })
+  await zone.dispatchEvent('dragenter', { dataTransfer: dropped })
+  await expect(page.getByText('Drop the picture here')).toHaveCount(0)
+  await zone.dispatchEvent('drop', { dataTransfer: dropped })
+  expect(await preview.getAttribute('src')).toBe(uploading)
+
+  finishUpload()
+  await expect(removePicture).toBeEnabled()
+  await removePicture.click()
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' && response.url().includes('/cover-image'),
+    ),
+    page.getByRole('button', { name: 'Save draft' }).click(),
+  ])
+  await page.reload()
+  await expect(page.getByLabel('Event name')).toBeVisible()
+  await expect(preview).toHaveCount(0)
+})
+
 test('2.1 AC14: a file that is not a JPEG, PNG or WebP is refused in the browser', async ({
   page,
 }) => {
