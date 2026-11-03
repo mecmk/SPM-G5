@@ -80,7 +80,7 @@ const STARTED_NOTE = 'This event has started, so it can no longer be withdrawn.'
 // A picture (2.1 AC14) is decorative - no alt text, hidden from assistive technology - so it has
 // no role or name, and is found by its tag. The yoga has the seeded one; an uploaded one is served
 // by the API (mediaUrl).
-const YOGA_PICTURE = '/images/events/cat.jpg'
+const YOGA_PICTURE = '/images/events/yoga.jpg'
 const UPLOADED_PICTURE_PATH = '/uploads/events/e2e-harbourfront.png'
 const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',

@@ -75,7 +75,7 @@ ROUTE = "/events/{event_id}/review-details"
 PICTURE_ROUTE = "/events/{event_id}/review-details/cover-image"
 # Enough of a PNG for the 2.1 type check, which reads the signature only.
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
-SEEDED_PICTURE = "/images/events/cat.jpg"
+SEEDED_PICTURE = "/images/events/training.jpg"
 LAPTOP_STOCK = 6
 # Fix f2.7.4's refusal (story 2.7 AC14, AC20), written out so a red run shows what the server
 # answers instead.
