@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ApiError, formatApiError } from '../api/client'
 import { deleteRoomLayout, type RoomLayout } from '../api/venues'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { CANCEL, CLOSE } from '../shared/format'
 
 export interface DeleteRoomLayoutDialogProps {
   layout: RoomLayout
@@ -54,7 +55,7 @@ export function DeleteRoomLayoutDialog({
       onConfirm={confirmDelete}
       onCancel={onCancel}
       canConfirm={!isGone}
-      cancelLabel={isGone ? 'Close' : 'Cancel'}
+      cancelLabel={isGone ? CLOSE : CANCEL}
     >
       <p>
         Venue records, event requests and the catalogue’s filter will no longer offer this layout.

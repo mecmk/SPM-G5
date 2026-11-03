@@ -3448,6 +3448,7 @@ tbody tr:hover td {
   font-size: 0.75rem;
   line-height: 1.125rem;
   color: var(--text-muted);
+  white-space: pre-line;
 }
 
 .notification-age {

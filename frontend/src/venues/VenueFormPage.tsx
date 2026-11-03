@@ -38,6 +38,7 @@ import {
 } from './venueForm'
 import { VenueUnavailabilityManager } from './VenueUnavailabilityManager'
 import { VenuePicturesField, type PictureTile } from './VenuePicturesField'
+import { CANCEL } from '../shared/format'
 
 /** Story 8.3 AC5: one of the venue's pictures as saved. Its key is its id. */
 interface SavedPicture {
@@ -642,7 +643,7 @@ export function VenueFormPage() {
               </p>
             )}
             <Link to={VENUE_CATALOGUE_PATH} className="button secondary">
-              Cancel
+              {CANCEL}
             </Link>
             <button type="submit" disabled={isSaving}>
               {isSaving && <span className="spinner button-spinner" aria-hidden="true" />}

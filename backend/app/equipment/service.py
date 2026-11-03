@@ -99,7 +99,12 @@ from app.events.models import (
     EventStatus,
 )
 from app.events.schemas import EventEquipmentIn
-from app.notifications.service import NotificationType, active_members, notify
+from app.notifications.service import (
+    NotificationType,
+    active_members,
+    notify,
+    take_unread_messages,
+)
 
 NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can change its equipment."
@@ -857,18 +862,14 @@ def submit_equipment(
 def _locked_event_of(db: Session, item_id: uuid.UUID) -> Event:
     """Story 16.1 AC9: the event the item belongs to, its row locked until the transaction ends -
     ``FOR NO KEY UPDATE``, so a record of units out of service saved meanwhile can still tell the
-    event's coordinator (story 16.2; see the module docstring)."""
+    event's coordinator (story 16.2; see the module docstring). AC10: taken through ``lock_event``,
+    so a decision that waited on a reassignment tells the coordinator now assigned."""
     event_id = db.scalar(
         select(EventEquipmentRequest.event_id).where(EventEquipmentRequest.id == item_id)
     )
     if event_id is None:
         raise EquipmentRequestNotFound(item_id)
-    return db.scalar(
-        select(Event)
-        .where(Event.id == event_id)
-        .with_for_update(of=Event, key_share=True)
-        .execution_options(populate_existing=True)
-    )
+    return events_service.lock_event(db, event_id)
 
 
 def _fresh_item(db: Session, item_id: uuid.UUID) -> EventEquipmentRequest:
@@ -907,6 +908,38 @@ def _reserve(db: Session, event: Event, item: EventEquipmentRequest, *, actor: U
         db.add(_new_hold(event, item, actor=actor, notes=_ACCEPTED_HOLD_NOTE))
 
 
+def _tell_coordinator_of_decision(
+    db: Session, event: Event, item: EventEquipmentRequest, *, actor: User
+) -> None:
+    """Story 16.1 AC10: tell the event's coordinator of the decision just made, one line in a
+    notice that replaces any they have not read yet, so a batch of items reaches them as one
+    entry at the top of their list. Only the coordinator is told, not the organiser (Q24)."""
+    summary = f"{item.quantity} × {item.equipment_type.name}"
+    line = (
+        f"{actor.full_name} accepted {summary}."
+        if item.status == EquipmentRequestStatus.ACCEPTED
+        else f"{actor.full_name} declined {summary}. Reason: {item.status_notes}"
+    )
+    earlier = take_unread_messages(
+        db,
+        recipient_id=event.assigned_coordinator_id,
+        event_id=event.id,
+        notification_type=NotificationType.EQUIPMENT_DECIDED,
+    )
+    notify(
+        db,
+        recipient=event.assigned_coordinator,
+        actor=actor,
+        notification_type=NotificationType.EQUIPMENT_DECIDED,
+        event_id=event.id,
+        title=f'Equipment update for "{event.name}"',
+        message="\n".join([*earlier, line]),
+        related_entity_type="event",
+        related_entity_id=event.id,
+        commit=False,
+    )
+
+
 def decide_equipment_request(
     db: Session, item_id: uuid.UUID, data: EquipmentDecisionIn, *, actor: User
 ) -> EquipmentQueueRow:
@@ -914,7 +947,8 @@ def decide_equipment_request(
     it with a reason, releasing its hold at once. AC3: who decided and when, saved with the hold in
     one transaction. AC5/AC6: accepting is refused, changing nothing, when the event's period no
     longer has the units. AC7: only a Pending request on an event still going ahead. AC9: the
-    event's row lock serialises two decisions, so the second sees the first's status."""
+    event's row lock serialises two decisions, so the second sees the first's status. AC10: the
+    coordinator is told in the same transaction."""
     event = _locked_event_of(db, item_id)
     item = _fresh_item(db, item_id)
     if event.status in _DECISION_CLOSED_EVENT_STATUSES:
@@ -941,6 +975,7 @@ def decide_equipment_request(
     item.status = data.outcome
     item.decided_by_id = actor.id
     item.decided_at = datetime.now(UTC)
+    _tell_coordinator_of_decision(db, event, item, actor=actor)
     record_audit(
         db,
         actor=actor,

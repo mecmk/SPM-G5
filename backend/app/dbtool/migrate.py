@@ -47,6 +47,10 @@ class MigrationDrift(RuntimeError):
     """An already-applied migration file has been edited."""
 
 
+class SeedRefused(RuntimeError):
+    """A seed file broke a database rule, re-run over rows the app has changed."""
+
+
 @dataclass(frozen=True)
 class SqlFile:
     version: str
@@ -145,7 +149,15 @@ def seed(url: str, *, only: list[str] | None = None, log=print) -> list[SqlFile]
             continue
         with connect(url) as conn:
             log(f"  seeding  {seed_file.name} ...")
-            conn.execute(seed_file.read())
+            try:
+                conn.execute(seed_file.read())
+            except psycopg.IntegrityError as exc:
+                raise SeedRefused(
+                    f"{seed_file.name} cannot be applied over this database, so it was rolled "
+                    f"back: {exc.diag.constraint_name} refused a row, probably because a row "
+                    "made in the app has taken a name the sample data needs. `npm run db:reset` "
+                    "rebuilds the database, and deletes what you added."
+                ) from exc
             conn.commit()
         ran.append(seed_file)
     return ran

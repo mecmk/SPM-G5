@@ -13,7 +13,8 @@ Story 20.1:
 
 * AC1 each action sends one ``NotificationType``, recording the action (the type), the event
   (``event_id``), the record to open (``related_entity_type`` / ``related_entity_id``) and the
-  time (``created_at``);
+  time (``created_at``). Equipment decisions on one event share one notice while it is unread
+  (``take_unread_messages``, story 16.1 AC10);
 * AC2 ``list_notifications`` is the recipient's list, filled the moment the action commits;
 * AC3 ``notify`` writes nothing for the user who performed the action;
 * AC4 written in the action's transaction, so an action that fails or is refused leaves none,
@@ -77,6 +78,8 @@ class NotificationType(StrEnum):
     EQUIPMENT_WITHDRAWN = "EQUIPMENT_WITHDRAWN"  # 19.2: Technical Support, items changed or removed
     # 16.2: the event's coordinator - units it holds went out of service, so its item is short
     EQUIPMENT_SHORT = "EQUIPMENT_SHORT"
+    # 16.1 AC10: the event's coordinator - accepts and declines share one notice while it is unread
+    EQUIPMENT_DECIDED = "EQUIPMENT_DECIDED"
     EVENT_CHANGE_REQUESTED = "EVENT_CHANGE_REQUESTED"  # 19.1: the coordinator
     EVENT_CHANGE_REQUEST_WITHDRAWN = "EVENT_CHANGE_REQUEST_WITHDRAWN"  # 19.1: the coordinator
     EVENT_CHANGE_APPROVED = "EVENT_CHANGE_APPROVED"  # 19.2: the organiser
@@ -137,6 +140,38 @@ def notify(
     else:
         db.flush()
     return entry
+
+
+def take_unread_messages(
+    db: Session,
+    *,
+    recipient_id: uuid.UUID | None,
+    event_id: uuid.UUID,
+    notification_type: NotificationType,
+) -> list[str]:
+    """Story 16.1 AC10: delete ``recipient_id``'s unread notices of this type about the event and
+    return their messages, oldest first, for the caller's ``notify`` to carry into the one that
+    replaces them. Replaced, not edited: "mark all as read" goes through the newest notice the
+    panel loaded, so a row edited under it would be marked read with a decision nobody saw.
+
+    The rows are locked, so a mark landing first keeps its notice read and out of this list, and
+    one landing after finds the notice gone. It deletes in the caller's transaction: an action
+    that fails or is refused leaves the notice as it was (20.1 AC4)."""
+    unread = db.scalars(
+        select(Notification)
+        .where(
+            Notification.recipient_id == recipient_id,
+            Notification.event_id == event_id,
+            Notification.notification_type == notification_type,
+            Notification.read_at.is_(None),
+        )
+        .order_by(Notification.created_at, Notification.id)
+        .with_for_update()
+    ).all()
+    messages = [notice.message for notice in unread]
+    for notice in unread:
+        db.delete(notice)
+    return messages
 
 
 def active_members(db: Session, *, role_code: str) -> list[User]:
