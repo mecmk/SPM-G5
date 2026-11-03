@@ -4,6 +4,7 @@ import { updatePointOfContact, type EventDetail, type PointOfContactInput } from
 import { ERROR_REGISTRY } from '../errors/registry'
 import { isBlankOrPhoneNumber, PHONE_MAX_LENGTH } from '../shared/phone'
 import { CONTACT_EMAIL_MAX_LENGTH, isBlankOrEmailAddress } from './eventRequestForm'
+import { CANCEL } from '../shared/format'
 
 export interface PointOfContactEditorProps {
   event: EventDetail
@@ -151,7 +152,7 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
           {isSaving ? 'Saving…' : 'Save contact details'}
         </button>
         <button type="button" className="secondary" disabled={isSaving} onClick={stopEditing}>
-          Cancel
+          {CANCEL}
         </button>
       </div>
     </form>

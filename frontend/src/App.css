@@ -3448,6 +3448,7 @@ tbody tr:hover td {
   font-size: 0.75rem;
   line-height: 1.125rem;
   color: var(--text-muted);
+  white-space: pre-line;
 }
 
 .notification-age {
@@ -4580,5 +4581,24 @@ button.requirement-choice.requirement-covered:hover,
   .out-of-service-form button,
   .out-of-service-records button {
     min-height: 44px;
+  }
+}
+
+/* Story 17.3: the equipment holds schedule. Each type's table scrolls inside its card on a phone,
+   its screen-reader-only header with it, rather than widening the page. */
+.equipment-hold-group .table-wrap {
+  position: relative;
+}
+
+/* On a phone the schedule's filters are big enough for a thumb. */
+@media (max-width: 640px) {
+  .equipment-hold-filters button,
+  .equipment-hold-filters input,
+  .equipment-hold-filters select {
+    min-height: 44px;
+  }
+
+  .equipment-hold-filters label {
+    flex: 1 1 100%;
   }
 }

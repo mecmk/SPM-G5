@@ -115,6 +115,7 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.PARTNER_BRIEFING),
         str(Events.EQUIPMENT_ROADSHOW),
         str(Events.LIGHT_SHOWCASE),
+        str(Events.VOLUNTEER_EVENING),
         str(Events.FINTECH_BREAKFAST),
         str(Events.CUSTOMER_FORUM),
         str(Events.SALES_KICKOFF),
@@ -177,6 +178,8 @@ def test_second_organiser_sees_only_their_own_requests(login_as):
         str(Events.FOOD_TASTING_WALK),
         str(Events.BATIK_WORKSHOP),
         str(Events.KITE_AFTERNOON),
+        # Story 17.3's e2e event.
+        str(Events.BAYFRONT_SHOWCASE),
     }
 
 

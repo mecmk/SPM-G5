@@ -188,6 +188,8 @@ class Events:
     # Story 16.2: Planning, organiser 2, coordinator 2, 20 Feb 2030, all three mobile LED screens
     # held and accepted (EquipmentItems/EquipmentHolds.LIGHT_SHOWCASE_LED_SCREENS).
     LIGHT_SHOWCASE = _e(16201)
+    # Fix f16.1.1: organiser 2, coordinator 2, March 2030; the 16.1 spec decides both its items.
+    VOLUNTEER_EVENING = _e(16110)
     # Fix f7.1.2 (story 7.1 AC4, AC8)'s e2e event: organiser 1, coordinator 1, PLANNING, May 2029,
     # an approved, held booking of Sunrise Studio over two days. The spec cancels it.
     LEADERSHIP_RETREAT = _e(7012)
@@ -240,6 +242,9 @@ class Events:
     # Story 12.8: PLANNING; coordinator 1, organiser 1, 22 May 2029. The spec cancels its one
     # booking, Seminar Room 2.1 for "Main hall", approved by Vera.
     PRODUCT_BRIEFING = _e(12801)
+    # Story 17.3: PLANNING; organiser 2, coordinator 2, 9 April 2031. One item in each status
+    # that holds units, and a declined one (EquipmentItems.BAYFRONT_*); the spec only reads it.
+    BAYFRONT_SHOWCASE = _e(17301)
 
 
 class Bookings:
@@ -362,6 +367,8 @@ class Registrations:
 
 class Unavailability:
     MAINTENANCE_SEMINAR_ROOM = uuid.UUID("88888888-0000-0000-0000-000000000001")
+    # 4 to 6 Jun 2029: still ahead when a test searches for it or requests the venue.
+    MAINTENANCE_SEMINAR_ROOM_AHEAD = uuid.UUID("88888888-0000-0000-0000-000000000002")
     # Story 12.6: Exhibition Foyer closed on each of its events' days, in the story's 0126NN block
     # (8888..0126NN), one after another in the order of the events; the marks on its bookings are
     # this closure's doing.
@@ -446,6 +453,14 @@ class EquipmentItems:
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000000062")
     # Story 16.2: Events.LIGHT_SHOWCASE's three mobile LED screens, accepted and held.
     LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("66666666-0000-0000-0000-000000016201")
+    # Story 17.3's, on Events.BAYFRONT_SHOWCASE: the first three hold units for its day.
+    BAYFRONT_WIRELESS_MICS = uuid.UUID("66666666-0000-0000-0000-000000017302")  # 3, accepted
+    BAYFRONT_SPEAKERS = uuid.UUID("66666666-0000-0000-0000-000000017303")  # 1, pending
+    BAYFRONT_LAPTOPS = uuid.UUID("66666666-0000-0000-0000-000000017304")  # 2, not yet sent
+    BAYFRONT_CAMERA = uuid.UUID("66666666-0000-0000-0000-000000017305")  # 1, declined, no hold
+    # Fix f16.1.1's, on Events.VOLUNTEER_EVENING, both pending and holding their units.
+    VOLUNTEER_PROJECTOR = uuid.UUID("66666666-0000-0000-0000-000000016111")
+    VOLUNTEER_CAMERA = uuid.UUID("66666666-0000-0000-0000-000000016112")
 
 
 class EquipmentHolds:
@@ -469,6 +484,10 @@ class EquipmentHolds:
     CHARITY_RUN_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000000062")
     # Story 16.2: the hold of Events.LIGHT_SHOWCASE's three mobile LED screens (item 6666..16201).
     LIGHT_SHOWCASE_LED_SCREENS = uuid.UUID("eeeeeeee-0000-0000-0000-000000016201")
+    # Story 17.3: the holds of Events.BAYFRONT_SHOWCASE's items, numbered as the items.
+    BAYFRONT_WIRELESS_MICS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017302")
+    BAYFRONT_SPEAKERS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017303")
+    BAYFRONT_LAPTOPS = uuid.UUID("eeeeeeee-0000-0000-0000-000000017304")
 
 
 class EquipmentOutOfService:

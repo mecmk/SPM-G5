@@ -10,6 +10,7 @@ import {
 } from '../api/venues'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { RequiredMark } from '../components/RequiredMark'
+import { CANCEL, CLOSE } from '../shared/format'
 
 export interface RoomLayoutDialogProps {
   /** The layout being changed, or null to add one. */
@@ -92,7 +93,7 @@ export function RoomLayoutDialog({ layout, onSaved, onCancel, onGone }: RoomLayo
       onConfirm={save}
       onCancel={onCancel}
       canConfirm={!isGone}
-      cancelLabel={isGone ? 'Close' : 'Cancel'}
+      cancelLabel={isGone ? CLOSE : CANCEL}
     >
       <label>
         <span>

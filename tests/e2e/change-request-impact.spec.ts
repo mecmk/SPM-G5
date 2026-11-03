@@ -64,12 +64,14 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 /** A day for an event that books venues: over a year ahead, spread out so reruns rarely meet,
  *  and early enough that a week later is within the two years an event may be planned ahead.
- *  Neither the day nor the week later falls on the Expo, so its Grand Hall stays free. */
+ *  Neither the day nor the week later falls on the Expo, so its Grand Hall stays free. The first
+ *  day it skips and the last are a day wider than the Expo, as `inFuture` takes the UTC date, which
+ *  is a day behind Singapore's before 08:00. */
 function farDay(): number {
   const expo = Math.floor((EXPO_STARTS - Date.now()) / DAY_MS)
   let day
   do day = 400 + Math.floor(Math.random() * 120)
-  while (day >= expo - 8 && day <= expo + 2)
+  while (day >= expo - 8 && day <= expo + 3)
   return day
 }
 

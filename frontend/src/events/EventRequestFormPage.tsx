@@ -34,7 +34,7 @@ import {
   EQUIPMENT_LOCKED_HINT,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
-import { formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
+import { CANCEL, formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
 import { PHONE_MAX_LENGTH } from '../shared/phone'
 import { unnamedRequirementLabel } from '../shared/venueRequest'
 import {
@@ -582,7 +582,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
 
   /** Take a file the person chose or dropped, unless it is certain to be refused. */
   function choosePicture(file: File | undefined) {
-    if (file === undefined || isReadOnly) return
+    if (file === undefined || isReadOnly || isSaving) return
     const problem = validateCoverImage(file)
     setPictureProblem(problem)
     if (problem !== null) return
@@ -598,7 +598,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
 
   function handlePictureDragOver(drag: DragEvent<HTMLDivElement>) {
     drag.preventDefault()
-    if (!isReadOnly) setIsDraggingPicture(true)
+    if (!isReadOnly && !isSaving) setIsDraggingPicture(true)
   }
 
   function handlePictureDragLeave() {
@@ -1059,11 +1059,17 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                     className="visually-hidden"
                     accept={COVER_IMAGE_TYPES.join(',')}
                     aria-label="Choose cover picture"
+                    disabled={isSaving}
                     onChange={handlePictureInput}
                   />
                 </label>
                 {shownPictureUrl && !isReadOnly && (
-                  <button type="button" className="secondary" onClick={removePicture}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={isSaving}
+                    onClick={removePicture}
+                  >
                     Remove picture
                   </button>
                 )}
@@ -1523,7 +1529,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                 </button>
               )}
               <Link to={backTo} className="button secondary">
-                Cancel
+                {CANCEL}
               </Link>
               <button
                 type="submit"
@@ -1547,7 +1553,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                 </p>
               )}
               <Link to={HOME_PATH} className="button secondary">
-                Cancel
+                {CANCEL}
               </Link>
               <button type="submit" className="secondary" disabled={isSaving}>
                 Save draft

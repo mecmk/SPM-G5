@@ -52,17 +52,17 @@ def _bookings_for(db: Session, event_id: uuid.UUID) -> int:
 
 @pytest.mark.story("12.1", ac=14)
 def test_a_blocked_venue_cannot_be_requested(coordinator_client, db):
-    # Seminar Room 2.1 is closed for air-con servicing from 2 Nov 00:00 to 4 Nov 00:00 (seed).
+    # Seminar Room 2.1 is closed for its air-con replacement from 4 Jun 2029 to 6 Jun 2029 (seed).
     event = _event(
-        db, datetime(2026, 11, 3, 9, 0, tzinfo=SGT), datetime(2026, 11, 3, 12, 0, tzinfo=SGT)
+        db, datetime(2029, 6, 5, 9, 0, tzinfo=SGT), datetime(2029, 6, 5, 12, 0, tzinfo=SGT)
     )
 
     response = _request(coordinator_client, event.id, Venues.SEMINAR_ROOM)
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "Seminar Room 2.1 is closed for maintenance from Mon 2 Nov 2026, 00:00 to "
-        "Wed 4 Nov 2026, 00:00."
+        "Seminar Room 2.1 is closed for maintenance from Mon 4 Jun 2029, 00:00 to "
+        "Wed 6 Jun 2029, 00:00."
     )
     assert _bookings_for(db, event.id) == 0
 

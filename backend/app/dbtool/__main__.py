@@ -186,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
                 return cmd_ready(
                     url, with_seed=not args.no_seed, with_docs=not args.no_docs, wait=args.wait
                 )
-    except (connection.DatabaseUnavailable, migrate.MigrationDrift) as exc:
+    except (connection.DatabaseUnavailable, migrate.MigrationDrift, migrate.SeedRefused) as exc:
         print(f"ERROR: {exc}")
         return 1
     return 2

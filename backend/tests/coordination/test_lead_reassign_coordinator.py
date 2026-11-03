@@ -120,11 +120,13 @@ def _open_assignment(db: Session, event_id):
 
 
 def _history(db: Session, event_id) -> list:
-    """Every assignment the event has had, oldest first."""
+    """Every assignment the event has had, oldest first, the open one last: inside one test's
+    transaction ``now()`` stands still, so two assignments can share ``assigned_at``."""
     return db.execute(
         text(
             "SELECT coordinator_id, assigned_by_id, unassigned_at"
-            " FROM event_coordinator_assignments WHERE event_id = :e ORDER BY assigned_at, id"
+            " FROM event_coordinator_assignments WHERE event_id = :e"
+            " ORDER BY unassigned_at IS NULL, assigned_at, id"
         ),
         {"e": event_id},
     ).all()
@@ -610,7 +612,12 @@ def test_two_leads_reassigning_at_once_write_one(engine):
             rows = session.scalars(
                 select(EventCoordinatorAssignment)
                 .where(EventCoordinatorAssignment.event_id == event_id)
-                .order_by(EventCoordinatorAssignment.assigned_at)
+                # The set-up row's assigned_at comes from the database's clock and the
+                # reassignment's from Python's, which can differ by more than the gap between them.
+                .order_by(
+                    EventCoordinatorAssignment.unassigned_at.is_(None),
+                    EventCoordinatorAssignment.assigned_at,
+                )
             ).all()
             assert [row.coordinator_id for row in rows] == [Users.COORDINATOR.id, winner]
             assert session.get(Event, event_id).assigned_coordinator_id == winner

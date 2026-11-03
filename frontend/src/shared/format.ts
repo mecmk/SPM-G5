@@ -47,6 +47,12 @@ export const REQUESTED_AT_LABEL = 'Requested at'
 /** Story 13.3 AC6: the link a search nothing matches offers, to list the whole tab again. */
 export const CLEAR_SEARCH = 'Clear search'
 
+/** The button that leaves a dialog or form without saving anything. */
+export const CANCEL = 'Cancel'
+
+/** The button or icon that dismisses a dialog or viewer with nothing left to decide. */
+export const CLOSE = 'Close'
+
 export function formatDate(stamp: string): string {
   return new Date(stamp).toLocaleDateString(LOCALE, {
     weekday: 'short',
@@ -113,6 +119,26 @@ export function isReadableDateTime(inputValue: string): boolean {
 /** The current moment as a Singapore `datetime-local` value, e.g. for a picker's `min`. */
 export function nowAsInput(): string {
   return instantToInput(new Date().toISOString())
+}
+
+const DATE_INPUT = /^\d{4}-\d{2}-\d{2}$/
+
+/** Story 17.3 AC3: whether the server can read a value as a day: a picker's, or one from the page
+ *  address. A picker can hold a year of five or six digits, which the server cannot, and an
+ *  address can hold a day its month does not have, which `Date.parse` rolls into the next month,
+ *  so the day must read back as itself. */
+export function isReadableDate(inputValue: string): boolean {
+  if (!DATE_INPUT.test(inputValue)) return false
+  const parsed = Date.parse(inputValue)
+  return (
+    !Number.isNaN(parsed) &&
+    new Date(parsed).toISOString().slice(0, 'YYYY-MM-DD'.length) === inputValue
+  )
+}
+
+/** Today in Singapore as a date picker's value ("2026-11-18"), e.g. for its `min`. */
+export function todayAsDateInput(): string {
+  return nowAsInput().slice(0, 'YYYY-MM-DD'.length)
 }
 
 /** The reverse of `inputToInstant`: a server timestamp as a Singapore `datetime-local` value. */
