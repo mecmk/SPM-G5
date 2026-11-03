@@ -54,6 +54,11 @@ can remove the equipment that I do not need anymore." ``withdraw_equipment_item`
 sent to Technical Support - Pending or Accepted - as Withdrawn rather than deleting it, so their
 record keeps it, releases its units at once, and tells them. It takes the event's row lock first,
 as a decision does, so the two are serialised (AC11).
+
+Story 17.3 - "As Technical Support Staff, I want a schedule of every equipment hold, grouped by
+equipment type, so that I can see at a glance which events have which equipment, from when to
+when." ``list_equipment_holds`` only reads: the holds still reserved, by their own dates, which
+are the units availability takes away.
 """
 
 from __future__ import annotations
@@ -61,7 +66,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any
 
@@ -84,6 +89,7 @@ from app.equipment.schemas import (
     EquipmentShortageOut,
     EquipmentWithdrawalIn,
     EventEquipmentAvailabilityOut,
+    HeldItemStatus,
     OutOfServiceIn,
     OutOfServiceUpdate,
 )
@@ -2029,3 +2035,170 @@ def list_event_shortages(
                     )
                 )
     return shortages
+
+
+# =============================================================================================
+# Story 17.3: the equipment holds schedule
+# =============================================================================================
+# A hold is listed while it is reserved and has not ended (AC5), by its own dates: a 7.2
+# correction inside the held period keeps them, so a hold can run past its event's end, and its
+# units stay taken until then (CL-210). A range's days are Singapore's, as every event's are.
+_SINGAPORE = timezone(timedelta(hours=8))
+HOLDS_START_BEFORE_TODAY_MESSAGE = "The start date cannot be before today."
+HOLDS_END_BEFORE_START_MESSAGE = "The end date cannot be before the start date."
+HOLDS_END_BEFORE_TODAY_MESSAGE = "The end date cannot be before today."
+# AC1/AC2/AC5: the items that hold units. The writes release a hold as its item leaves them.
+_HOLDING_ITEM_STATUSES = frozenset(HeldItemStatus)
+
+
+class InvalidHoldRange(ValueError):
+    """AC3: a range that reaches before today - its start, or with no start its end - or ends
+    before it starts (a 422)."""
+
+
+@dataclass(frozen=True)
+class HoldWindow:
+    """AC3: the moments a range covers - from 00:00 on its first day to 00:00 after its last, in
+    Singapore. A side left out is ``None``: the range is open there."""
+
+    starts_at: datetime | None
+    ends_at: datetime | None
+
+
+@dataclass(frozen=True)
+class HoldRow:
+    """One row of the schedule's statement: an active type, and one of its holds with that hold's
+    event name and item status - or ``None`` for each when none of its holds matched (AC6)."""
+
+    equipment_type: EquipmentType
+    hold: EquipmentReservation | None
+    event_name: str | None
+    item_status: str | None
+
+
+@dataclass(frozen=True)
+class ScheduledHold:
+    """AC1: a hold as the schedule shows it - its event's name, its item's status and the units
+    it has not released, as availability counts them."""
+
+    hold: EquipmentReservation
+    event_name: str
+    item_status: str
+    units: int
+
+
+@dataclass(frozen=True)
+class HoldGroup:
+    """AC1: one type and its holds, soonest first. AC6: none, when nothing of it is held."""
+
+    equipment_type: EquipmentType
+    holds: list[ScheduledHold]
+
+
+@dataclass(frozen=True)
+class HoldsSchedule:
+    """AC1/AC3: every active type, for the filter, and the groups the schedule shows."""
+
+    types: list[EquipmentType]
+    groups: list[HoldGroup]
+
+
+def singapore_today(now: datetime) -> date:
+    """AC3: the day ``now`` falls on in Singapore."""
+    return now.astimezone(_SINGAPORE).date()
+
+
+def _singapore_midnight(day: date) -> datetime:
+    return datetime(day.year, day.month, day.day, tzinfo=_SINGAPORE)
+
+
+def hold_window(from_date: date | None, to_date: date | None) -> HoldWindow:
+    """AC3: the moments a range from ``from_date`` to ``to_date``, both days included, covers. A
+    range ending on the last day there is (``date.max``) has no midnight after it, so it is open at
+    its end, as a range with no end is."""
+    is_open_ended = to_date is None or to_date == date.max
+    return HoldWindow(
+        starts_at=None if from_date is None else _singapore_midnight(from_date),
+        ends_at=None if is_open_ended else _singapore_midnight(to_date + timedelta(days=1)),
+    )
+
+
+def check_hold_range(from_date: date | None, to_date: date | None, *, today: date) -> None:
+    """AC3: refuse a range that starts before ``today``, ends before it starts, or - with no start
+    - ends before ``today``, each with its own sentence (``InvalidHoldRange``)."""
+    if from_date is not None and from_date < today:
+        raise InvalidHoldRange(HOLDS_START_BEFORE_TODAY_MESSAGE)
+    if from_date is not None and to_date is not None and to_date < from_date:
+        raise InvalidHoldRange(HOLDS_END_BEFORE_START_MESSAGE)
+    if from_date is None and to_date is not None and to_date < today:
+        raise InvalidHoldRange(HOLDS_END_BEFORE_TODAY_MESSAGE)
+
+
+def group_holds(rows: Iterable[HoldRow], *, type_code: str | None) -> HoldsSchedule:
+    """AC1/AC6: ``rows`` as one group per type, in the order given; AC3: with ``type_code``, that
+    type's group alone (``UnknownEquipmentType`` when no row is of it)."""
+    groups: dict[uuid.UUID, HoldGroup] = {}
+    for row in rows:
+        group = groups.setdefault(row.equipment_type.id, HoldGroup(row.equipment_type, []))
+        if row.hold is not None:
+            units = row.hold.quantity - row.hold.released_quantity
+            group.holds.append(ScheduledHold(row.hold, row.event_name, row.item_status, units))
+    types = [group.equipment_type for group in groups.values()]
+    if type_code is None:
+        return HoldsSchedule(types, list(groups.values()))
+    chosen = [group for group in groups.values() if group.equipment_type.code == type_code]
+    if not chosen:
+        raise UnknownEquipmentType(type_code)
+    return HoldsSchedule(types, chosen)
+
+
+def list_equipment_holds(
+    db: Session,
+    *,
+    type_code: str | None,
+    from_date: date | None,
+    to_date: date | None,
+    now: datetime,
+) -> HoldsSchedule:
+    """AC1-AC3, AC5, AC6: the schedule at ``now``, filtered by type and range - every active type
+    by name, each with its holds still reserved and not yet ended that have any part in the range,
+    soonest first; ties by end, event name and id. One statement, however many types: the active
+    types, each joined outer to its matching holds, so a type with none is still a row (AC6), and
+    with ``type_code`` the other types' rows carry no hold, so they still fill the filter (AC3)."""
+    check_hold_range(from_date, to_date, today=singapore_today(now))
+    window = hold_window(from_date, to_date)
+    matching = [
+        EquipmentReservation.equipment_type_id == EquipmentType.id,
+        EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+        EventEquipmentRequest.status.in_(_HOLDING_ITEM_STATUSES),
+        EquipmentReservation.ends_at > now,
+    ]
+    if window.starts_at is not None:
+        matching.append(EquipmentReservation.ends_at > window.starts_at)
+    if window.ends_at is not None:
+        matching.append(EquipmentReservation.starts_at < window.ends_at)
+    if type_code is not None:
+        matching.append(EquipmentType.code == type_code)
+    # Joined as tables, so the outer join takes all three together: an ORM join here is flattened
+    # into the outer join's own target, which leaves the item and the event out of the FROM.
+    held = (
+        EquipmentReservation.__table__.join(
+            EventEquipmentRequest.__table__,
+            EventEquipmentRequest.id == EquipmentReservation.equipment_request_id,
+        )
+    ).join(Event.__table__, Event.id == EquipmentReservation.event_id)
+    rows = db.execute(
+        select(EquipmentType, EquipmentReservation, Event.name, EventEquipmentRequest.status)
+        .select_from(EquipmentType)
+        .outerjoin(held, and_(*matching))
+        .where(EquipmentType.is_active.is_(True))
+        .order_by(
+            EquipmentType.name,
+            EquipmentType.id,
+            EquipmentReservation.starts_at,
+            EquipmentReservation.ends_at,
+            by_name(Event.name),
+            EquipmentReservation.id,
+        )
+    ).all()
+    return group_holds((HoldRow(*row) for row in rows), type_code=type_code)
