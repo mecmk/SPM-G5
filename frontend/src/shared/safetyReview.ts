@@ -1,3 +1,4 @@
+import type { BookingStatus } from '../api/bookings'
 import type { EventStatus } from '../api/events'
 import type { EventSafety, ReleasedBooking, SafetyArrangement, SafetyVenue } from '../api/safety'
 import { ADDITIONAL_VENUE, formatCalendarDate } from './format'
@@ -47,4 +48,34 @@ export function flaggedArrangements(safety: EventSafety | null): SafetyArrangeme
   const review = safety?.latest_review
   if (safety?.status !== 'PLANNING' || review?.outcome !== 'CHANGES_REQUESTED') return []
   return review.flagged_arrangements
+}
+
+/** What a booking card needs to tell whether the latest review flagged it. */
+interface ReviewedBooking {
+  id: string
+  status: BookingStatus
+  created_at: string
+}
+
+/**
+ * Fix f21.2.1 (story 21.2): whether the latest review flagged this booking, so only its card is
+ * highlighted, not the whole section. AC22: a booking a finding about venue bookings named, which
+ * the review released. AC23: when such a finding names none, a pending or approved booking
+ * requested before the review, which it saw. AC24: so never one requested after it. AC27: none
+ * once `flaggedArrangements` flags no venue bookings.
+ */
+export function isBookingFlagged(safety: EventSafety | null, booking: ReviewedBooking): boolean {
+  const review = safety?.latest_review
+  if (!review || !flaggedArrangements(safety).includes('VENUE_BOOKINGS')) return false
+  const findings = review.findings.filter((finding) => finding.arrangement === 'VENUE_BOOKINGS')
+  const isNamed = findings.some((finding) =>
+    finding.released_bookings.some((released) => released.booking_id === booking.id),
+  )
+  if (isNamed) return true
+  const namesNone = findings.some((finding) => finding.released_bookings.length === 0)
+  return (
+    namesNone &&
+    (booking.status === 'PENDING' || booking.status === 'APPROVED') &&
+    new Date(booking.created_at) < new Date(review.reviewed_at)
+  )
 }

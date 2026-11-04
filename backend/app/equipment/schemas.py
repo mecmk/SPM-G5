@@ -386,7 +386,8 @@ class OutOfServiceOut(BaseModel):
 
 
 class EquipmentCatalogueEntryOut(BaseModel):
-    """Story 16.2 AC2: one type in the catalogue - its stock and the units out of service now.
+    """Story 16.2 AC2: one type in the catalogue - its stock, the units out of service now and its
+    current records, in force or still to come.
     No defaults (response schema)."""
 
     id: uuid.UUID
@@ -394,6 +395,7 @@ class EquipmentCatalogueEntryOut(BaseModel):
     name: str
     total_quantity: int
     out_of_service_now: int
+    records: list[OutOfServiceOut]
 
     @classmethod
     def from_entry(cls, entry: CatalogueEntry) -> EquipmentCatalogueEntryOut:
@@ -404,6 +406,7 @@ class EquipmentCatalogueEntryOut(BaseModel):
             name=kind.name,
             total_quantity=kind.total_quantity,
             out_of_service_now=entry.out_of_service_now,
+            records=[OutOfServiceOut.from_record(record) for record in entry.records],
         )
 
 
@@ -413,7 +416,6 @@ class EquipmentTypePageOut(EquipmentCatalogueEntryOut):
 
     description: str | None
     storage_location: str | None
-    records: list[OutOfServiceOut]
 
     @classmethod
     def from_page(cls, page: TypePage) -> EquipmentTypePageOut:

@@ -1618,10 +1618,12 @@ def starts_in_the_past(starts_at: datetime, *, now: datetime) -> bool:
 
 @dataclass(frozen=True)
 class CatalogueEntry:
-    """AC2: one active type, and the units out of service now."""
+    """AC2: one active type, the units out of service now, and its current records - in force or
+    still to come - soonest first."""
 
     equipment_type: EquipmentType
     out_of_service_now: int
+    records: list[EquipmentUnavailabilityPeriod]
 
 
 @dataclass(frozen=True)
@@ -1653,23 +1655,26 @@ def _not_yet_ended(now: datetime) -> ColumnElement[bool]:
 
 
 def list_equipment_catalogue(db: Session, *, now: datetime) -> list[CatalogueEntry]:
-    """AC2: every active type, by name, with the units its records have out of service now."""
-    out_now = dict(
-        db.execute(
-            select(
-                EquipmentUnavailabilityPeriod.equipment_type_id,
-                func.sum(EquipmentUnavailabilityPeriod.quantity),
-            )
-            .where(EquipmentUnavailabilityPeriod.starts_at <= now, _not_yet_ended(now))
-            .group_by(EquipmentUnavailabilityPeriod.equipment_type_id)
-        ).all()
-    )
+    """AC2: every active type, by name, with the units its records have out of service now and
+    those records, so a period still to come shows beside the ones in force."""
+    current: dict[uuid.UUID, list[EquipmentUnavailabilityPeriod]] = {}
+    for record in db.scalars(
+        select(EquipmentUnavailabilityPeriod)
+        .where(_not_yet_ended(now))
+        .order_by(EquipmentUnavailabilityPeriod.starts_at, EquipmentUnavailabilityPeriod.id)
+    ):
+        current.setdefault(record.equipment_type_id, []).append(record)
     types = db.scalars(
         select(EquipmentType)
         .where(EquipmentType.is_active.is_(True))
         .order_by(EquipmentType.name, EquipmentType.id)
     )
-    return [CatalogueEntry(each, out_now.get(each.id, 0)) for each in types]
+    entries = []
+    for each in types:
+        records = current.get(each.id, [])
+        out_now = sum(record.quantity for record in records if record.starts_at <= now)
+        entries.append(CatalogueEntry(each, out_now, records))
+    return entries
 
 
 def _active_type(db: Session, type_id: uuid.UUID) -> EquipmentType:

@@ -12,8 +12,9 @@
  *     editor is open makes the save fail as stale, and a reload shows the details still editable.
  * AC12 once Confirmed, the organiser's details and cover picture are greyed out with a hint that
  *     further changes go through a change request; internal notes still save.
- * AC15 once approved, the form shows the equipment read-only, pointing to the Equipment
- *     requirements section, and a save leaves the equipment out of what it sends.
+ * AC15 once approved, the form shows no Equipment section and no hint, since the equipment is
+ *     changed in the event page's own section, and a save leaves the equipment out of what it
+ *     sends; while under review the section is still shown and editable (f7.2.5).
  * AC7 the form counts availability without the event's own holds, and marks equipment no longer
  *     available for new dates on its line, refusing the save.
  * AC8 nobody but the assigned coordinator is offered the edit.
@@ -68,6 +69,11 @@ function equipmentItem(page: Page, position: number): Locator {
 /** Every equipment line on the form. */
 function equipmentItems(page: Page): Locator {
   return page.getByRole('group', { name: /^Equipment item/ })
+}
+
+/** The form's Equipment section, which holds the lines. */
+function equipmentFormSection(page: Page): Locator {
+  return page.getByRole('group', { name: 'Equipment', exact: true })
 }
 
 /** Has the Lead assign the request (story 5.4), and returns the coordinator's account. */
@@ -380,22 +386,64 @@ test('7.2 AC10: an event awaiting its safety check still offers its details for 
   await expect(page.getByLabel('Description')).toBeEnabled()
 })
 
-test('7.2 AC15: once approved, the form shows the equipment read-only and points to its own section', async ({
+// Read only: each seeded event's coordinator opens the form and nothing is saved.
+const APPROVED_EVENT_FORMS = [
+  {
+    status: 'Planning',
+    eventId: EVENTS.equipmentRoadshow,
+    account: ACCOUNTS.coordinator,
+    isDetailsEditable: true,
+  },
+  {
+    status: 'Awaiting Safety Check',
+    eventId: EVENTS.harbourConcert,
+    account: ACCOUNTS.coordinator2,
+    isDetailsEditable: true,
+  },
+  {
+    status: 'Confirmed',
+    eventId: EVENTS.confirmed,
+    account: ACCOUNTS.coordinator,
+    isDetailsEditable: false,
+  },
+]
+
+for (const { status, eventId, account, isDetailsEditable } of APPROVED_EVENT_FORMS) {
+  test(`7.2 AC15: once approved (${status}), the form shows no Equipment section and no hint`, async ({
+    page,
+  }) => {
+    await signIn(page, account)
+    await page.goto(`/events/${eventId}`)
+    await page.getByRole('link', { name: 'Edit event' }).click()
+
+    // The rest of the form is drawn in the same pass, so waiting for it makes the absence real.
+    const description = page.getByLabel('Description')
+    await expect(description).toBeVisible()
+    if (isDetailsEditable) await expect(description).toBeEnabled()
+    else await expect(description).toBeDisabled()
+    await expect(equipmentFormSection(page)).toHaveCount(0)
+    await expect(equipmentItems(page)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Add equipment' })).toHaveCount(0)
+    await expect(page.getByText(EQUIPMENT_HINT)).toHaveCount(0)
+  })
+}
+
+test('7.2 AC15: while under review, the form still shows the Equipment section and its lines can be edited', async ({
   page,
 }) => {
-  // Read only: the roadshow's pending and accepted items are shown, never changed.
+  // Read only: the seeded request's one unsent line is shown and nothing is saved.
   await signIn(page, ACCOUNTS.coordinator)
-  await page.goto(`/events/${EVENTS.equipmentRoadshow}`)
+  await page.goto(`/events/${EVENTS.submitted}`)
   await page.getByRole('link', { name: 'Edit event' }).click()
 
-  await expect(page.getByText(EQUIPMENT_HINT)).toBeVisible()
+  await expect(equipmentFormSection(page)).toBeVisible()
   const firstItem = equipmentItem(page, 1)
-  await expect(firstItem.getByLabel('Equipment type')).toBeDisabled()
-  await expect(firstItem.getByLabel('Quantity')).toBeDisabled()
-  await expect(firstItem.getByLabel('Technical notes')).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Add equipment' })).toHaveCount(0)
-  await expect(page.getByLabel('Description')).toBeEnabled()
+  await expect(firstItem.getByLabel('Equipment type')).toBeEnabled()
+  await expect(firstItem.getByLabel('Quantity')).toBeEnabled()
+  await expect(firstItem.getByLabel('Technical notes')).toBeEnabled()
+  await expect(firstItem.getByRole('button', { name: 'Remove' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Add equipment' })).toBeEnabled()
+  await expect(page.getByText(EQUIPMENT_HINT)).toHaveCount(0)
 })
 
 test('7.2 AC15: once approved, a correction leaves the equipment out of what it sends', async ({
@@ -412,7 +460,6 @@ test('7.2 AC15: once approved, a correction leaves the equipment out of what it 
   const coordinator = await signedInAs(browser, page, request.coordinator)
   await approve(coordinator, request.id)
   await openCorrection(coordinator, request.id, name)
-  await expect(equipmentItem(coordinator, 1).getByLabel('Quantity')).toBeDisabled()
 
   await coordinator.getByLabel('Description').fill('Corrected with the kit left alone.')
   const [sent] = await Promise.all([
