@@ -10,7 +10,9 @@
  *          any request is sent. A purely client-side check has no backend call to assert against
  *          and no other runner, so it belongs here (AGENTS.md, tests/CLAUDE.md).
  * 15.1 AC6 a type already requested is not offered, and one with none available cannot be chosen.
- * 15.1 AC9 a Confirmed event, and the organiser's own view, show the equipment read-only.
+ * 15.1 AC9 a Confirmed event can still take equipment; an event under review, and the organiser's
+ *          own view, show the equipment read-only, and under review an unsent item has no badge
+ *          (f15.1.2).
  *
  * The holds, the availability arithmetic, the server's boundaries, the permissions, the date
  * re-check (AC8) and the races (AC10) are backend cases, in backend/tests/equipment/. This spec
@@ -127,15 +129,26 @@ test('15.1 AC4: a quantity of 0, or more than are available, is pointed out befo
   await expect(item(page, 'Presentation laptop')).toHaveCount(0)
 })
 
-test('15.1 AC9: a confirmed event shows its equipment with nothing to change', async ({ page }) => {
+test('15.1 AC9: an event under review shows its equipment with nothing to change', async ({
+  page,
+}) => {
   await signIn(page, ACCOUNTS.coordinator)
-  await page.goto(`/events/${EVENTS.confirmed}`)
+  await page.goto(`/events/${EVENTS.submitted}`)
 
-  await expect(equipmentSection(page)).toBeVisible()
+  await expect(item(page, 'Portable projector')).toBeVisible()
   await expect(addForm(page)).toHaveCount(0)
   await expect(
     equipmentSection(page).getByRole('button', { name: 'Submit to Technical Support' }),
   ).toHaveCount(0)
+  // Nothing can be sent yet, so the item does not say it is waiting to be.
+  await expect(item(page, 'Portable projector')).not.toContainText('Not yet sent')
+})
+
+test('15.1 AC9: a confirmed event can still take equipment', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.confirmed}`)
+
+  await expect(addForm(page)).toBeVisible()
 })
 
 test('15.1 AC9: the organiser sees each item and its status, with nothing to change', async ({

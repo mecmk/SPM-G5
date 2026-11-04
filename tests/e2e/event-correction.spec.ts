@@ -23,12 +23,6 @@
  * by backend/tests/events/test_correct_event_under_review.py. The organiser-vs-coordinator case of
  * AC9 needs story 4.3 (organisers editing a submitted request).
  *
- * Story 15.1 AC6 (fix f15.1.1): a declined item stays on the event page as history and does not
- * count, so it is not on this form, and neither a shortage of its type nor the type being requested
- * again stops a correction. Those checks run in the form, before anything is sent, so they are
- * here. What the server does with a declined item is covered by
- * backend/tests/equipment/test_declined_item_in_a_correction.py.
- *
  * Each test that saves raises its own request through the organiser's form, so parallel specs
  * never edit the same event. A submitted request waits until the Lead assigns it (5.4), so the
  * test has the Lead assign it before signing in as that coordinator.
@@ -55,8 +49,6 @@ const EQUIPMENT_HINT =
 // sign-in cycles take longer than the default per-test budget.
 const TWO_USER_TIMEOUT = 90_000
 // Story 15.1 AC6: the organiser, the Lead, the coordinator and Technical Support each sign in.
-const DECLINED_ITEM_TIMEOUT = 120_000
-const DECLINE_REASON = 'No laptops spare that week.'
 /** The smallest valid PNG: one transparent pixel. */
 const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -76,15 +68,6 @@ function equipmentItem(page: Page, position: number): Locator {
 /** Every equipment line on the form. */
 function equipmentItems(page: Page): Locator {
   return page.getByRole('group', { name: /^Equipment item/ })
-}
-
-function equipmentSection(page: Page): Locator {
-  return page.getByRole('region', { name: 'Equipment requirements' })
-}
-
-/** The event page's laptop lines. */
-function laptopItems(page: Page): Locator {
-  return equipmentSection(page).getByRole('listitem').filter({ hasText: 'Presentation laptop' })
 }
 
 /** Has the Lead assign the request (story 5.4), and returns the coordinator's account. */
@@ -171,34 +154,6 @@ async function saveCorrection(page: Page) {
     ),
     page.getByRole('button', { name: 'Save changes' }).click(),
   ])
-}
-
-/**
- * Story 15.1 AC6 only: the coordinator sends the request's laptops to Technical Support (15.1 AC1),
- * who decline them (16.1 AC2), and is left on the event page.
- */
-async function laptopsDeclined(coordinator: Page, browser: Browser, id: string, name: string) {
-  await coordinator.goto(`/events/${id}`)
-  await equipmentSection(coordinator)
-    .getByRole('button', { name: 'Submit to Technical Support' })
-    .click()
-  await expect(laptopItems(coordinator)).toContainText('Pending')
-
-  const techSupport = await signedInAs(browser, coordinator, ACCOUNTS.techSupport)
-  await techSupport.goto('/equipment/requests')
-  await techSupport.getByRole('searchbox', { name: 'Search requests' }).fill(name)
-  await techSupport
-    .getByRole('listitem')
-    .filter({ hasText: name })
-    .getByRole('button', { name: 'Decline' })
-    .click()
-  const dialog = techSupport.getByRole('dialog', { name: 'Decline this request?' })
-  await dialog.getByLabel('Reason for declining').fill(DECLINE_REASON)
-  await dialog.getByRole('button', { name: 'Decline' }).click()
-  await expect(dialog).not.toBeVisible()
-
-  await coordinator.reload()
-  await expect(laptopItems(coordinator)).toContainText('Declined')
 }
 
 test('7.2 AC4: the assigned coordinator corrects a request under review and the details page shows it', async ({
@@ -473,80 +428,6 @@ test('7.2 AC15: once approved, a correction leaves the equipment out of what it 
   await coordinator.getByRole('link', { name: /^← / }).click()
   await expect(
     coordinator.getByRole('paragraph').filter({ hasText: 'Corrected with the kit left alone.' }),
-  ).toBeVisible()
-})
-
-test('15.1 AC6: a declined item is not on the form, so a shortage of its type does not stop the dates moving', async ({
-  page,
-  browser,
-}) => {
-  test.setTimeout(DECLINED_ITEM_TIMEOUT)
-  const name = uniqueName('Declined kit')
-  // A day no other spec holds laptops on, and a different one each run, so a retry cannot collide.
-  const busyDay = 230 + Math.floor(Math.random() * 60)
-  await signIn(page, ACCOUNTS.organiser)
-  const request = await submittedRequestWithLaptops(page, name, {
-    days: busyDay - 40,
-    laptops: 4,
-  })
-  // Another request takes 5 of the 6 laptops on the day the coordinator will move this one to.
-  await submittedRequestWithLaptops(page, uniqueName('Busy day'), {
-    days: busyDay,
-    laptops: 5,
-  })
-  const coordinator = await signedInAs(browser, page, request.coordinator)
-  await laptopsDeclined(coordinator, browser, request.id, name)
-
-  await openCorrection(coordinator, request.id, name)
-  await expect(coordinator.getByText('No equipment requested.')).toBeVisible()
-  await expect(equipmentItems(coordinator)).toHaveCount(0)
-
-  await coordinator.getByLabel('Proposed start').fill(inFuture(busyDay, 9))
-  await coordinator.getByLabel('Proposed end').fill(inFuture(busyDay, 17))
-  await saveCorrection(coordinator)
-  await expect(coordinator.getByRole('alert')).toHaveCount(0)
-
-  // The item stays on the event page as history, with Technical Support's reason.
-  await coordinator.getByRole('link', { name: /^← / }).click()
-  await expect(coordinator).toHaveURL(DETAILS_PATH)
-  await expect(laptopItems(coordinator)).toContainText('Declined')
-  await expect(laptopItems(coordinator)).toContainText(DECLINE_REASON)
-  await openCorrection(coordinator, request.id, name)
-  await expect(coordinator.getByLabel('Proposed start')).toHaveValue(inFuture(busyDay, 9))
-})
-
-test('15.1 AC6: a type declined and requested again can still be corrected', async ({
-  page,
-  browser,
-}) => {
-  test.setTimeout(DECLINED_ITEM_TIMEOUT)
-  const name = uniqueName('Asked again')
-  await signIn(page, ACCOUNTS.organiser)
-  const request = await submittedRequestWithLaptops(page, name, {
-    days: 290 + Math.floor(Math.random() * 30),
-    laptops: 2,
-  })
-  const coordinator = await signedInAs(browser, page, request.coordinator)
-  await laptopsDeclined(coordinator, browser, request.id, name)
-
-  // AC2: the type is offered again, and that line is the only one the form lists.
-  const addForm = equipmentSection(coordinator).getByRole('form', { name: 'Add equipment' })
-  await addForm.getByLabel('Equipment type').selectOption('LAPTOP')
-  await addForm.getByLabel('Quantity').fill('1')
-  await addForm.getByRole('button', { name: 'Add item' }).click()
-  await expect(laptopItems(coordinator).filter({ hasText: 'Not yet sent' })).toHaveCount(1)
-
-  await openCorrection(coordinator, request.id, name)
-  await expect(equipmentItems(coordinator)).toHaveCount(1)
-  await coordinator.getByLabel('Description').fill('Corrected beside the declined laptops.')
-  await saveCorrection(coordinator)
-  await expect(coordinator.getByRole('alert')).toHaveCount(0)
-
-  await coordinator.getByRole('link', { name: /^← / }).click()
-  await expect(
-    coordinator
-      .getByRole('paragraph')
-      .filter({ hasText: 'Corrected beside the declined laptops.' }),
   ).toBeVisible()
 })
 
