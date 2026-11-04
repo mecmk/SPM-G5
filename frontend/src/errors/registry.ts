@@ -292,7 +292,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check the floor area',
     message: 'Floor area must be above 0, with up to 2 decimals.',
   },
-  /** Story 8.3 AC11-AC13 (fix f8.3.4): each shown under its own field. */
+  /** Story 8.3 AC13-AC15 (fix f8.3.4): each shown under its own field. */
   VENUE_OPENS_REQUIRED: {
     title: 'Opening time needed',
     message: 'Enter the time the venue opens.',

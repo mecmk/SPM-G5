@@ -117,21 +117,21 @@ function isValidFloorArea(value: string): boolean {
   return area === '' || (AREA_WITH_TWO_DECIMALS.test(area) && Number(area) > 0)
 }
 
-/** Story 8.3 AC11-AC13 (fix f8.3.4): the operating fields, each with its problem shown under it. */
+/** Story 8.3 AC13-AC15 (fix f8.3.4): the operating fields, each with its problem shown under it. */
 export type OperatingField = 'opensAt' | 'closesAt' | 'setupMinutes' | 'teardownMinutes'
 
 export type OperatingProblems = Record<OperatingField, ErrorCode | null>
 
-/** Story 8.3 AC12: the most digits a minutes box takes - enough for 14 days' 20160. */
+/** Story 8.3 AC14: the most digits a minutes box takes - enough for 14 days' 20160. */
 export const MINUTES_MAX_DIGITS = String(TURNAROUND_MAX_MINUTES).length
 
-/** Story 8.3 AC12: what a minutes box keeps of what was typed - its digits, nothing else. */
+/** Story 8.3 AC14: what a minutes box keeps of what was typed - its digits, nothing else. */
 export function digitsOnly(value: string): string {
   return value.replace(/\D/g, '')
 }
 
 /**
- * Story 8.3 AC11-AC13 (fix f8.3.4): what is wrong with each operating field, or null. Both times
+ * Story 8.3 AC13-AC15 (fix f8.3.4): what is wrong with each operating field, or null. Both times
  * are required and closing must come after opening; setup and teardown are required whole minutes.
  */
 export function operatingProblemsOf(form: VenueFormState): OperatingProblems {
@@ -153,7 +153,7 @@ export function operatingProblemsOf(form: VenueFormState): OperatingProblems {
   }
 }
 
-/** Story 8.3 AC12: a minutes box must hold whole minutes, at most a booking's own limit. */
+/** Story 8.3 AC14: a minutes box must hold whole minutes, at most a booking's own limit. */
 function minutesProblem(value: string, required: ErrorCode, tooLong: ErrorCode): ErrorCode | null {
   if (!WHOLE_NUMBER.test(value)) return required
   return Number(value) > TURNAROUND_MAX_MINUTES ? tooLong : null
@@ -167,7 +167,7 @@ export const OPERATING_FIELDS: OperatingField[] = [
 ]
 
 /**
- * Story 8.3 AC13 (fix f8.3.4): the operating problems to show now - each field's once it has been
+ * Story 8.3 AC15 (fix f8.3.4): the operating problems to show now - each field's once it has been
  * left or the form saved, and a closing time before the opening time as soon as both are set.
  */
 export function shownOperatingProblems(
@@ -233,8 +233,8 @@ export function venueInputFrom(form: VenueFormState, isEditing: boolean): VenueI
     capacity: Number(form.capacity),
     description: textOrNull(form.description),
     floor_area_sqm: textOrNull(form.floorAreaSqm),
-    operating_hours_start: textOrNull(form.opensAt),
-    operating_hours_end: textOrNull(form.closesAt),
+    operating_hours_start: form.opensAt,
+    operating_hours_end: form.closesAt,
     operating_notes: textOrNull(form.operatingNotes),
     setup_minutes_default: Number(form.setupMinutes),
     teardown_minutes_default: Number(form.teardownMinutes),

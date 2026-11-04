@@ -7,10 +7,10 @@
  * Beyond those ACs this spec also covers delete (Venue Staff have full CRUD), search and a
  * capacity filter, and that every save appears in the notification centre.
  *
- * Story 8.3 AC11-AC13 (fix f8.3.4): a venue's operating information is required.
- * AC11 Opens and Closes are required: a venue without them is not sent, new or saved earlier.
- * AC12 Setup and teardown are required, start at 0, take digits only and are at most 14 days.
- * AC13 each problem is named under its field; Closes cannot be picked before Opens.
+ * Story 8.3 AC13-AC15 (fix f8.3.4): a venue's operating information is required.
+ * AC13 Opens and Closes are required: a venue without them is not sent, new or saved earlier.
+ * AC14 Setup and teardown are required, start at 0, take digits only and are at most 14 days.
+ * AC15 each problem is named under its field; Closes cannot be picked before Opens.
  * The server's refusals are backend cases: backend/tests/venues/test_required_operating_info.py.
  *
  * Story 8.3 AC5-AC8 and AC10 (bugs f8.3.2 and f8.3.3): a venue's pictures.
@@ -277,7 +277,7 @@ test('8.3: a link to the new-venue form survives signing in', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'New venue' })).toBeVisible()
 })
 
-// --- 8.3 AC11-AC13: required operating information (f8.3.4) -------------------------------------
+// --- 8.3 AC13-AC15: required operating information (f8.3.4) -------------------------------------
 /** Count the venue saves (POST and PATCH /venues...) the page sends from here on. */
 function countVenueSaves(page: Page) {
   const saves = { count: 0 }
@@ -288,7 +288,7 @@ function countVenueSaves(page: Page) {
   return saves
 }
 
-test('8.3 AC11: a new venue without opening hours is not sent, and Opens and Closes say why', async ({
+test('8.3 AC13: a new venue without opening hours is not sent, and Opens and Closes say why', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -311,7 +311,7 @@ test('8.3 AC11: a new venue without opening hours is not sent, and Opens and Clo
   expect(saves.count).toBe(0)
 })
 
-test('8.3 AC11: a venue saved without opening hours asks for them before it saves', async ({
+test('8.3 AC13: a venue saved without opening hours asks for them before it saves', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -329,7 +329,7 @@ test('8.3 AC11: a venue saved without opening hours asks for them before it save
   expect(saves.count).toBe(0)
 })
 
-test('8.3 AC11-AC13: the four operating fields are marked required', async ({ page }) => {
+test('8.3 AC13-AC15: the four operating fields are marked required', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venues/new')
 
@@ -340,7 +340,7 @@ test('8.3 AC11-AC13: the four operating fields are marked required', async ({ pa
   await expect(page.getByLabel('Teardown (minutes)')).toHaveValue('0')
 })
 
-test('8.3 AC12: setup and teardown take digits only', async ({ page }) => {
+test('8.3 AC14: setup and teardown take digits only', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venues/new')
 
@@ -352,7 +352,7 @@ test('8.3 AC12: setup and teardown take digits only', async ({ page }) => {
   }
 })
 
-test('8.3 AC12: setup and teardown stop at five digits, and more than 14 days is named under the field', async ({
+test('8.3 AC14: setup and teardown stop at five digits, and more than 14 days is named under the field', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -374,7 +374,7 @@ test('8.3 AC12: setup and teardown stop at five digits, and more than 14 days is
   await expect(teardown).not.toHaveAttribute('aria-invalid', 'true')
 })
 
-test('8.3 AC12: a setup left empty is named under Setup as soon as it is left', async ({
+test('8.3 AC14: a setup left empty is named under Setup as soon as it is left', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -388,7 +388,7 @@ test('8.3 AC12: a setup left empty is named under Setup as soon as it is left', 
   await expect(setup).toHaveAccessibleDescription('Enter the setup time in minutes, or 0 for none.')
 })
 
-test('8.3 AC13: a closing time before the opening time is named under Closes straight away', async ({
+test('8.3 AC15: a closing time before the opening time is named under Closes straight away', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.venueStaff)
@@ -406,7 +406,7 @@ test('8.3 AC13: a closing time before the opening time is named under Closes str
   await expect(page.getByLabel('Closes')).not.toHaveAttribute('aria-invalid', 'true')
 })
 
-test('8.3 AC11-AC13: a venue with its hours, setup and teardown is created', async ({ page }) => {
+test('8.3 AC13-AC15: a venue with its hours, setup and teardown is created', async ({ page }) => {
   const name = uniqueName('E2E Hours')
   await signIn(page, ACCOUNTS.venueStaff)
   await startNewVenue(page, name)

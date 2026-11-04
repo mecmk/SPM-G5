@@ -139,7 +139,7 @@ export function VenueFormPage() {
   // Every problem the form's own check found on the last save, each said in its own toast.
   const [formProblems, setFormProblems] = useState<ErrorCode[]>([])
   const [isSaving, setIsSaving] = useState(false)
-  // Story 8.3 AC13 (fix f8.3.4): the operating fields left since the page opened; each shows its
+  // Story 8.3 AC15 (fix f8.3.4): the operating fields left since the page opened; each shows its
   // problem from then on.
   const [leftFields, setLeftFields] = useState<ReadonlySet<OperatingField>>(new Set())
   // Story 8.3 AC5: the pictures in the order they will be saved in, saved ones and those chosen
@@ -349,7 +349,7 @@ export function VenueFormPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form) return
-    // Story 8.3 AC13 (fix f8.3.4): a save names every operating problem under its field.
+    // Story 8.3 AC15 (fix f8.3.4): a save names every operating problem under its field.
     setLeftFields(new Set(OPERATING_FIELDS))
     const problems = validateVenueForm(form, reference?.facilities ?? [])
     setFormProblems(problems)

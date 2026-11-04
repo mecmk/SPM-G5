@@ -150,8 +150,8 @@ class _OperatingHoursMixin(BaseModel):
 
 
 class VenueCreate(_OperatingHoursMixin):
-    """AC1/AC11 (fix f8.3.4): name, location, capacity and the opening hours are the minimum;
-    setup and teardown default to 0 and are at most a booking's own limit, 14 days (AC12), and
+    """AC1/AC13 (fix f8.3.4): name, location, capacity and the opening hours are the minimum;
+    setup and teardown default to 0 and are at most a booking's own limit, 14 days (AC14), and
     everything else is optional."""
 
     name: str = Field(min_length=1, max_length=200)
@@ -227,7 +227,7 @@ class VenueUpdate(_OperatingHoursMixin):
     )
     @classmethod
     def _refuse_clearing(cls, value):
-        """AC11/AC12 (fix f8.3.4): these may be left out of an update, but never sent empty. A venue
+        """AC13/AC14 (fix f8.3.4): these may be left out of an update, but never sent empty. A venue
         saved earlier without opening hours keeps them unrecorded until both are given."""
         if value is None:
             raise ValueError("is required and cannot be cleared")

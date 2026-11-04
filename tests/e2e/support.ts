@@ -418,7 +418,7 @@ export function clarificationsSection(page: Page) {
   return page.getByRole('region', { name: 'Clarifications', exact: true })
 }
 
-/** Story 8.3 AC11 (fix f8.3.4): fill in the opening hours a venue form needs before it saves. */
+/** Story 8.3 AC13 (fix f8.3.4): fill in the opening hours a venue form needs before it saves. */
 export async function fillVenueHours(page: Page, opens = '09:00', closes = '18:00') {
   await page.getByLabel('Opens').fill(opens)
   await page.getByLabel('Closes').fill(closes)

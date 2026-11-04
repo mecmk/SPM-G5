@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { RequiredMark } from '../components/RequiredMark'
 import { ERROR_REGISTRY } from '../errors/registry'
+import { refuseNonDigits } from '../shared/inputGuards'
 import {
   digitsOnly,
   MINUTES_MAX_DIGITS,
@@ -18,7 +19,7 @@ interface OperatingInformationFieldsProps {
 }
 
 /**
- * Story 8.3 AC11-AC13 (fix f8.3.4): the venue form's Operating information card. Opens, Closes,
+ * Story 8.3 AC13-AC15 (fix f8.3.4): the venue form's Operating information card. Opens, Closes,
  * Setup and Teardown are required and each names its own problem beneath it; the closing time
  * cannot be picked before the opening time, and the minutes boxes keep digits only, five at most.
  */
@@ -83,6 +84,7 @@ export function OperatingInformationFields({
         <label>
           Setup (minutes) <RequiredMark />
           <input
+            onBeforeInput={refuseNonDigits}
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={MINUTES_MAX_DIGITS}
@@ -96,6 +98,7 @@ export function OperatingInformationFields({
         <label>
           Teardown (minutes) <RequiredMark />
           <input
+            onBeforeInput={refuseNonDigits}
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={MINUTES_MAX_DIGITS}

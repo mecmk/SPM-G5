@@ -264,7 +264,7 @@ def approval_payload(*, expires_in: timedelta = timedelta(days=1)) -> dict:
 
 
 def venue_payload(**overrides) -> dict:
-    """A valid POST /venues body (story 8.3 AC1 and AC11 minimum) with optional overrides."""
+    """A valid POST /venues body (story 8.3 AC1 and AC13 minimum) with optional overrides."""
     n = next(_counter)
     body = {
         "name": f"API Venue {n}",
