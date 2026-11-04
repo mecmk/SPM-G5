@@ -19,6 +19,9 @@ AC4 When the units left cannot cover the holds on that type over the period, the
     cannot be covered - the most recently placed first, so earlier ones keep their units - are
     short. Only the part still to come counts. (Here: which holds, and by how many units.)
 AC7 Records that overlap in time add up. (Here: as counted; the locking is an integration case.)
+AC10 (fix f16.2.4) A save that leaves an item short of every unit it holds closes it as Out of
+    service, kept for the record as a withdrawn one is. (Here: which holds close, what the
+    coordinator is told, and that a change leaves a closed item closed.)
 """
 
 from __future__ import annotations
@@ -398,3 +401,30 @@ def test_an_edit_follows_the_same_rules():
         )["msg"]
     )
     assert schemas.OutOfServiceUpdate(notes="  ").notes is None
+
+
+# --- AC10 (fix f16.2.4): an item short of every unit it holds is closed ---------------------------
+@pytest.mark.story("16.2", ac=10)
+@pytest.mark.parametrize(
+    ("short", "held", "closes"), [(3, 3, True), (2, 3, False), (1, 1, True), (0, 1, False)]
+)
+def test_a_hold_closes_only_when_it_is_short_of_every_unit_it_holds(short, held, closes):
+    assert service.closes_item(units_short=short, units_held=held) is closes
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_the_coordinator_is_told_every_unit_held_is_out_of_service_one_or_many():
+    assert service.out_of_service_message(name="Mobile kit", held=1) == (
+        "Mobile kit: the 1 held for this event is out of service, so the item was closed and"
+        " nothing is held for it. Request another type if you still need one."
+    )
+    assert service.out_of_service_message(name="Mobile kit", held=3) == (
+        "Mobile kit: all 3 held for this event are out of service, so the item was closed and"
+        " nothing is held for it. Request another type if you still need one."
+    )
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_a_closed_item_is_kept_for_the_record_and_a_change_leaves_it_closed():
+    assert "OUT_OF_SERVICE" in service.KEPT_FOR_RECORD
+    assert service.status_after_removal("OUT_OF_SERVICE") == "OUT_OF_SERVICE"

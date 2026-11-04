@@ -23,6 +23,10 @@ export const CANCELLED_AT_LABEL = 'Cancelled at'
  *  Support's queue card and on the request's own page. */
 export const WITHDRAWN_AT_LABEL = 'Withdrawn at'
 
+/** Fix f16.2.4 (16.2 AC12): the label of when units out of service closed an equipment request,
+ *  on Technical Support's queue card and on the request's own page. */
+export const OUT_OF_SERVICE_AT_LABEL = 'Out of service since'
+
 /** What a page shows for a venue requirement or booking that asks for no particular layout. */
 export const ANY_LAYOUT = 'Any'
 

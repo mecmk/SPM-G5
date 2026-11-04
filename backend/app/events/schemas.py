@@ -601,6 +601,9 @@ class EquipmentLineOut(BaseModel):
     # Story 17.2 AC3: when the coordinator withdrew it, and who; both None unless it is withdrawn.
     withdrawn_at: datetime | None
     withdrawn_by_name: str | None
+    # Fix f16.2.4 (16.2 AC10): when units out of service closed it; None unless it is Out of
+    # service.
+    out_of_service_at: datetime | None
 
     @classmethod
     def from_line(cls, line: EventEquipmentRequest) -> EquipmentLineOut:
@@ -626,6 +629,7 @@ class EquipmentLineOut(BaseModel):
             withdrawn_by_name=line.withdrawn_by.full_name
             if line.withdrawn_by is not None
             else None,
+            out_of_service_at=line.out_of_service_at,
         )
 
 

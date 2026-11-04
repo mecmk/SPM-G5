@@ -22,6 +22,7 @@ import {
   CANCELLED_AT_LABEL,
   CLEAR_SEARCH,
   NOT_RECORDED,
+  OUT_OF_SERVICE_AT_LABEL,
   WITHDRAWN_AT_LABEL,
   formatDateTime,
   formatSchedule,
@@ -76,6 +77,11 @@ const EQUIPMENT_QUEUE_TABS: { key: EquipmentQueueTabKey; label: string; hint: st
     label: EQUIPMENT_STATUS_LABELS.WITHDRAWN,
     hint: 'Withdrawn by the event coordinator, so nothing is held for them. Read-only.',
   },
+  {
+    key: 'OUT_OF_SERVICE',
+    label: EQUIPMENT_STATUS_LABELS.OUT_OF_SERVICE,
+    hint: 'Closed because every unit they held was taken out of service, so nothing is held for them. Read-only.',
+  },
 ]
 
 /** Story 13.3 AC3: the equipment queue's orders, as its Order by list offers them. */
@@ -97,7 +103,12 @@ function tabCount(tab: EquipmentQueueTabKey, counts: EquipmentQueueCounts): numb
   switch (tab) {
     case 'ALL':
       return (
-        counts.pending + counts.accepted + counts.declined + counts.cancelled + counts.withdrawn
+        counts.pending +
+        counts.accepted +
+        counts.declined +
+        counts.cancelled +
+        counts.withdrawn +
+        counts.out_of_service
       )
     case 'PENDING':
       return counts.pending
@@ -109,6 +120,8 @@ function tabCount(tab: EquipmentQueueTabKey, counts: EquipmentQueueCounts): numb
       return counts.cancelled
     case 'WITHDRAWN':
       return counts.withdrawn
+    case 'OUT_OF_SERVICE':
+      return counts.out_of_service
   }
 }
 
@@ -389,6 +402,13 @@ export function EquipmentRequestsPage() {
                     <div className="subtle-block">
                       <p className="fact-label">{WITHDRAWN_AT_LABEL}</p>
                       <p>{withdrawnWhenAndBy(entry.withdrawn_at, entry.withdrawn_by_name)}</p>
+                    </div>
+                  )}
+
+                  {entry.out_of_service_at !== null && (
+                    <div className="subtle-block">
+                      <p className="fact-label">{OUT_OF_SERVICE_AT_LABEL}</p>
+                      <p>{formatDateTime(entry.out_of_service_at)}</p>
                     </div>
                   )}
 

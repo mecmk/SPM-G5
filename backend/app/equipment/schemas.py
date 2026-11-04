@@ -116,14 +116,16 @@ class EventEquipmentAvailabilityOut(BaseModel):
 class EquipmentQueueStatus(StrEnum):
     """Story 15.2 AC3: the statuses Technical Support's queue has a tab for. Story 6.2 AC15:
     Cancelled, read-only, for the items once sent to them. Story 17.2 AC4: Withdrawn, read-only,
-    for the items their coordinator withdrew. Any other item status is not a tab, so asking for
-    one is a 422 rather than an empty list."""
+    for the items their coordinator withdrew. Fix f16.2.4 (16.2 AC12): Out of service, read-only,
+    for the items closed once sent to them. Any other item status is not a tab, so asking for one
+    is a 422 rather than an empty list."""
 
     PENDING = EquipmentRequestStatus.PENDING
     ACCEPTED = EquipmentRequestStatus.ACCEPTED
     DECLINED = EquipmentRequestStatus.DECLINED
     CANCELLED = EquipmentRequestStatus.CANCELLED
     WITHDRAWN = EquipmentRequestStatus.WITHDRAWN
+    OUT_OF_SERVICE = EquipmentRequestStatus.OUT_OF_SERVICE
 
 
 class EquipmentQueueOrder(StrEnum):
@@ -221,6 +223,9 @@ class EquipmentQueueEntry(BaseModel):
     cancelled_at: datetime | None
     withdrawn_at: datetime | None
     withdrawn_by_name: str | None
+    # Fix f16.2.4 (16.2 AC12): when units out of service closed it; None unless it is Out of
+    # service.
+    out_of_service_at: datetime | None
 
     @classmethod
     def from_item(
@@ -247,6 +252,7 @@ class EquipmentQueueEntry(BaseModel):
             cancelled_at=item.cancelled_at,
             withdrawn_at=item.withdrawn_at,
             withdrawn_by_name=None if item.withdrawn_by is None else item.withdrawn_by.full_name,
+            out_of_service_at=item.out_of_service_at,
         )
 
 
@@ -263,6 +269,8 @@ class EquipmentQueueCounts(BaseModel):
     cancelled: int
     # Story 17.2 AC4.
     withdrawn: int
+    # Fix f16.2.4 (16.2 AC12).
+    out_of_service: int
 
     @classmethod
     def from_counts(cls, by_status: Mapping[str, int]) -> EquipmentQueueCounts:
@@ -435,7 +443,8 @@ class EquipmentTypePageOut(EquipmentCatalogueEntryOut):
 class ShortHoldOut(BaseModel):
     """Story 16.2 AC4/AC5: a hold a record leaves short - its event, the event's coordinator (None
     while it has none), the units it still holds and how many of those it cannot have, and its
-    period. No defaults (response schema)."""
+    period. Fix f16.2.4 (AC12): ``closes``, whether saving closes its item, short of every unit.
+    No defaults (response schema)."""
 
     event_id: uuid.UUID
     event_name: str
@@ -444,6 +453,7 @@ class ShortHoldOut(BaseModel):
     units_short: int
     starts_at: datetime
     ends_at: datetime
+    closes: bool
 
     @classmethod
     def from_short(cls, short: ShortHold) -> ShortHoldOut:
@@ -456,6 +466,7 @@ class ShortHoldOut(BaseModel):
             units_short=short.units_short,
             starts_at=short.hold.starts_at,
             ends_at=short.hold.ends_at,
+            closes=short.closes,
         )
 
 

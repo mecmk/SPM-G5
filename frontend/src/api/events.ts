@@ -149,10 +149,18 @@ export interface AccessibilityNeed {
  * Values of `EquipmentRequestStatus` (backend/app/events/models.py, story 15.1). REQUESTED is
  * recorded but not yet sent to Technical Support; ACCEPTED and DECLINED are Technical Support's
  * decisions (story 16.1); UNAVAILABLE is an item the event's new dates can no longer cover (AC8).
- * WITHDRAWN is a sent item the coordinator withdrew (story 17.2).
+ * WITHDRAWN is a sent item the coordinator withdrew (story 17.2). OUT_OF_SERVICE is an item a
+ * record of units out of service left none of its units, so it was closed (fix f16.2.4).
  */
 export type EquipmentItemStatus =
-  'REQUESTED' | 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'UNAVAILABLE' | 'CANCELLED' | 'WITHDRAWN'
+  | 'REQUESTED'
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'UNAVAILABLE'
+  | 'CANCELLED'
+  | 'WITHDRAWN'
+  | 'OUT_OF_SERVICE'
 
 /**
  * Mirrors `EquipmentLineOut`: one equipment item on a request. Story 15.1 AC1: `submitted_at` and
@@ -179,6 +187,9 @@ export interface EquipmentLine {
   /** Story 17.2 AC3: when the coordinator withdrew it, and who; `null` unless it is withdrawn. */
   withdrawn_at: string | null
   withdrawn_by_name: string | null
+  /** Fix f16.2.4 (16.2 AC10): when units out of service closed it; `null` unless it is Out of
+   *  service. */
+  out_of_service_at: string | null
 }
 
 /**
