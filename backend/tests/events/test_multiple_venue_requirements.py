@@ -215,7 +215,7 @@ def test_several_venue_requirements_are_recorded_with_their_own_details(organise
                 "Breakout",
                 40,
                 layout_code="CLASSROOM",
-                facilities=[{"code": "BREAKOUT_ROOMS", "quantity": 3}, {"code": "WIFI"}],
+                facilities=[{"code": "WHITEBOARD", "quantity": 3}, {"code": "WIFI"}],
             ),
         ],
         attendance=300,
@@ -239,7 +239,7 @@ def test_several_venue_requirements_are_recorded_with_their_own_details(organise
     assert breakout["capacity"] == 40
     assert breakout["layout_code"] == "CLASSROOM"
     assert {(f["code"], f["quantity"]) for f in breakout["facilities"]} == {
-        ("BREAKOUT_ROOMS", 3),
+        ("WHITEBOARD", 3),
         ("WIFI", None),
     }
     assert breakout["notes"] is None
@@ -744,7 +744,7 @@ def test_migration_012_turns_recorded_venue_requirements_into_a_main_venue(db: S
         attendance=80,
         layout="THEATRE",
         notes="Near the loading bay",
-        facilities=(("BREAKOUT_ROOMS", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
+        facilities=(("WHITEBOARD", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
     )
     facilities_only = _pre_012_event(db, facilities=(("WIFI", None, None),))
     notes_only = _pre_012_event(db, notes="Step-free access")
@@ -757,7 +757,7 @@ def test_migration_012_turns_recorded_venue_requirements_into_a_main_venue(db: S
     assert (main.starts_at, main.ends_at, main.capacity) == (starts_at, ends_at, 80)
     assert (main.layout_code, main.notes) == ("THEATRE", "Near the loading bay")
     assert _facility_rows(db, main.id) == {
-        ("BREAKOUT_ROOMS", 3, "HDMI input needed"),
+        ("WHITEBOARD", 3, "HDMI input needed"),
         ("PROJECTOR", None, None),
     }
     (from_facilities,) = _requirement_rows(db, facilities_only)

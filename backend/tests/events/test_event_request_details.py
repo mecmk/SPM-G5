@@ -581,9 +581,7 @@ def test_equipment_quantity_accepts_the_boundary_values(organiser_client, quanti
 @pytest.mark.parametrize("quantity", NOT_WHOLE_POSITIVE)
 def test_facility_quantity_rejects_anything_but_a_positive_whole_number(organiser_client, quantity):
     payload = event_request_payload(
-        venue_requirements=[
-            _main_venue(facilities=[{"code": "BREAKOUT_ROOMS", "quantity": quantity}])
-        ]
+        venue_requirements=[_main_venue(facilities=[{"code": "WHITEBOARD", "quantity": quantity}])]
     )
 
     assert organiser_client.post("/events", json=payload).status_code == 422
@@ -594,9 +592,7 @@ def test_facility_quantity_rejects_anything_but_a_positive_whole_number(organise
 def test_facility_quantity_accepts_the_boundary_values(organiser_client, quantity):
     created = create_event_request(
         organiser_client,
-        venue_requirements=[
-            _main_venue(facilities=[{"code": "BREAKOUT_ROOMS", "quantity": quantity}])
-        ],
+        venue_requirements=[_main_venue(facilities=[{"code": "WHITEBOARD", "quantity": quantity}])],
     )
 
     assert created["venue_requirements"][0]["facilities"][0]["quantity"] == quantity
@@ -609,9 +605,7 @@ def test_an_edit_also_rejects_a_bad_facility_quantity(organiser_client):
     response = organiser_client.patch(
         f"/events/{created['id']}",
         json={
-            "venue_requirements": [
-                _main_venue(facilities=[{"code": "BREAKOUT_ROOMS", "quantity": 0}])
-            ]
+            "venue_requirements": [_main_venue(facilities=[{"code": "WHITEBOARD", "quantity": 0}])]
         },
     )
 
@@ -630,7 +624,7 @@ def test_venue_requirements_are_recorded_with_their_names(organiser_client):
                 notes="Close to the lifts",
                 facilities=[
                     {"code": "PROJECTOR", "notes": "HDMI input"},
-                    {"code": "BREAKOUT_ROOMS", "quantity": 3},
+                    {"code": "WHITEBOARD", "quantity": 3},
                     {"code": "WIFI"},
                 ],
             )
@@ -648,7 +642,7 @@ def test_venue_requirements_are_recorded_with_their_names(organiser_client):
     }
     assert facilities == {
         "PROJECTOR": ("Projector & screen", None, "HDMI input"),
-        "BREAKOUT_ROOMS": ("Breakout rooms", 3, None),
+        "WHITEBOARD": ("Whiteboard / flipchart", 3, None),
         "WIFI": ("Wi-Fi", None, None),
     }
 
@@ -1152,7 +1146,7 @@ def _full_request(client) -> dict:
                 notes="Near the loading bay",
                 facilities=[
                     {"code": "STAGE", "notes": "Keynote riser"},
-                    {"code": "BREAKOUT_ROOMS", "quantity": 3},
+                    {"code": "WHITEBOARD", "quantity": 3},
                 ],
             )
         ],
@@ -1187,7 +1181,7 @@ def test_the_coordinator_sees_every_detail_requirement_and_equipment_item(login_
     assert body["venue_none_required"] is False
     assert {(f["name"], f["quantity"], f["notes"]) for f in requirement["facilities"]} == {
         ("Stage", None, "Keynote riser"),
-        ("Breakout rooms", 3, None),
+        ("Whiteboard / flipchart", 3, None),
     }
     assert [(n["name"], n["notes"]) for n in body["accessibility_needs"]] == [
         ("Wheelchair access", "Two users")

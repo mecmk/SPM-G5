@@ -283,7 +283,7 @@ VENUE_CLOSED_MESSAGE = (
 )
 
 REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
-# A facility may be needed in a quantity, with a note of its own ("3 breakout rooms, HDMI
+# A facility may be needed in a quantity, with a note of its own ("2 projectors, HDMI
 # input needed"). Venue Staff read all of it as one sentence, so each is appended to the name.
 FACILITY_QUANTITY_SUFFIX = " ×{quantity}"
 FACILITY_NOTES_SUFFIX = " ({notes})"
@@ -1605,8 +1605,8 @@ def _bookable_venue(db: Session, venue_id: uuid.UUID) -> Venue:
 def _describe_facility(required: VenueRequirementFacility) -> str:
     """One facility as Venue Staff should read it: name, how many, and its own note.
 
-    The quantity and note are the difference between "Breakout rooms" and "Breakout rooms ×3
-    (HDMI input needed)" - without them the request understates what the venue has to provide.
+    The quantity and note are the difference between "Projector & screen" and "Projector & screen
+    ×2 (HDMI input needed)" - without them the request understates what the venue has to provide.
     """
     described = required.facility.name
     if required.quantity is not None:
