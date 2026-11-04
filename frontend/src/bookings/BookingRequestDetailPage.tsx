@@ -48,6 +48,7 @@ import { singaporeDateOf, startOfMonthOf, useVenueCalendar } from '../shared/use
 import { holdExpiryRefusal } from './holdExpiry'
 import { venueStaffOutsideHoursNotice } from './turnaround'
 import { TurnaroundAgainstDefaults } from './TurnaroundAgainstDefaults'
+import { ErrorToast } from '../components/ErrorToast'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -294,9 +295,7 @@ export function BookingRequestDetailPage() {
   if (error) {
     return (
       <div className="page">
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <ErrorToast message={error} />
       </div>
     )
   }
@@ -596,6 +595,7 @@ export function BookingRequestDetailPage() {
           confirmLabel="Reject"
           isBusy={isRejecting}
           error={rejectError}
+          onErrorDismiss={() => setRejectError(null)}
           onConfirm={confirmReject}
           onCancel={cancelReject}
         >

@@ -42,6 +42,7 @@ import { useRequestingEvent } from './useRequestingEvent'
 import { VenueCard } from './VenueCard'
 import { VenueFilterPanel } from './VenueFilterPanel'
 import { hasFilters, hasSameFilters, RELAX_CHANGES, useVenueSearch } from './useVenueSearch'
+import { ErrorToast } from '../components/ErrorToast'
 
 /**
  * Story 8.1 AC3/AC8: the server query for the address's search. The period goes only once both
@@ -319,11 +320,7 @@ export function VenueCataloguePage() {
         }
       />
 
-      {eventError && (
-        <p role="alert" className="error">
-          {eventError}
-        </p>
-      )}
+      {eventError && <ErrorToast message={eventError} />}
       {event && (
         <RequestingEventBanner
           event={event}

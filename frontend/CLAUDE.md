@@ -120,7 +120,7 @@ becomes visible again and when the notification panel opens: no timer. The log h
 and is not counted. Marking one notification read (`PATCH /notifications/{id}`) and all of them (`PATCH /notifications`, through
 the newest notification of the list last loaded) are the two other `notify: false` calls: marking
 read is not a save of the user's, so it adds no toast and no entry to the log, and a refusal shows
-in the panel as `<p role="alert" className="error">`. Where opening a notification goes is the
+as an `ErrorToast`. Where opening a notification goes is the
 server's `target` (a kind and an id, never an address); `src/notifications/notificationTarget.ts`
 is the one place that turns it into a route, and a notification with no target to open says
 "This is no longer available to you." in its row. The panel's words are constants in
@@ -163,7 +163,7 @@ Adding `<feature>` end to end, after the backend endpoints exist:
    endpoint calling `api<T>()`. Head each interface with a docblock naming the backend schema
    it mirrors, the way `CurrentUser` in `src/api/auth.ts` does.
 2. `src/<feature>/<Name>Page.tsx` — named export. Loading, empty, and error states all rendered;
-   errors through `formatApiError` into `<p role="alert" className="error">`.
+   errors through `formatApiError` into `<ErrorToast message={error} />`.
 3. `src/App.tsx` — add the route inside `<RequireAuth>` / `<AppLayout>`, behind
    `<RequirePermission>` when the feature is role-restricted.
 4. `src/layout/navigation.ts` — add a `NavItem` for the section. The sidebar and main page pick

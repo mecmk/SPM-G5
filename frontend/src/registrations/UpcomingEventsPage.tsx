@@ -16,6 +16,7 @@ import {
   describeRegistration,
   describeVenues,
 } from './registrationLabels'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** AC1: the first page of the list, loaded when the page opens. */
 function loadFirstPage() {
@@ -104,11 +105,7 @@ export function UpcomingEventsPage() {
         subtitle="Confirmed events you can register for, soonest first."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading upcoming events…" />}
 
       {list !== null && list.items.length === 0 && (
@@ -123,11 +120,7 @@ export function UpcomingEventsPage() {
             ))}
           </EventCardGrid>
 
-          {loadMoreError && (
-            <p role="alert" className="error">
-              {loadMoreError}
-            </p>
-          )}
+          {loadMoreError && <ErrorToast message={loadMoreError} />}
           {list.items.length < list.total && (
             <div className="load-more">
               <p className="small muted">

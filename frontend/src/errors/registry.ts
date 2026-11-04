@@ -170,7 +170,7 @@ export interface ErrorEntry {
 export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   NETWORK_UNAVAILABLE: {
     title: 'Cannot reach ConnectSphere',
-    message: 'The server could not be reached. Check your connection and try again.',
+    message: "Can't reach the server. Check your connection.",
   },
   VALIDATION_FAILED: {
     title: 'Check your details',
@@ -221,11 +221,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
   VENUE_NAME_TAKEN: {
     title: 'Venue name already used',
-    message: 'Another venue already has this name. Choose a different one.',
+    message: 'This venue name is taken.',
   },
   VENUE_IN_USE: {
     title: 'Venue has bookings',
-    message: 'You cannot delete a venue that has bookings. Withdraw it from service instead.',
+    message: 'This venue has bookings. Withdraw it from service instead.',
   },
 
   // Story 8.6: the room layouts venues can offer. These usually arrive with the backend's own
@@ -236,23 +236,21 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
   ROOM_LAYOUT_NAME_TAKEN: {
     title: 'Layout name already used',
-    message: 'Another room layout already has this name. Choose a different one.',
+    message: 'This layout name is taken.',
   },
   ROOM_LAYOUT_IN_USE: {
     title: 'Room layout in use',
-    message:
-      'You cannot delete a room layout that venues, venue requirements or booking requests use. ' +
-      'You can still rename it.',
+    message: "This layout is in use, so it can't be deleted. Rename it instead.",
   },
 
   // Story 9.4: a venue marked unavailable. These usually arrive with the backend's own sentence.
   UNAVAILABILITY_NOT_FOUND: {
     title: 'Closure not found',
-    message: 'This closure no longer exists. It may have been removed.',
+    message: 'This closure no longer exists.',
   },
   UNAVAILABILITY_CANNOT_BE_ENDED: {
     title: 'Closure cannot be ended',
-    message: 'This closure has not started, or has already ended. Reload the page to see it.',
+    message: "This closure isn't running. Reload the page.",
   },
   UNAVAILABILITY_CANNOT_BE_REMOVED: {
     title: 'Closure cannot be removed',
@@ -262,8 +260,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   // says so, and the page shows the fresh list it carries.
   UNAVAILABILITY_NEEDS_CONFIRMATION: {
     title: 'Bookings changed',
-    message:
-      'Bookings changed since you reviewed the list, so this closure was not saved. Review the list and save again.',
+    message: 'Bookings changed. Review the list and save again.',
   },
   // Checked in the form before anything is sent; the backend refuses it too, in its own words.
   UNAVAILABILITY_END_BEFORE_START: {
@@ -287,11 +284,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
   VENUE_FLOOR_AREA_INVALID: {
     title: 'Check the floor area',
-    message: 'Floor area must be a number above zero, with at most two decimal places.',
+    message: 'Floor area must be above 0, with up to 2 decimals.',
   },
   VENUE_HOURS_INCOMPLETE: {
     title: 'Check the operating hours',
-    message: 'Enter both an opening and a closing time, or leave both empty.',
+    message: 'Enter both opening and closing times, or neither.',
   },
   VENUE_HOURS_OUT_OF_ORDER: {
     title: 'Check the operating hours',
@@ -299,15 +296,15 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
   VENUE_TURNAROUND_INVALID: {
     title: 'Check setup and teardown',
-    message: 'Setup and teardown times must be whole numbers of minutes, zero or more.',
+    message: 'Setup and teardown must be whole minutes, 0 or more.',
   },
   VENUE_QUANTITY_INVALID: {
     title: 'Check facility quantities',
-    message: 'A facility quantity must be a positive whole number, or left empty.',
+    message: 'Facility quantity must be a whole number above 0.',
   },
   VENUE_LAYOUT_CAPACITY_INVALID: {
     title: 'Check layout capacities',
-    message: 'A layout capacity must be a positive whole number, or left empty.',
+    message: 'Layout capacity must be a whole number above 0.',
   },
   /** Story 8.3 AC7: checked on choosing a picture; the backend answers 422 to the same rule. */
   VENUE_PICTURE_TYPE_INVALID: {
@@ -334,43 +331,40 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    * removed elsewhere. */
   VENUE_PICTURES_CHANGED: {
     title: 'Pictures changed',
-    message:
-      "The venue's pictures have changed since this page was opened. Reload the page and " +
-      'arrange them again.',
+    message: 'The pictures changed. Reload and try again.',
   },
 
   // Story 2.1: event requests. These API codes usually arrive with the backend's own sentence.
   EVENT_NOT_FOUND: {
     title: 'Request not found',
-    message: 'This request does not exist, or it is not yours to open.',
+    message: "This request doesn't exist or isn't yours.",
   },
   /** Story 5.6 AC3: the Reassign picker found no active coordinator other than the current one;
    * checked in the browser, before anything is sent. */
   NO_OTHER_COORDINATOR: {
     title: 'No one to reassign to',
-    message: 'There is no other active Event Coordinator to reassign this to.',
+    message: 'No other coordinator is available.',
   },
   /** Story 5.6 AC1 (5.5 AC5): the overview's lists could not be read again after a reassignment
    * that went through, so they still show the old coordinator. Says it went through, so the Lead
    * does not try again from the old card. */
   REASSIGNED_LIST_NOT_REFRESHED: {
     title: 'List not refreshed',
-    message:
-      'The event was reassigned, but this list could not be refreshed. Reload the page to see the change.',
+    message: 'Reassigned. Reload the page to see it.',
   },
   EVENT_ALREADY_SUBMITTED: {
     title: 'Request already submitted',
-    message: 'This request has been submitted and can no longer be changed.',
+    message: "This request is submitted and can't be changed.",
   },
   /** Story 7.2 AC3. */
   EVENT_ROUTINE_EDIT_CLOSED: {
     title: 'No longer editable',
-    message: 'This event is completed, cancelled or rejected, so it can no longer be edited.',
+    message: 'This event can no longer be edited.',
   },
   /** Story 7.2 AC4: a corrected request must keep everything it needed to be submitted. */
   EVENT_REQUIRED_DETAIL_CLEARED: {
     title: 'Required detail missing',
-    message: 'Fill in every field marked * before saving - a submitted request needs them all.',
+    message: 'Fill in every field marked *.',
   },
   /**
    * Story 7.2 AC9/AC12: the event was confirmed, or changed, after the coordinator opened it. The
@@ -378,7 +372,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    */
   EVENT_CORRECTION_CONFLICT: {
     title: 'Event changed',
-    message: 'This event changed after you opened it. Reload it to see its latest details.',
+    message: 'This event changed. Reload to see the latest.',
   },
   /**
    * Stories 4.4/4.5: approving or rejecting a request that has already been decided, or is
@@ -390,7 +384,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    */
   EVENT_NOT_AWAITING_DECISION: {
     title: 'Cannot decide this request',
-    message: 'This request cannot be approved or rejected in its current state.',
+    message: 'This request can no longer be approved or rejected.',
   },
   /**
    * Story 4.5 AC1: the reject dialog's own pre-check before calling the API. Never wired into an
@@ -430,7 +424,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    *  cancelled, approved or rejected, possibly while the response was being written. */
   EVENT_NOT_AWAITING_RESPONSE: {
     title: 'Cannot send response',
-    message: 'This request is no longer awaiting your response, so it was not sent.',
+    message: 'This request no longer needs your response.',
   },
   /** Story 21.2 AC12/AC14/AC19/AC21: a safety review request or a confirmation was refused. The
    *  backend's own sentence (always sent) names what is missing, or which flagged arrangement is
@@ -464,7 +458,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   /** Story 2.1 AC2. */
   EVENT_END_BEFORE_START: {
     title: 'Check the dates',
-    message: 'The proposed end date and time must be after the start date and time.',
+    message: 'The end must be after the start.',
   },
   /** Story 2.1 AC2. */
   EVENT_DATE_IN_PAST: {
@@ -474,7 +468,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   /** Story 2.1 AC2: the backend allows a start at most 2 years ahead. */
   EVENT_TOO_FAR_AHEAD: {
     title: 'Check the dates',
-    message: 'The proposed start cannot be more than 2 years from now.',
+    message: 'The start can be at most 2 years away.',
   },
   /** Story 2.1 AC2: the backend allows an event to run for at most 14 days. */
   EVENT_TOO_LONG: {
@@ -483,10 +477,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
   EVENT_DATE_INCOMPLETE: {
     title: 'Check the dates',
-    message:
-      'Finish entering the date and time, including AM or PM. If every part is filled in, ' +
-      'check the day exists in that month: 29 February is only valid in a leap year, and ' +
-      'there is no 31st in April, June, September or November.',
+    message: 'Enter a complete, real date and time.',
   },
   EVENT_DATE_INVALID: {
     title: 'Check the dates',
@@ -505,7 +496,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   /** Story 2.1 AC3. */
   EVENT_FACILITY_QUANTITY_INVALID: {
     title: 'Check the quantity',
-    message: 'A facility quantity must be a positive whole number, or left empty.',
+    message: 'Facility quantity must be a whole number above 0.',
   },
   /** Story 2.1 AC22 (fix f2.1.5): worded as the backend words it. */
   EVENT_FACILITY_QUANTITY_TOO_LARGE: {
@@ -515,20 +506,20 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   /** Story 2.7 AC6, worded as the backend words it where it has its own sentence. */
   VENUE_REQUIREMENT_CAPACITY_INVALID: {
     title: 'Check the number of people',
-    message: 'The number of people must be a positive whole number, or left empty on a draft.',
+    message: 'People must be a whole number above 0.',
   },
   VENUE_REQUIREMENT_OVER_ATTENDANCE: {
     title: 'Check the number of people',
-    message: 'A venue requirement cannot need room for more people than the expected attendance.',
+    message: "A venue requirement can't exceed the expected attendance.",
   },
   /** Story 2.7 AC2. */
   VENUE_REQUIREMENT_TIMES_INCOMPLETE: {
     title: 'Check the times',
-    message: 'Give a venue requirement both a start and an end, or leave both empty.',
+    message: 'Give the venue requirement a start and an end, or neither.',
   },
   VENUE_REQUIREMENT_DATE_INVALID: {
     title: 'Check the times',
-    message: 'Enter a complete date and time for the venue requirement.',
+    message: 'Enter a complete date and time.',
   },
   /** Story 2.7 AC5/AC10. */
   VENUE_REQUIREMENT_END_BEFORE_START: {
@@ -537,7 +528,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
   VENUE_REQUIREMENT_STARTS_BEFORE_EVENT: {
     title: 'Check the times',
-    message: 'A venue requirement cannot start before the event starts.',
+    message: "A venue requirement can't start before the event.",
   },
   VENUE_REQUIREMENT_ENDS_AFTER_EVENT: {
     title: 'Check the times',
@@ -596,10 +587,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    * precedent as EVENT_DATE_INCOMPLETE/EVENT_DATE_INVALID above. */
   EVENT_REGISTRATION_DATE_INCOMPLETE: {
     title: 'Check the registration dates',
-    message:
-      'Finish entering the date and time, including AM or PM. If every part is filled in, ' +
-      'check the day exists in that month: 29 February is only valid in a leap year, and ' +
-      'there is no 31st in April, June, September or November.',
+    message: 'Enter a complete, real date and time.',
   },
   EVENT_REGISTRATION_DATE_INVALID: {
     title: 'Check the registration dates',
@@ -622,11 +610,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    * registration date. */
   EVENT_REGISTRATION_OPENS_AFTER_START: {
     title: 'Check the registration dates',
-    message: 'Registration must open no later than the proposed start.',
+    message: 'Registration must open by the event start.',
   },
   EVENT_REGISTRATION_CLOSES_AFTER_START: {
     title: 'Check the registration dates',
-    message: 'Registration must close no later than the proposed start.',
+    message: 'Registration must close by the event start.',
   },
 
   /**
@@ -635,7 +623,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    */
   BOOKING_NOT_ALLOWED: {
     title: 'Venue cannot be requested',
-    message: 'A venue booking can only be requested for an approved event.',
+    message: 'Only approved events can book a venue.',
   },
   /**
    * f12.1.1 (story 12.1 AC15): the request step's address was opened by someone who may not
@@ -644,9 +632,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    */
   BOOKING_NOT_REQUESTABLE: {
     title: 'Venue cannot be requested',
-    message:
-      "Only the event's assigned coordinator can request a venue for it, while the event is in " +
-      'Planning or Confirmed.',
+    message: "Only the event's coordinator can request a venue, while it's Planning or Confirmed.",
   },
   /**
    * Story 12.5 / 12.6: the request step names another booking of the event - the request a switch
@@ -656,9 +642,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    */
   BOOKING_EVENT_BOOKINGS_UNREAD: {
     title: 'Bookings could not be read',
-    message:
-      "This request cannot be sent yet: the event's other bookings could not be read, and it " +
-      'depends on one of them.',
+    message: "The event's other bookings couldn't be loaded.",
   },
   /**
    * Story 12.5 AC11: the request step's address names a venue requirement that is not the
@@ -667,16 +651,14 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    */
   BOOKING_REQUIREMENT_NOT_FOUND: {
     title: 'Venue requirement not found',
-    message:
-      "This venue requirement is not one of the event's. Go back to the catalogue and select " +
-      'one of its venue requirements.',
+    message: "This venue requirement isn't the event's. Pick one from the catalogue.",
   },
   // f12.1.2 (story 12.1 AC5): checks the request step makes on a setup and a teardown before
   // anything is sent - never wired into an `errorCodes` map, same precedent as
   // EVENT_REJECTION_REASON_REQUIRED. The server refuses the same values.
   BOOKING_TURNAROUND_INVALID: {
     title: 'Check setup and teardown',
-    message: 'Setup and teardown must be whole numbers of days, hours and minutes, zero or more.',
+    message: 'Setup and teardown must be whole numbers, 0 or more.',
   },
   /** Keep in step with TURNAROUND_MAX_MINUTES in src/api/bookings.ts. */
   BOOKING_TURNAROUND_TOO_LONG: {
@@ -715,7 +697,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   // the venue stopped suiting after the step loaded (the backend's own sentence is shown then).
   BOOKING_JUSTIFICATION_REQUIRED: {
     title: 'Justification needed',
-    message: 'Give a justification for requesting a venue that does not suit the event.',
+    message: 'Give a justification for this unsuitable venue.',
   },
 
   // Story 12.2: withdrawing a venue booking request. Named for the withdraw endpoint
@@ -783,7 +765,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    * the units are no longer there. The backend's own sentence says which. */
   EQUIPMENT_DECISION_REFUSED: {
     title: 'Cannot decide this request',
-    message: 'This request cannot be accepted or declined in its current state.',
+    message: 'This request can no longer be accepted or declined.',
   },
   /** Story 16.1 AC4: checked by the decline dialog before anything is sent. Keep in step with the
    * backend's DECLINE_REASON_REQUIRED_MESSAGE. */
@@ -805,7 +787,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    *  ended, in force or not yet started. */
   OUT_OF_SERVICE_REFUSED: {
     title: 'Could not save',
-    message: 'The record could not be saved as it stands. Reload and try again.',
+    message: "Couldn't save. Reload and try again.",
   },
   /** AC3: worded as the backend's OUT_OF_SERVICE_QUANTITY_MESSAGE. */
   OUT_OF_SERVICE_QUANTITY_INVALID: {
@@ -830,9 +812,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    * that would save the record as out until ended. */
   OUT_OF_SERVICE_DATE_INCOMPLETE: {
     title: 'Check the dates',
-    message:
-      'Finish entering the date and time, including AM or PM, and check the day exists in that ' +
-      'month.',
+    message: 'Enter a complete, real date and time.',
   },
   /** AC3: a date the picker holds but the server cannot read, such as a five-digit year. */
   OUT_OF_SERVICE_DATE_INVALID: {
@@ -865,7 +845,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    *  range at all, if it were let through. */
   EQUIPMENT_HOLDS_DATE_INCOMPLETE: {
     title: 'Check the dates',
-    message: 'Finish entering the date, and check the day exists in that month.',
+    message: 'Enter a complete, real date.',
   },
   /** AC3: a year of five or six digits, which a picker can hold and the server cannot read. */
   EQUIPMENT_HOLDS_DATE_INVALID: {
@@ -880,7 +860,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    *  decided before it could be withdrawn. The backend's own sentence (always sent) says which. */
   CHANGE_REQUEST_REFUSED: {
     title: 'Change request not sent',
-    message: "This change request could not be made in the event's current state.",
+    message: "This change can't be made in the event's current state.",
   },
   /** AC3/AC4: a proposed value the creation rules refuse, or one identical to the current value. */
   CHANGE_REQUEST_INVALID: {
@@ -902,7 +882,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    *  proposed requirement must say how many people it holds - never wired into an errorCodes map. */
   CHANGE_REQUEST_REQUIREMENT_PEOPLE_INVALID: {
     title: 'Check the number of people',
-    message: 'Give every venue requirement a number of people, as a whole number from 1.',
+    message: 'Give every venue requirement a whole number of people, from 1.',
   },
   // Story 19.2: the coordinator deciding change requests.
   /** AC7: a decision refused for the state it found - already decided or withdrawn, the event
@@ -923,13 +903,12 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
    *  saw, so nothing was applied; the dialog shows the new assessment to approve on again. */
   CHANGE_REQUEST_IMPACT_CHANGED: {
     title: 'Impact changed',
-    message:
-      'The impact of this change has changed. Review the updated impact, then approve again.',
+    message: 'The impact changed. Review it, then approve again.',
   },
   /** AC2: the point of contact is updated directly only while the event is Planning or Confirmed. */
   EVENT_CONTACT_EDIT_CLOSED: {
     title: 'Cannot update the point of contact',
-    message: 'The point of contact can no longer be updated on this event.',
+    message: 'The point of contact can no longer be changed.',
   },
 
   // Story 18.1: an attendee registering for an event.

@@ -19,8 +19,11 @@ import {
   inputToInstant,
   instantToInput,
   isReadableDateTime,
+  nowAsInput,
 } from '../shared/format'
 import { REASON_CODES, REASON_LABELS, describeHoldShort, hasStarted } from './outOfServiceLabels'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits } from '../shared/inputGuards'
 
 const WHOLE_NUMBER = /^\d+$/
 const UNTIL_HINT = 'Leave blank to keep them out until the record is ended.'
@@ -292,6 +295,7 @@ export function OutOfServiceForm({
         <label>
           Units <RequiredMark />
           <input
+            onBeforeInput={refuseNonDigits}
             ref={unitsInput}
             type="number"
             inputMode="numeric"
@@ -342,6 +346,7 @@ export function OutOfServiceForm({
             type="datetime-local"
             required
             aria-required="true"
+            min={isStartLocked ? undefined : nowAsInput()}
             value={values.from}
             disabled={isSaving || isStartLocked}
             aria-invalid={problems?.from ? true : undefined}
@@ -362,6 +367,7 @@ export function OutOfServiceForm({
           <input
             ref={untilInput}
             type="datetime-local"
+            min={values.from || nowAsInput()}
             value={values.until}
             disabled={isSaving}
             aria-invalid={problems?.until ? true : undefined}
@@ -380,11 +386,7 @@ export function OutOfServiceForm({
           )}
         </label>
 
-        {formError && (
-          <p role="alert" className="error">
-            {formError}
-          </p>
-        )}
+        {formError && <ErrorToast message={formError} />}
 
         <div className="cluster">
           <button type="submit" className="brand" disabled={isSaving}>

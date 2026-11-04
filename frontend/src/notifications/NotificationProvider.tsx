@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { subscribeToMutations, type MutationOutcome } from '../api/client'
+import { TOAST_LIFETIME_MS } from '../components/toast'
 import {
   NotificationContext,
   type AppNotification,
   type NotificationContextValue,
 } from './notificationContext'
 
-const TOAST_LIFETIME_MS = 5000
 const MAX_NOTIFICATIONS = 50
 
 /**

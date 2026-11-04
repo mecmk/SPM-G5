@@ -45,7 +45,7 @@ const QUANTITY_MESSAGE = 'Enter a whole number of at least 1.'
 const START_REQUIRED_MESSAGE = 'Enter when the units go out of service.'
 const END_NOT_AFTER_START_MESSAGE = 'The end must be after the start.'
 const START_IN_THE_PAST_MESSAGE = 'The start cannot be in the past.'
-const DATE_INCOMPLETE_MESSAGE = 'Finish entering the date and time'
+const DATE_INCOMPLETE_MESSAGE = 'Enter a complete, real date and time'
 const DATE_INVALID_MESSAGE = 'Enter a valid date and time, with a four-digit year.'
 
 /** Singapore's clock, which every date field reads (frontend/src/shared/format.ts). */

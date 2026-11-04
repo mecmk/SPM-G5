@@ -17,7 +17,7 @@ import {
 import { useAuth } from '../auth/authContext'
 import { PERMISSIONS } from '../auth/permissions'
 import { PageHeader } from '../components/PageHeader'
-import { ERROR_REGISTRY } from '../errors/registry'
+import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import { VENUE_CATALOGUE_PATH, venueEditPath } from '../routes'
 import {
@@ -39,6 +39,8 @@ import {
 import { VenueUnavailabilityManager } from './VenueUnavailabilityManager'
 import { VenuePicturesField, type PictureTile } from './VenuePicturesField'
 import { CANCEL } from '../shared/format'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDecimal, refuseNonDigits } from '../shared/inputGuards'
 
 /** Story 8.3 AC5: one of the venue's pictures as saved. Its key is its id. */
 interface SavedPicture {
@@ -129,6 +131,8 @@ export function VenueFormPage() {
   const [savedName, setSavedName] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(noticeFrom(location.state))
+  // Every problem the form's own check found on the last save, each said in its own toast.
+  const [formProblems, setFormProblems] = useState<ErrorCode[]>([])
   const [isSaving, setIsSaving] = useState(false)
   // Story 8.3 AC5: the pictures in the order they will be saved in, saved ones and those chosen
   // here mixed; the saved ones taken off; and the files the last choice could not take (AC7).
@@ -330,15 +334,17 @@ export function VenueFormPage() {
     setIsSaving(false)
   }
 
+  function dismissFormProblem(code: ErrorCode) {
+    setFormProblems((current) => current.filter((problem) => problem !== code))
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form) return
-    const problem = validateVenueForm(form)
-    if (problem) {
-      setSaveError(ERROR_REGISTRY[problem].message)
-      return
-    }
+    const problems = validateVenueForm(form)
+    setFormProblems(problems)
     setSaveError(null)
+    if (problems.length > 0) return
     setIsSaving(true)
     let saved: Venue
     try {
@@ -376,11 +382,7 @@ export function VenueFormPage() {
         subtitle="Name, location and capacity are required. Anything left empty shows as not recorded."
       />
 
-      {loadError && (
-        <p role="alert" className="error">
-          {loadError}
-        </p>
-      )}
+      {loadError && <ErrorToast message={loadError} />}
       {!loadError && (!form || !reference) && <LoadingState label="Loading venue…" />}
 
       {form && reference && (
@@ -406,6 +408,7 @@ export function VenueFormPage() {
                   *
                 </span>
                 <input
+                  onBeforeInput={refuseNonDigits}
                   type="number"
                   inputMode="numeric"
                   min={1}
@@ -431,6 +434,7 @@ export function VenueFormPage() {
               <label>
                 Floor area (m²)
                 <input
+                  onBeforeInput={refuseNonDecimal}
                   type="number"
                   min={0}
                   step="0.01"
@@ -485,6 +489,7 @@ export function VenueFormPage() {
                 Closes
                 <input
                   type="time"
+                  min={form.opensAt || undefined}
                   value={form.closesAt}
                   onChange={(e) => updateField('closesAt', e.target.value)}
                 />
@@ -492,6 +497,7 @@ export function VenueFormPage() {
               <label>
                 Setup (minutes)
                 <input
+                  onBeforeInput={refuseNonDigits}
                   type="number"
                   min={0}
                   step={1}
@@ -502,6 +508,7 @@ export function VenueFormPage() {
               <label>
                 Teardown (minutes)
                 <input
+                  onBeforeInput={refuseNonDigits}
                   type="number"
                   min={0}
                   step={1}
@@ -540,6 +547,7 @@ export function VenueFormPage() {
                     {selected && (
                       <div className="inline-fields">
                         <input
+                          onBeforeInput={refuseNonDigits}
                           type="number"
                           min={1}
                           step={1}
@@ -584,6 +592,7 @@ export function VenueFormPage() {
                     {selected && (
                       <div className="inline-fields">
                         <input
+                          onBeforeInput={refuseNonDigits}
                           type="number"
                           min={1}
                           step={1}
@@ -637,11 +646,14 @@ export function VenueFormPage() {
           </fieldset>
 
           <div className="form-actions">
-            {saveError && (
-              <p role="alert" className="error">
-                {saveError}
-              </p>
-            )}
+            {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
+            {formProblems.map((code) => (
+              <ErrorToast
+                key={code}
+                message={ERROR_REGISTRY[code].message}
+                onDismiss={() => dismissFormProblem(code)}
+              />
+            ))}
             <Link to={VENUE_CATALOGUE_PATH} className="button secondary">
               {CANCEL}
             </Link>

@@ -38,6 +38,7 @@ import {
 } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
+import { ErrorToast } from '../components/ErrorToast'
 
 const PAGE_TITLE = 'Equipment Requests'
 
@@ -260,11 +261,7 @@ export function EquipmentRequestsPage() {
     <div className="page page-wide">
       <PageHeader title={PAGE_TITLE} subtitle={tabHint} />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading equipment requests…" />}
 
       {queue !== null && (

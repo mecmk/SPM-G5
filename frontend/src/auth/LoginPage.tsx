@@ -5,6 +5,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { useAuth } from './authContext'
 import { homeFor } from './homeFor'
 import { SignInLockedAlert, type SignInLock } from './SignInLockedAlert'
+import { ErrorToast } from '../components/ErrorToast'
 
 const PLATFORM_FEATURES = [
   'Event requests and approvals',
@@ -116,11 +117,7 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            {error && (
-              <p role="alert" className="error login-error">
-                {error}
-              </p>
-            )}
+            {error && <ErrorToast message={error} />}
             {lock && <SignInLockedAlert lock={lock} />}
             <button type="submit" className="button-block login-submit" disabled={isSubmitting}>
               {isSubmitting ? 'Signing in…' : 'Sign in'}

@@ -688,10 +688,6 @@
   display: none;
 }
 
-.filter-panel-alert {
-  margin: 1rem 1rem 0;
-}
-
 .filter-section {
   padding: 1rem;
 }
@@ -701,10 +697,6 @@
 }
 
 .filter-section > label,
-.filter-section > .error {
-  margin: 0;
-}
-
 /* A section's title, set like the form labels it sits among. */
 .filter-section-title {
   display: flex;
@@ -870,10 +862,6 @@ label.choice-chip:has(input:checked)::before {
 
   .filter-panel.is-collapsed .filter-panel-header {
     border-bottom: 0;
-  }
-
-  .filter-panel.is-collapsed .filter-panel-alert {
-    margin-bottom: 1rem;
   }
 
   .filter-panel.is-collapsed .filter-panel-body {
@@ -3166,11 +3154,6 @@ tbody tr:hover td {
   background: var(--bg);
 }
 
-.venue-form .form-actions .error {
-  flex: 1 1 18rem;
-  margin: 0;
-}
-
 .dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -3180,15 +3163,17 @@ tbody tr:hover td {
 
 .dialog {
   position: fixed;
-  top: 50%;
-  left: 50%;
+  inset: 0;
   z-index: 51;
   width: min(28rem, calc(100vw - 2rem));
   padding: 1.5rem;
   border: 1px solid var(--border);
   background: var(--surface);
   box-shadow: var(--shadow);
-  transform: translate(-50%, -50%);
+  /* Centred by its auto margins, not a transform, so an error toast inside it is placed against
+     the screen rather than the dialog. */
+  height: fit-content;
+  margin: auto;
 }
 
 /* Story 5.4 responsive: on a phone the width above includes the padding and border, which
@@ -3208,10 +3193,6 @@ tbody tr:hover td {
 .dialog-body {
   display: grid;
   gap: 0.5rem;
-}
-
-.dialog-body .error {
-  margin: 0.5rem 0 0;
 }
 
 .dialog-actions {
@@ -3303,10 +3284,6 @@ tbody tr:hover td {
   padding: 1.5rem 1rem;
   text-align: center;
   color: var(--text-muted);
-}
-
-.notification-error {
-  margin: 0.5rem 1rem;
 }
 
 .notification-list {
@@ -3492,6 +3469,25 @@ tbody tr:hover td {
   font-size: 0.75rem;
   line-height: 1.125rem;
   color: var(--text-muted);
+}
+
+/* An error, shown as a toast where the notification toasts appear. It is rendered beside what it
+   is about (ErrorToast) and lifted out to the corner here, above the notification toasts. */
+.error-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 61;
+  width: min(22rem, calc(100vw - 2rem));
+  margin: 0;
+}
+
+.error-toast-message {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-h);
 }
 
 /* ---------- responsive ---------- */

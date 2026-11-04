@@ -1,6 +1,7 @@
 import type { ServerNotification } from '../api/notifications'
 import { formatDateTime } from '../shared/format'
 import { MARK_AS_READ, NO_LONGER_AVAILABLE, UNREAD_LABEL } from './notificationText'
+import { ErrorToast } from '../components/ErrorToast'
 
 interface ServerNotificationRowProps {
   notification: ServerNotification
@@ -46,11 +47,7 @@ export function ServerNotificationRow({
         <p className="notification-message">{notification.message}</p>
         <p className="notification-time">{formatDateTime(notification.created_at)}</p>
         {isUnavailable && <p className="notification-unavailable">{NO_LONGER_AVAILABLE}</p>}
-        {error && (
-          <p role="alert" className="error notification-error">
-            {error}
-          </p>
-        )}
+        {error && <ErrorToast message={error} />}
         {isUnread && (
           <button
             type="button"

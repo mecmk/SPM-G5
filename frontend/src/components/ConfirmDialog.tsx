@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { CANCEL } from '../shared/format'
+import { ErrorToast } from './ErrorToast'
 
 export interface ConfirmDialogProps {
   title: string
@@ -23,6 +24,9 @@ export interface ConfirmDialogProps {
   /** The error message's id, so a field in `children` can point at it with `aria-describedby`
    *  (story 19.2 AC4: the rejection reason). */
   errorId?: string
+  /** Called when the error's toast closes. A dialog whose own check can fail twice in a row with
+   *  the same message (an empty reason) clears its error here, so the next failure shows again. */
+  onErrorDismiss?: () => void
   /** A class added to the dialog, so one dialog can be styled apart from the others (story 5.6:
    *  the Reassign dialog's 44px phone targets). */
   className?: string
@@ -46,6 +50,7 @@ export function ConfirmDialog({
   canConfirm = true,
   cancelLabel = CANCEL,
   errorId,
+  onErrorDismiss,
   className,
 }: ConfirmDialogProps) {
   const titleId = useId()
@@ -79,11 +84,7 @@ export function ConfirmDialog({
         </h2>
         <div className="dialog-body">
           {children}
-          {error && (
-            <p id={errorId} role="alert" className="error">
-              {error}
-            </p>
-          )}
+          {error && <ErrorToast message={error} id={errorId} onDismiss={onErrorDismiss} />}
         </div>
         <div className="dialog-actions">
           <button

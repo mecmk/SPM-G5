@@ -34,6 +34,7 @@ import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestImpactToggle } from './ChangeRequestImpact'
 import { changeTitle, OUT_OF_DATE_NOTE, STATUS_LABELS, VIEW_EVENT } from './changeRequestValues'
+import { ErrorToast } from '../components/ErrorToast'
 
 type QueueTabKey = 'ALL' | ChangeRequestStatus
 
@@ -161,21 +162,9 @@ export function ChangeRequestQueuePage() {
         subtitle="Changes organisers have asked for on your events: those waiting for your decision, and those already decided."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      {referencesError && (
-        <p role="alert" className="error">
-          {referencesError}
-        </p>
-      )}
-      {reloadError && (
-        <p role="alert" className="error">
-          {reloadError}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
+      {referencesError && <ErrorToast message={referencesError} />}
+      {reloadError && <ErrorToast message={reloadError} />}
 
       <div className="stack">
         <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />

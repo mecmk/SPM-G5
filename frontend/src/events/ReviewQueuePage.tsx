@@ -11,6 +11,7 @@ import { EVENTS_INBOX_PATH, eventPath } from '../routes'
 import { eventStatusTab, EVENT_STATUS_TABS, type EventStatusTabKey } from '../shared/eventStatus'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { ErrorToast } from '../components/ErrorToast'
 
 const BACK_TO_INBOX = { from: EVENTS_INBOX_PATH, fromLabel: 'Events inbox' }
 
@@ -112,11 +113,7 @@ export function ReviewQueuePage() {
         subtitle="Every event assigned to you, and where it stands."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading your events…" />}
 
       {list !== null && (
@@ -178,11 +175,7 @@ export function ReviewQueuePage() {
             </EventCardGrid>
           )}
 
-          {loadMoreError && (
-            <p role="alert" className="error">
-              {loadMoreError}
-            </p>
-          )}
+          {loadMoreError && <ErrorToast message={loadMoreError} />}
           {list.items.length < list.total && (
             <div className="load-more">
               <p className="small muted">

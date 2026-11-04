@@ -25,6 +25,8 @@ import {
 } from '../shared/equipmentStatus'
 import { CANCEL, CLOSE, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits } from '../shared/inputGuards'
 
 /** AC2/AC7: the items the coordinator may still edit, mirroring the backend's
  *  `_EDITABLE_ITEM_STATUSES` (backend/app/equipment/service.py). */
@@ -365,11 +367,7 @@ export function EquipmentRequestsSection({
     >
       <h2 id="equipment-heading">Equipment requirements</h2>
       {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
-      {hasItems && shortagesError && (
-        <p role="alert" className="error">
-          {shortagesError}
-        </p>
-      )}
+      {hasItems && shortagesError && <ErrorToast message={shortagesError} />}
       {equipment.length === 0 ? (
         <p className="muted">No equipment requested.</p>
       ) : (
@@ -387,6 +385,7 @@ export function EquipmentRequestsSection({
                   <label>
                     Quantity
                     <input
+                      onBeforeInput={refuseNonDigits}
                       type="number"
                       inputMode="numeric"
                       value={editQuantity}
@@ -412,11 +411,7 @@ export function EquipmentRequestsSection({
                       onChange={(e) => setEditNotes(e.target.value)}
                     />
                   </label>
-                  {editError && (
-                    <p role="alert" className="error">
-                      {editError}
-                    </p>
-                  )}
+                  {editError && <ErrorToast message={editError} />}
                   <span className="row-actions">
                     <button type="submit" disabled={isSaving}>
                       {isSaving ? 'Saving…' : 'Save'}
@@ -554,11 +549,7 @@ export function EquipmentRequestsSection({
 
       {canChange && hasWaiting && (
         <div className="stack">
-          {submitError && (
-            <p role="alert" className="error">
-              {submitError}
-            </p>
-          )}
+          {submitError && <ErrorToast message={submitError} />}
           <div className="page-actions">
             <button type="button" disabled={isSubmitting} onClick={sendToTechnicalSupport}>
               {isSubmitting ? 'Sending…' : 'Submit to Technical Support'}
@@ -570,11 +561,7 @@ export function EquipmentRequestsSection({
       {canChange && (
         <form className="stack" aria-label="Add equipment" noValidate onSubmit={handleAdd}>
           <p className="eyebrow">Add equipment</p>
-          {availabilityError && (
-            <p role="alert" className="error">
-              {availabilityError}
-            </p>
-          )}
+          {availabilityError && <ErrorToast message={availabilityError} />}
           <label>
             Equipment type
             <select
@@ -602,6 +589,7 @@ export function EquipmentRequestsSection({
           <label>
             Quantity
             <input
+              onBeforeInput={refuseNonDigits}
               type="number"
               inputMode="numeric"
               value={quantity}
@@ -626,11 +614,7 @@ export function EquipmentRequestsSection({
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
-          {addError && (
-            <p role="alert" className="error">
-              {addError}
-            </p>
-          )}
+          {addError && <ErrorToast message={addError} />}
           <div className="page-actions">
             <button type="submit" className="secondary" disabled={isAdding}>
               {isAdding ? 'Adding…' : 'Add item'}

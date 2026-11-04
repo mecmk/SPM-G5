@@ -16,6 +16,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { EVENTS_UNASSIGNED_PATH, eventPath } from '../routes'
 import { formatDateTime, formatSchedule, NOT_RECORDED } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { ErrorToast } from '../components/ErrorToast'
 
 const QUEUE_LABEL = 'Unassigned events'
 const BACK_TO_QUEUE = { from: EVENTS_UNASSIGNED_PATH, fromLabel: QUEUE_LABEL }
@@ -120,17 +121,9 @@ export function UnassignedQueuePage() {
         subtitle="Submitted requests waiting for an Event Coordinator, oldest first."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading the unassigned queue…" />}
-      {conflict && (
-        <p role="alert" className="error">
-          {conflict}
-        </p>
-      )}
+      {conflict && <ErrorToast message={conflict} />}
 
       {queue !== null && (
         <div className="stack">

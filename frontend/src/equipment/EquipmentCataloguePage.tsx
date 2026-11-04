@@ -5,6 +5,7 @@ import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_CATALOGUE_TITLE, equipmentTypePath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
+import { ErrorToast } from '../components/ErrorToast'
 
 /**
  * Story 16.2 AC2 - the equipment catalogue, for Technical Support: every active type, by name,
@@ -23,11 +24,7 @@ export function EquipmentCataloguePage() {
         subtitle="Each equipment type's stock, and how many units are out of service now."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading the catalogue…" />}
 
       {types !== null && types.length === 0 && (

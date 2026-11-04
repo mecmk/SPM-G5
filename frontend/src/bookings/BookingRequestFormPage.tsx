@@ -47,6 +47,8 @@ import {
   venueDefaultNote,
   type DurationDraft,
 } from './turnaround'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits } from '../shared/inputGuards'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -120,6 +122,7 @@ function DurationFields({ legend, draft, onChange, defaultMinutes }: DurationFie
           <label key={part}>
             {label}
             <input
+              onBeforeInput={refuseNonDigits}
               type="text"
               inputMode="numeric"
               autoComplete="off"
@@ -274,9 +277,7 @@ export function BookingRequestFormPage() {
   if (error) {
     return (
       <div className="page">
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <ErrorToast message={error} />
       </div>
     )
   }
@@ -315,9 +316,7 @@ export function BookingRequestFormPage() {
           ← {event.name}
         </Link>
         <PageHeader title={`Request ${venue.name}`} subtitle={`For ${event.name}.`} />
-        <p role="alert" className="error">
-          {ERROR_REGISTRY.BOOKING_NOT_REQUESTABLE.message}
-        </p>
+        <ErrorToast message={ERROR_REGISTRY.BOOKING_NOT_REQUESTABLE.message} />
       </div>
     )
   }
@@ -328,9 +327,7 @@ export function BookingRequestFormPage() {
           ← Venue catalogue
         </Link>
         <PageHeader title={`Request ${venue.name}`} subtitle={`For ${event.name}.`} />
-        <p role="alert" className="error">
-          {ERROR_REGISTRY.BOOKING_REQUIREMENT_NOT_FOUND.message}
-        </p>
+        <ErrorToast message={ERROR_REGISTRY.BOOKING_REQUIREMENT_NOT_FOUND.message} />
       </div>
     )
   }
@@ -538,9 +535,7 @@ export function BookingRequestFormPage() {
             />
           </div>
           {turnaroundError !== null && (
-            <p role="alert" className="error">
-              {ERROR_REGISTRY[turnaroundError].message}
-            </p>
+            <ErrorToast message={ERROR_REGISTRY[turnaroundError].message} />
           )}
           {period !== null && (
             <ul className="check-list">
@@ -564,11 +559,7 @@ export function BookingRequestFormPage() {
         <section aria-labelledby="booking-suitability-heading" className="stack">
           <h2 id="booking-suitability-heading">Suitability</h2>
           {isChecking && <p className="muted">Checking whether this venue suits the event…</p>}
-          {checkError !== null && (
-            <p role="alert" className="error">
-              {checkError}
-            </p>
-          )}
+          {checkError !== null && <ErrorToast message={checkError} />}
           {suitability !== null && (
             <SuitabilityNote
               suitability={suitability}
@@ -593,15 +584,11 @@ export function BookingRequestFormPage() {
 
         <div className="form-actions">
           {bookingsError !== null && (
-            <p role="alert" className="error">
-              {ERROR_REGISTRY.BOOKING_EVENT_BOOKINGS_UNREAD.message} {bookingsError}
-            </p>
+            <ErrorToast
+              message={`${ERROR_REGISTRY.BOOKING_EVENT_BOOKINGS_UNREAD.message} ${bookingsError}`}
+            />
           )}
-          {sendError && (
-            <p role="alert" className="error">
-              {sendError}
-            </p>
-          )}
+          {sendError && <ErrorToast message={sendError} onDismiss={() => setSendError(null)} />}
           {canReturnToResults && (
             <Link to={backTo} className="button secondary">
               Back to the results

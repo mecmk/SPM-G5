@@ -18,6 +18,7 @@ import { CHANGE_RETURNS_TO_PLANNING_STATUSES } from '../shared/eventStatus'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestImpact, IMPACT_LOADING_LABEL } from './ChangeRequestImpact'
 import { FIELD_LABELS } from './changeRequestValues'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** Story 19.2 AC5: what approving each field may release, said before it is applied. Fix f19.2.1:
  *  an attendance change releases no booking, so the coordinator checks the room themselves. */
@@ -163,6 +164,7 @@ export function ChangeRequestDecisionDialog({
         tone="primary"
         isBusy={isDeciding}
         error={error}
+        onErrorDismiss={() => setError(null)}
         canConfirm={impact !== null}
         onConfirm={confirm}
         onCancel={onCancel}
@@ -170,11 +172,7 @@ export function ChangeRequestDecisionDialog({
         <p>This change is applied to the event, and the organiser will be told.</p>
         <ChangeRequestChanges request={request} references={references} />
         <section aria-label="Impact of this change" className="change-impact-scroll">
-          {impactError !== null && (
-            <p role="alert" className="error">
-              {impactError}
-            </p>
-          )}
+          {impactError !== null && <ErrorToast message={impactError} />}
           {impact === null && impactError === null && <LoadingState label={IMPACT_LOADING_LABEL} />}
           {impact !== null && <ChangeRequestImpact impact={impact} isUpdated={isImpactUpdated} />}
         </section>
@@ -195,6 +193,7 @@ export function ChangeRequestDecisionDialog({
       confirmLabel="Reject"
       isBusy={isDeciding}
       error={error}
+      onErrorDismiss={() => setError(null)}
       errorId={errorId}
       onConfirm={confirm}
       onCancel={onCancel}

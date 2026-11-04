@@ -17,6 +17,7 @@ import {
 } from './notificationText'
 import { ServerNotificationRow } from './ServerNotificationRow'
 import { useServerNotifications } from './serverNotificationContext'
+import { ErrorToast } from '../components/ErrorToast'
 
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
@@ -165,16 +166,8 @@ export function NotificationBell({ placement, isSidebarCollapsed = false }: Noti
                 </button>
               </header>
               <div className="notification-scroll">
-                {markAllError && (
-                  <p role="alert" className="error notification-error">
-                    {markAllError}
-                  </p>
-                )}
-                {listError && (
-                  <p role="alert" className="error notification-error">
-                    {listError}
-                  </p>
-                )}
+                {markAllError && <ErrorToast message={markAllError} />}
+                {listError && <ErrorToast message={listError} />}
                 {notifications !== null && notifications.length === 0 && !listError && (
                   <p className="notification-empty">{NO_NOTIFICATIONS}</p>
                 )}

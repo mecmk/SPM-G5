@@ -1,5 +1,6 @@
 import { formatDate, formatDateTime } from '../shared/format'
 import { StatusBadge } from './StatusBadge'
+import { ErrorToast } from './ErrorToast'
 
 export type ClarificationEntryKind = 'REQUEST' | 'RESPONSE' | 'NOTE'
 
@@ -81,11 +82,7 @@ export function ClarificationHistory({
           </span>
         </p>
       )}
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {entries === null && !error && <p className="muted">Loading…</p>}
       {entries !== null && entries.length === 0 && (
         <p className="muted">No clarification has been requested on this request.</p>

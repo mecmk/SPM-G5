@@ -80,6 +80,8 @@ import {
   type VenueRequirementDraft,
 } from './eventRequestForm'
 import { readBackState } from './backState'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits, refuseNonPhone } from '../shared/inputGuards'
 
 const NO_LAYOUT_PREFERENCE = ''
 const NO_EQUIPMENT_CHOSEN = ''
@@ -231,10 +233,13 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   const [availabilityRefresh, setAvailabilityRefresh] = useState(0)
   // A date field left half-typed, noticed as the person types or leaves it.
   const [incompleteDateId, setIncompleteDateId] = useState<string | null>(null)
-  // The field a refused save is about, tied to the form as it was then, so any edit clears it.
-  const [invalidField, setInvalidField] = useState<{ id: string; form: EventFormState } | null>(
-    null,
-  )
+  // The fields a refused save is about, tied to the form as it was then, so any edit clears them.
+  const [invalidFields, setInvalidFields] = useState<{
+    ids: string[]
+    form: EventFormState
+  } | null>(null)
+  // Every problem the form's own check found on the last save, each said in its own toast.
+  const [formProblems, setFormProblems] = useState<ErrorCode[]>([])
   // Story 2.1 AC17: confirms clearing saved registration dates when switching Registration
   // required off.
   const [isConfirmingClearRegistration, setIsConfirmingClearRegistration] = useState(false)
@@ -404,7 +409,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   /** The id, and the invalid mark when the last save was refused because of this field. */
   function fieldProps(id: string) {
     const isInvalid =
-      (invalidField !== null && invalidField.form === form && invalidField.id === id) ||
+      (invalidFields !== null && invalidFields.form === form && invalidFields.ids.includes(id)) ||
       dateProblem?.fieldId === id ||
       registrationDateProblem?.fieldId === id ||
       id in liveProblems
@@ -627,29 +632,56 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   }
 
   /**
-   * AC2/AC3/AC6/AC17: check the form before anything is sent. On a problem, say it, mark the field
-   * and move to it. Shared by saving a draft and by story 7.2's correction.
+   * AC2/AC3/AC6/AC17: check the form before anything is sent. On problems, say every one, mark
+   * their fields and move to the first. Shared by saving a draft and by story 7.2's correction.
    */
   function isFormValid(current: EventFormState): boolean {
     const incompleteFieldId = findIncompleteDateField()
-    const problem: FormProblem | null = incompleteFieldId
-      ? {
-          code: REGISTRATION_DATE_FIELD_IDS.includes(incompleteFieldId)
-            ? 'EVENT_REGISTRATION_DATE_INCOMPLETE'
-            : 'EVENT_DATE_INCOMPLETE',
-          fieldId: incompleteFieldId,
-        }
-      : validateEventForm(current, event, judgedAvailability, {
-          isEquipmentLeftOut: isEquipmentApproved,
-        })
-    if (problem) {
-      setSaveError(ERROR_REGISTRY[problem.code].message)
-      setInvalidField({ id: problem.fieldId, form: current })
-      document.getElementById(problem.fieldId)?.focus()
+    const incompleteProblems: FormProblem[] = incompleteFieldId
+      ? [
+          {
+            code: REGISTRATION_DATE_FIELD_IDS.includes(incompleteFieldId)
+              ? 'EVENT_REGISTRATION_DATE_INCOMPLETE'
+              : 'EVENT_DATE_INCOMPLETE',
+            fieldId: incompleteFieldId,
+          },
+        ]
+      : []
+    const problems = [
+      ...incompleteProblems,
+      ...validateEventForm(current, event, judgedAvailability, {
+        isEquipmentLeftOut: isEquipmentApproved,
+      }).filter((problem) => problem.fieldId !== incompleteFieldId),
+    ]
+    setSaveError(null)
+    if (problems.length > 0) {
+      setFormProblems([...new Set(problems.map((problem) => problem.code))])
+      setInvalidFields({ ids: problems.map((problem) => problem.fieldId), form: current })
+      document.getElementById(problems[0].fieldId)?.focus()
       return false
     }
-    setSaveError(null)
+    setFormProblems([])
     return true
+  }
+
+  function dismissFormProblem(code: ErrorCode) {
+    setFormProblems((current) => current.filter((problem) => problem !== code))
+  }
+
+  /** The last save's refusal, and every problem the form's own check found, each a toast. */
+  function renderSaveErrors() {
+    return (
+      <>
+        {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
+        {formProblems.map((code) => (
+          <ErrorToast
+            key={code}
+            message={ERROR_REGISTRY[code].message}
+            onDismiss={() => dismissFormProblem(code)}
+          />
+        ))}
+      </>
+    )
   }
 
   /**
@@ -682,7 +714,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
       form && err instanceof ApiError ? findServerProblemField(form, err.detail) : null
     if (form && serverField) {
       setSaveError(serverField.message || formatApiError(err))
-      setInvalidField({ id: serverField.fieldId, form })
+      setInvalidFields({ ids: [serverField.fieldId], form })
       document.getElementById(serverField.fieldId)?.focus()
     } else {
       setSaveError(formatApiError(err))
@@ -828,7 +860,8 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     setPicture(null)
     setIsPictureRemoved(false)
     setPictureProblem(null)
-    setInvalidField(null)
+    setInvalidFields(null)
+    setFormProblems([])
     setLoadCount((count) => count + 1)
   }
 
@@ -872,11 +905,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     <div className="page">
       <PageHeader backTo={backTo} backLabel={backLabel} title={title} subtitle={subtitle} />
 
-      {loadError && (
-        <p role="alert" className="error">
-          {loadError}
-        </p>
-      )}
+      {loadError && <ErrorToast message={loadError} />}
       {!loadError && (!form || !reference) && <LoadingState label="Loading request…" />}
 
       {form && reference && (
@@ -920,6 +949,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
               <label>
                 Expected attendance <RequiredMark />
                 <input
+                  onBeforeInput={refuseNonDigits}
                   type="number"
                   inputMode="numeric"
                   min={1}
@@ -1000,6 +1030,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                 Contact phone number <RequiredMark />
                 <input
                   type="tel"
+                  onBeforeInput={refuseNonPhone}
                   autoComplete="tel"
                   maxLength={PHONE_MAX_LENGTH}
                   {...fieldProps(FIELD_ID.contactPhone)}
@@ -1120,6 +1151,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                     <label>
                       Number of people
                       <input
+                        onBeforeInput={refuseNonDigits}
                         type="number"
                         inputMode="numeric"
                         min={1}
@@ -1203,6 +1235,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                           {selected && (
                             <div className="inline-fields">
                               <input
+                                onBeforeInput={refuseNonDigits}
                                 type="number"
                                 inputMode="numeric"
                                 min={1}
@@ -1465,6 +1498,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                   <label>
                     Quantity
                     <input
+                      onBeforeInput={refuseNonDigits}
                       type="number"
                       inputMode="numeric"
                       min={1}
@@ -1518,11 +1552,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
               {canCorrectDetails && missingForSubmission.length > 0 && (
                 <p className="form-hint">Still needed: {missingForSubmission.join(', ')}.</p>
               )}
-              {saveError && (
-                <p role="alert" className="error">
-                  {saveError}
-                </p>
-              )}
+              {renderSaveErrors()}
               {isOutOfDate && (
                 <button type="button" className="secondary" onClick={reloadEvent}>
                   Reload event
@@ -1547,11 +1577,7 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                   To submit, still needed: {missingForSubmission.join(', ')}.
                 </p>
               )}
-              {saveError && (
-                <p role="alert" className="error">
-                  {saveError}
-                </p>
-              )}
+              {renderSaveErrors()}
               <Link to={HOME_PATH} className="button secondary">
                 {CANCEL}
               </Link>

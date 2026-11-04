@@ -9,6 +9,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { safetyCheckPath } from '../routes'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { ErrorToast } from '../components/ErrorToast'
 
 type SafetyQueueTabKey = 'ALL' | SafetyQueueStatus
 
@@ -64,11 +65,7 @@ export function SafetyChecksPage() {
         subtitle="Events awaiting the operational safety check, and those already reviewed."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
 
       <div className="stack">
         <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />

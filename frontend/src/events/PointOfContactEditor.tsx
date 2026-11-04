@@ -5,6 +5,8 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import { isBlankOrPhoneNumber, PHONE_MAX_LENGTH } from '../shared/phone'
 import { CONTACT_EMAIL_MAX_LENGTH, isBlankOrEmailAddress } from './eventRequestForm'
 import { CANCEL } from '../shared/format'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonPhone } from '../shared/inputGuards'
 
 export interface PointOfContactEditorProps {
   event: EventDetail
@@ -125,6 +127,7 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
         <label>
           Contact phone number
           <input
+            onBeforeInput={refuseNonPhone}
             ref={phoneInput}
             type="tel"
             inputMode="tel"
@@ -142,11 +145,7 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
           )}
         </label>
       </div>
-      {saveError && (
-        <p role="alert" className="error">
-          {saveError}
-        </p>
-      )}
+      {saveError && <ErrorToast message={saveError} />}
       <div className="page-actions">
         <button type="submit" disabled={isSaving}>
           {isSaving ? 'Saving…' : 'Save contact details'}

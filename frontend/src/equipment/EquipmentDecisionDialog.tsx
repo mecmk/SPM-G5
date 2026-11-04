@@ -97,6 +97,7 @@ export function EquipmentDecisionDialog({
         tone="primary"
         isBusy={isDeciding}
         error={error}
+        onErrorDismiss={() => setError(null)}
         onConfirm={confirm}
         onCancel={onCancel}
       >
@@ -121,6 +122,7 @@ export function EquipmentDecisionDialog({
       confirmLabel="Decline"
       isBusy={isDeciding}
       error={error}
+      onErrorDismiss={() => setError(null)}
       onConfirm={confirm}
       onCancel={onCancel}
     >

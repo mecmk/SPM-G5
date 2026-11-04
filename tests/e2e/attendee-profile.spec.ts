@@ -327,7 +327,10 @@ test('18.4 AC6/AC7: My profile shows what is wrong with the phone number before 
   await page.goto(PROFILE_PATH)
 
   const phone = page.getByLabel('Phone number')
-  await phone.fill('9123 456a')
+  // A letter cannot be typed into it, so what is left to say is too few digits.
+  await phone.fill('9123 456')
+  await phone.pressSequentially('a')
+  await expect(phone).toHaveValue('9123 456')
   await page.getByRole('button', { name: 'Save details' }).click()
 
   const problem = page.getByRole('alert').filter({ hasText: PHONE_INVALID_MESSAGE })

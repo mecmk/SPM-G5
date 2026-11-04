@@ -10,6 +10,7 @@ import { SAFETY_CHECKS_PATH } from '../routes'
 import { NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { SafetyDecisionForm } from './SafetyDecisionForm'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** The shapes `safety_facts` (backend/app/safety/service.py) writes its list facts in. */
 interface VenueFact {
@@ -129,11 +130,7 @@ export function SafetyCheckDetailPage() {
           ← Safety Checks
         </Link>
       )}
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading the safety check…" />}
 
       {check !== null && (

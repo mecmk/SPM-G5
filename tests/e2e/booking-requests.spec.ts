@@ -135,11 +135,10 @@ const REQUEST_THIS_VENUE = 'Request this venue'
 const CLOSED_VENUE_MESSAGE =
   'Grand Hall is closed for maintenance from Tue 15 Dec 2026, 00:00 to Thu 17 Dec 2026, 00:00.'
 const NOT_REQUESTABLE_MESSAGE =
-  "Only the event's assigned coordinator can request a venue for it, while the event is in " +
-  'Planning or Confirmed.'
+  "Only the event's coordinator can request a venue, while it's Planning or Confirmed."
 // f12.1.2 (12.1 AC5): as the step words a setup or teardown it refuses before sending.
 const TURNAROUND_INVALID_MESSAGE =
-  'Setup and teardown must be whole numbers of days, hours and minutes, zero or more.'
+  'Setup and teardown must be whole numbers, 0 or more.'
 const TURNAROUND_TOO_LONG_MESSAGE = 'Setup and teardown can each be at most 14 days.'
 // f12.1.2 (12.1 AC17): as the step and Venue Staff are told what runs outside Seminar Room 2.1's
 // opening hours - the step adding who decides, and Venue Staff the booked period.
@@ -664,13 +663,10 @@ test('12.1 AC5: a negative, fractional or over-long setup or teardown is refused
   const problem = turnaround.getByRole('alert')
   const sendRequest = page.getByRole('button', { name: 'Send request' })
 
-  // Said under the fields as soon as it is typed, and still said after Send request, which sends
-  // nothing while it shows.
+  // A sign or a decimal point cannot be typed, so a negative or fractional time never gets in.
   for (const hours of ['-1', '1.5']) {
     await turnaroundField(turnaround, 'Setup', 'Hours').fill(hours)
-    await expect(problem).toHaveText(TURNAROUND_INVALID_MESSAGE)
-    await sendRequest.click()
-    await expect(problem).toHaveText(TURNAROUND_INVALID_MESSAGE)
+    await expect(turnaroundField(turnaround, 'Setup', 'Hours')).not.toHaveValue(hours)
   }
 
   // Each is at most 14 days, the longest an event may run.
@@ -695,11 +691,11 @@ test('12.1 AC5: text that is not a whole number is refused, not read as 0', asyn
   const turnaround = await openInductionStep(page)
   const hours = turnaroundField(turnaround, 'Setup', 'Hours')
 
-  // Typed key by key, as a person types it, so the field holds exactly what was typed.
+  // Typed key by key, as a person types it: the dash is refused, so the field holds only the 3.
   await hours.fill('')
   await hours.pressSequentially('3-')
-  await expect(turnaround.getByRole('alert')).toHaveText(TURNAROUND_INVALID_MESSAGE)
-  await expect(turnaround).not.toContainText('Booked period')
+  await expect(hours).toHaveValue('3')
+  await expect(turnaround.getByRole('alert')).toHaveCount(0)
 })
 
 test('12.1 AC17: the step says when setup or teardown would run outside the opening hours', async ({

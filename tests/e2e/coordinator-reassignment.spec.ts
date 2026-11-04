@@ -45,9 +45,9 @@ const [CHLOE, CARL] = COORDINATORS
 const STALE_MESSAGE =
   "This event's coordinator has changed since you opened it. Reload the event and try again."
 const NO_OTHER_COORDINATOR_MESSAGE =
-  'There is no other active Event Coordinator to reassign this to.'
+  'No other coordinator is available.'
 const NOT_REFRESHED_MESSAGE =
-  'The event was reassigned, but this list could not be refreshed. Reload the page to see the change.'
+  'Reassigned. Reload the page to see it.'
 /** How the picker names a coordinator: their name and their number of active events (5.4 AC3). */
 const WITH_COUNT = /· \d+ active events?$/
 

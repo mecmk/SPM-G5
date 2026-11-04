@@ -53,7 +53,7 @@ const START_BEFORE_TODAY = 'The start date cannot be before today.'
 const END_BEFORE_START = 'The end date cannot be before the start date.'
 const END_BEFORE_TODAY = 'The end date cannot be before today.'
 const DATE_INVALID = 'Enter a valid date, with a four-digit year.'
-const DATE_INCOMPLETE = 'Finish entering the date'
+const DATE_INCOMPLETE = 'Enter a complete, real date'
 
 /** Singapore's clock, which the page's dates read (frontend/src/shared/format.ts). */
 const SINGAPORE_OFFSET_MS = 8 * 60 * 60 * 1000
