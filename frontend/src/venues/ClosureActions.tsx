@@ -95,6 +95,7 @@ export function ClosureActions({ venueId, closure, now, onEdit, onChanged }: Clo
           tone="primary"
           isBusy={isBusy}
           error={error}
+          onErrorDismiss={() => setError(null)}
           onConfirm={confirm}
           onCancel={cancel}
         >
@@ -110,6 +111,7 @@ export function ClosureActions({ venueId, closure, now, onEdit, onChanged }: Clo
           confirmLabel="Remove"
           isBusy={isBusy}
           error={error}
+          onErrorDismiss={() => setError(null)}
           onConfirm={confirm}
           onCancel={cancel}
         >

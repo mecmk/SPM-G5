@@ -25,6 +25,7 @@ import {
   END_BOOKINGS_WARNING,
   blockOffTitle,
 } from './blockOffLabels'
+import { ErrorToast } from '../components/ErrorToast'
 
 export interface VenueUnavailabilitySectionProps {
   venueId: string
@@ -289,6 +290,7 @@ export function VenueUnavailabilitySection({
             Ends
             <input
               type="datetime-local"
+              min={starts || undefined}
               value={ends}
               onChange={(event) => setEnds(event.target.value)}
               disabled={isSaving}
@@ -296,9 +298,7 @@ export function VenueUnavailabilitySection({
           </label>
         </div>
         {isEndBeforeStart && (
-          <p role="alert" className="error">
-            {ERROR_REGISTRY.UNAVAILABILITY_END_BEFORE_START.message}
-          </p>
+          <ErrorToast message={ERROR_REGISTRY.UNAVAILABILITY_END_BEFORE_START.message} />
         )}
         <div className="form-grid">
           <label>
@@ -377,9 +377,7 @@ export function VenueUnavailabilitySection({
         )}
 
         {saveError && !isConfirming && (
-          <p role="alert" className="error">
-            {saveError}
-          </p>
+          <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />
         )}
 
         <div className="cluster">
@@ -408,6 +406,7 @@ export function VenueUnavailabilitySection({
           tone="primary"
           isBusy={isSaving}
           error={saveError}
+          onErrorDismiss={() => setSaveError(null)}
           onConfirm={save}
           onCancel={cancelConfirm}
         >

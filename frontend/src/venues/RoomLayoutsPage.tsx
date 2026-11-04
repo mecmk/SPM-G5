@@ -9,6 +9,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { useLoaded } from '../shared/useLoaded'
 import { DeleteRoomLayoutDialog } from './DeleteRoomLayoutDialog'
 import { RoomLayoutDialog } from './RoomLayoutDialog'
+import { ErrorToast } from '../components/ErrorToast'
 
 const PAGE_TITLE = 'Room layouts'
 
@@ -72,11 +73,7 @@ export function RoomLayoutsPage() {
         }
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading room layouts…" />}
       {layouts !== null && layouts.length === 0 && (
         <EmptyState>There are no room layouts yet.</EmptyState>

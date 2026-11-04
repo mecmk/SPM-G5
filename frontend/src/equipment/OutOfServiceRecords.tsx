@@ -110,6 +110,7 @@ export function OutOfServiceRecords({
           tone="primary"
           isBusy={isBusy}
           error={error}
+          onErrorDismiss={() => setError(null)}
           onConfirm={handleConfirm}
           onCancel={handleCancel}
         >
@@ -125,6 +126,7 @@ export function OutOfServiceRecords({
           confirmLabel="Remove"
           isBusy={isBusy}
           error={error}
+          onErrorDismiss={() => setError(null)}
           onConfirm={handleConfirm}
           onCancel={handleCancel}
         >

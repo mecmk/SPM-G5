@@ -29,6 +29,7 @@ import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
 import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE } from './bookingOutcome'
 import { BookingVenueThumb } from './BookingVenueThumb'
+import { ErrorToast } from '../components/ErrorToast'
 
 export interface OrganiserBookingsSectionProps {
   eventId: string
@@ -79,11 +80,7 @@ export function OrganiserBookingsSection({
         Venue bookings
       </h2>
       {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {bookings !== null && bookings.length === 0 && (
         <EmptyState>No venue has been booked for this event yet.</EmptyState>
       )}

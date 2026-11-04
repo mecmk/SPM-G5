@@ -5,6 +5,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { formatDateTime, NONE, shortReference } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { describeChanges, FIELD_LABELS, NOT_THERE_REQUESTED } from './changeRequestValues'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** Story 7.4 AC3: a value longer than this is cut short, with a way to show all of it. */
 const SHORT_VALUE_LENGTH = 120
@@ -176,11 +177,7 @@ export function ChangeHistorySection({ eventId, version, references }: ChangeHis
       <p className="eyebrow" id="change-history-heading">
         Change history
       </p>
-      {error !== null && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error !== null && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading change history…" />}
       {changes !== null && changes.length === 0 && <EmptyState>No changes yet</EmptyState>}
       {changes !== null &&

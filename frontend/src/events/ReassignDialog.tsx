@@ -74,6 +74,7 @@ export function ReassignDialog({
       tone="primary"
       isBusy={isSaving}
       error={error}
+      onErrorDismiss={() => setError(null)}
       onConfirm={confirm}
       onCancel={onCancel}
       className="reassign-dialog"

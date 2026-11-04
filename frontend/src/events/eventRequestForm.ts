@@ -526,8 +526,9 @@ export function getLatestEndInput(startsAt: string): string {
 }
 
 /**
- * Story 2.1 AC2/AC3/AC6 and story 2.7: the first problem with the form (an error-registry code and
- * the field to fix), or null. The backend checks the same rules again; this only saves a round
+ * Story 2.1 AC2/AC3/AC6 and story 2.7: every problem with the form (an error-registry code and the
+ * field to fix), in the form's order, or none. Each date pair gives only its first, since fixing
+ * one date often fixes the next. The backend checks the same rules again; this only saves a round
  * trip. A date already saved on the draft is not judged again unless it was changed, as on the
  * backend. What a request needs before it can be submitted (AC10) is left to the backend, which
  * names anything missing.
@@ -537,21 +538,22 @@ export function validateEventForm(
   saved: EventDetail | null,
   availability: Record<string, number> | null,
   { isEquipmentLeftOut = false }: { isEquipmentLeftOut?: boolean } = {},
-): FormProblem | null {
-  if (!form.name.trim()) return { code: 'EVENT_NAME_REQUIRED', fieldId: FIELD_ID.name }
+): FormProblem[] {
+  const problems: FormProblem[] = []
+  if (!form.name.trim()) problems.push({ code: 'EVENT_NAME_REQUIRED', fieldId: FIELD_ID.name })
   const attendanceProblem = getAttendanceProblem(form.attendance)
-  if (attendanceProblem) return { code: attendanceProblem, fieldId: FIELD_ID.attendance }
+  if (attendanceProblem) problems.push({ code: attendanceProblem, fieldId: FIELD_ID.attendance })
   const dateProblem = validateDates(form, saved)
-  if (dateProblem) return dateProblem
+  if (dateProblem) problems.push(dateProblem)
   const registrationDateProblem = validateRegistrationDates(form, saved)
-  if (registrationDateProblem) return registrationDateProblem
+  if (registrationDateProblem) problems.push(registrationDateProblem)
   if (!isBlankOrEmailAddress(form.contactEmail)) {
-    return { code: 'EVENT_CONTACT_EMAIL_INVALID', fieldId: FIELD_ID.contactEmail }
+    problems.push({ code: 'EVENT_CONTACT_EMAIL_INVALID', fieldId: FIELD_ID.contactEmail })
   }
   if (!isBlankOrPhoneNumber(form.contactPhone)) {
-    return { code: 'EVENT_CONTACT_PHONE_INVALID', fieldId: FIELD_ID.contactPhone }
+    problems.push({ code: 'EVENT_CONTACT_PHONE_INVALID', fieldId: FIELD_ID.contactPhone })
   }
-  return validateRequirements(form, availability, isEquipmentLeftOut)
+  return [...problems, ...validateRequirements(form, availability, isEquipmentLeftOut)]
 }
 
 /**
@@ -788,7 +790,7 @@ function getTimesProblem(
  * judged against the event's times as they stand on the form, so moving the event flags a
  * requirement left outside it. AC6: the number of people. AC9: no two share a name, trimmed and
  * case-insensitive (the later one is the one marked). The page says each next to its field as it
- * is typed; a save is refused for the first.
+ * is typed, and a save is refused for all of them.
  */
 export function getVenueRequirementProblems(form: EventFormState): FormProblem[] {
   const problems: FormProblem[] = []
@@ -869,40 +871,28 @@ function validateRequirements(
   form: EventFormState,
   availability: Record<string, number> | null,
   isEquipmentLeftOut: boolean,
-): FormProblem | null {
-  const [venueProblem] = getVenueRequirementProblems(form)
-  if (venueProblem) return venueProblem
-  if (isEquipmentLeftOut) return null
-  const untypedLine = form.equipment.find((line) => line.typeCode === NO_EQUIPMENT_TYPE)
-  if (untypedLine) {
-    return { code: 'EVENT_EQUIPMENT_TYPE_REQUIRED', fieldId: getEquipmentTypeId(untypedLine.key) }
-  }
-  const repeatedLine = form.equipment.find((line) =>
-    isEquipmentTypeTaken(form.equipment, line.key, line.typeCode),
-  )
-  if (repeatedLine) {
-    return { code: 'EVENT_EQUIPMENT_DUPLICATE', fieldId: getEquipmentTypeId(repeatedLine.key) }
-  }
-  const badQuantityLine = form.equipment.find(
-    (line) => !isPositiveWholeNumber(line.quantity) && !isAboveRequestLimit(line.quantity),
-  )
-  if (badQuantityLine) {
-    return {
-      code: 'EVENT_QUANTITY_INVALID',
-      fieldId: getEquipmentQuantityId(badQuantityLine.key),
+): FormProblem[] {
+  const problems = getVenueRequirementProblems(form)
+  if (isEquipmentLeftOut) return problems
+  for (const line of form.equipment) {
+    const typeId = getEquipmentTypeId(line.key)
+    const quantityId = getEquipmentQuantityId(line.key)
+    if (line.typeCode === NO_EQUIPMENT_TYPE) {
+      problems.push({ code: 'EVENT_EQUIPMENT_TYPE_REQUIRED', fieldId: typeId })
+    } else if (isEquipmentTypeTaken(form.equipment, line.key, line.typeCode)) {
+      problems.push({ code: 'EVENT_EQUIPMENT_DUPLICATE', fieldId: typeId })
+    }
+    if (!isPositiveWholeNumber(line.quantity) && !isAboveRequestLimit(line.quantity)) {
+      problems.push({ code: 'EVENT_QUANTITY_INVALID', fieldId: quantityId })
+    } else if (isOverAvailable(line, availability)) {
+      problems.push({ code: 'EVENT_EQUIPMENT_UNAVAILABLE', fieldId: quantityId })
+    } else if (isAboveRequestLimit(line.quantity)) {
+      // Fix f2.1.5 (story 2.1 AC21): with no stock known for its dates, a quantity above the limit
+      // is told the limit.
+      problems.push({ code: 'EVENT_QUANTITY_TOO_LARGE', fieldId: quantityId })
     }
   }
-  const overLine = form.equipment.find((line) => isOverAvailable(line, availability))
-  if (overLine) {
-    return { code: 'EVENT_EQUIPMENT_UNAVAILABLE', fieldId: getEquipmentQuantityId(overLine.key) }
-  }
-  // Fix f2.1.5 (story 2.1 AC21): with no stock known for its dates, a quantity above the limit is
-  // told the limit.
-  const tooLargeLine = form.equipment.find((line) => isAboveRequestLimit(line.quantity))
-  if (tooLargeLine) {
-    return { code: 'EVENT_QUANTITY_TOO_LARGE', fieldId: getEquipmentQuantityId(tooLargeLine.key) }
-  }
-  return null
+  return problems
 }
 
 function textOrNull(value: string): string | null {

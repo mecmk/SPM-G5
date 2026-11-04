@@ -219,17 +219,21 @@ test('2.1 AC3: attendance, facility and equipment quantities must be positive wh
   })
   await fillEssentials(page, uniqueName('Numbers'))
 
-  for (const value of ['0', '-3', '1.5']) {
+  // A sign or a decimal point cannot be typed: the entry is refused and the field keeps the 60 it
+  // held, so only 0 is left to refuse.
+  for (const value of ['-3', '1.5']) {
     await page.getByLabel('Expected attendance').fill(value)
-    await page.getByRole('button', { name: 'Save draft' }).click()
-    await expect(page.getByRole('alert')).toContainText('positive whole number')
+    await expect(page.getByLabel('Expected attendance')).toHaveValue('60')
   }
+  await page.getByLabel('Expected attendance').fill('0')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'positive whole number' })).toBeVisible()
 
   await page.getByLabel('Expected attendance').fill('60')
   await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
   await page.getByLabel('Whiteboard / flipchart quantity').fill('0')
   await page.getByRole('button', { name: 'Save draft' }).click()
-  await expect(page.getByRole('alert')).toContainText('positive whole number')
+  await expect(page.getByRole('alert')).toContainText('whole number above 0')
 
   await page.getByLabel('Whiteboard / flipchart quantity').fill('3')
   await addEquipment(page, 1, 'Presentation laptop', '0')
@@ -602,12 +606,12 @@ test('2.1 AC2: a year-0001 date and a half-typed date are refused, not read as e
   await end.focus()
   for (let segment = 0; segment < 5; segment += 1) await page.keyboard.press('Tab')
   await page.keyboard.press('Backspace')
-  await expect(
-    page.getByText('Finish entering the date and time, including AM or PM.'),
-  ).toBeVisible()
+  await expect(page.getByText('Enter a complete, real date and time.')).toBeVisible()
   await page.getByRole('button', { name: 'Save draft' }).click()
 
-  await expect(page.getByRole('alert')).toContainText('Finish entering')
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Enter a complete, real date and time.' }),
+  ).toBeVisible()
   await expect(end).toBeFocused()
   await expect(end).toHaveAttribute('aria-invalid', 'true')
 })
@@ -661,17 +665,13 @@ test('2.1 AC2: a date problem is said under the dates as soon as it is typed', a
   // An end before the start is said first: 12 Dec 2022 to 31 Mar 2022.
   await start.fill('2022-12-12T14:22')
   await end.fill('2022-03-31T01:13')
-  await expect(
-    page.getByText('The proposed end date and time must be after the start date and time.'),
-  ).toBeVisible()
+  await expect(page.getByText('The end must be after the start.')).toBeVisible()
   await expect(end).toHaveAttribute('aria-invalid', 'true')
 
   // Each other problem is named as it happens.
   await start.fill(inFuture(30, 9))
   await end.fill(inFuture(30, 8))
-  await expect(
-    page.getByText('The proposed end date and time must be after the start date and time.'),
-  ).toBeVisible()
+  await expect(page.getByText('The end must be after the start.')).toBeVisible()
   await expect(end).toHaveAttribute('aria-invalid', 'true')
 
   await end.fill(inFuture(45, 9))
@@ -679,9 +679,7 @@ test('2.1 AC2: a date problem is said under the dates as soon as it is typed', a
 
   await start.fill('2099-06-15T09:00')
   await end.fill('2099-06-15T17:00')
-  await expect(
-    page.getByText('The proposed start cannot be more than 2 years from now.'),
-  ).toBeVisible()
+  await expect(page.getByText('The start can be at most 2 years away.')).toBeVisible()
   await expect(start).toHaveAttribute('aria-invalid', 'true')
 
   // And it goes away once the dates are right.
@@ -689,7 +687,7 @@ test('2.1 AC2: a date problem is said under the dates as soon as it is typed', a
   await end.fill(inFuture(30, 17))
   await expect(
     page.getByText(
-      /cannot be in the past|must be after the start date|cannot run for more than|cannot be more than 2 years/,
+      /cannot be in the past|The end must be after the start|cannot run for more than|The start can be at most 2 years away/,
     ),
   ).toHaveCount(0)
   await expect(start).not.toHaveAttribute('aria-invalid', 'true')
@@ -804,18 +802,14 @@ test('2.1 AC3: a bad number is said next to the field as soon as it is typed', a
 
   // A facility quantity
   await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
-  await page.getByLabel('Whiteboard / flipchart quantity').fill('-2')
-  await expect(
-    page.getByText('A facility quantity must be a positive whole number, or left empty.'),
-  ).toBeVisible()
+  await page.getByLabel('Whiteboard / flipchart quantity').fill('0')
+  await expect(page.getByText('Facility quantity must be a whole number above 0.')).toBeVisible()
   await page.getByLabel('Whiteboard / flipchart quantity').fill('3')
-  await expect(
-    page.getByText('A facility quantity must be a positive whole number, or left empty.'),
-  ).toHaveCount(0)
+  await expect(page.getByText('Facility quantity must be a whole number above 0.')).toHaveCount(0)
 
   // An equipment quantity, on the row it belongs to
   await addEquipment(page, 1, 'Presentation laptop', '1')
-  await addEquipment(page, 2, 'Wireless microphone', '1.5')
+  await addEquipment(page, 2, 'Wireless microphone', '0')
   await expect(
     equipmentItem(page, 2).getByText('Equipment quantity must be a positive whole number.'),
   ).toBeVisible()
@@ -907,8 +901,7 @@ test('2.1 AC2: a date that does not exist, like 29 February in a non-leap year, 
     await page.keyboard.type(text)
   }
 
-  await expect(page.getByText(/29 February is only valid in a leap year/)).toBeVisible()
-  await expect(page.getByText(/no 31st in April, June, September or November/)).toBeVisible()
+  await expect(page.getByText('Enter a complete, real date and time.')).toBeVisible()
   await expect(start).toHaveAttribute('aria-invalid', 'true')
 })
 
@@ -1311,9 +1304,7 @@ test('2.1 AC17: a registration date problem is said under the fields as soon as 
 
   // Closing after the proposed start.
   await closes.fill(inFuture(31, 9))
-  await expect(
-    page.getByText('Registration must close no later than the proposed start.'),
-  ).toBeVisible()
+  await expect(page.getByText('Registration must close by the event start.')).toBeVisible()
   await expect(closes).toHaveAttribute('aria-invalid', 'true')
 
   // Fixed, then the opening date after the closing date.
@@ -1332,9 +1323,7 @@ test('2.1 AC17: a registration date problem is said under the fields as soon as 
   // And it goes away once both dates are right.
   await opens.fill(inFuture(1, 9))
   await closes.fill(inFuture(30, 9))
-  await expect(
-    page.getByText('Registration must close no later than the proposed start.'),
-  ).toHaveCount(0)
+  await expect(page.getByText('Registration must close by the event start.')).toHaveCount(0)
   await expect(page.getByText('Registration must open before it closes.')).toHaveCount(0)
 })
 
@@ -1553,10 +1542,10 @@ test('2.1 AC22: an expected attendance above 100,000 is told the largest accepte
     await expect(attendance).toHaveAttribute('aria-invalid', 'true')
   }
 
-  // A wrong number is still a wrong number, however large.
+  // A sign cannot be typed: a large negative is refused and the field keeps the number it held.
   await attendance.fill('-100001')
-  await expect(wrongNumber).toBeVisible()
-  await expect(tooLarge).toHaveCount(0)
+  await expect(attendance).toHaveValue('99999999999999999999')
+  await expect(wrongNumber).toHaveCount(0)
 
   await attendance.fill('100001')
   await page.getByRole('button', { name: 'Save draft' }).click()
@@ -1586,9 +1575,7 @@ test('2.1 AC22: a facility quantity above 100,000 is told the largest accepted, 
 
   await rooms.fill('100001')
   await expect(page.getByText('A facility quantity must be 100,000 or less.')).toBeVisible()
-  await expect(
-    page.getByText('A facility quantity must be a positive whole number, or left empty.'),
-  ).toHaveCount(0)
+  await expect(page.getByText('Facility quantity must be a whole number above 0.')).toHaveCount(0)
   await expect(rooms).toHaveAttribute('aria-invalid', 'true')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page.getByRole('alert')).toContainText('A facility quantity must be 100,000 or less.')
@@ -1600,4 +1587,74 @@ test('2.1 AC22: a facility quantity above 100,000 is told the largest accepted, 
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
   await expect(page.getByLabel('Whiteboard / flipchart quantity')).toHaveValue('100000')
+})
+
+test('2.1 AC3: two problems on one save are each said in a toast that stays until it is closed', async ({
+  page,
+}) => {
+  await page.clock.install()
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('Two problems'))
+  await page.getByLabel('Expected attendance').fill('0')
+  await page.getByLabel('Contact email').fill('nope')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  // Only a toast has a close button: a field's own message says the same words without one.
+  const toast = (message: string) =>
+    page
+      .getByRole('alert')
+      .filter({ hasText: message })
+      .filter({ has: page.getByRole('button', { name: 'Dismiss' }) })
+  const attendance = toast('Expected attendance must be a positive whole number.')
+  const email = toast('Enter an email address like name@example.com.')
+  await expect(attendance).toBeVisible()
+  await expect(email).toBeVisible()
+
+  // Nothing closes them but their own button, however long they are left.
+  await page.clock.fastForward('00:30')
+  await expect(attendance).toBeVisible()
+  await expect(email).toBeVisible()
+
+  await attendance.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(attendance).toHaveCount(0)
+  await expect(email).toBeVisible()
+})
+
+test('2.1 AC3: a problem fixed in its field closes its toast, and the other stays', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('Fixed problem'))
+  await page.getByLabel('Expected attendance').fill('0')
+  await page.getByLabel('Contact email').fill('nope')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  const toast = (message: string) =>
+    page
+      .getByRole('alert')
+      .filter({ hasText: message })
+      .filter({ has: page.getByRole('button', { name: 'Dismiss' }) })
+  const attendance = toast('Expected attendance must be a positive whole number.')
+  const email = toast('Enter an email address like name@example.com.')
+  await expect(attendance).toBeVisible()
+  await expect(email).toBeVisible()
+
+  await page.getByLabel('Expected attendance').fill('60')
+  await expect(attendance).toHaveCount(0)
+  await expect(email).toBeVisible()
+})
+
+test('2.1 AC3: a sign, a decimal point or an exponent cannot be typed into a whole-number field', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const attendance = page.getByLabel('Expected attendance')
+
+  // Typed key by key, as a person types: only the digits get in.
+  await attendance.fill('')
+  await attendance.pressSequentially('1e-.+2')
+  await expect(attendance).toHaveValue('12')
 })

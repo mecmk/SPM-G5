@@ -23,6 +23,7 @@ import { EQUIPMENT_STATUS_LABELS, HOLD_LENGTH_SENTENCE } from '../shared/equipme
 import { formatDateTime, isReadableDate, todayAsDateInput } from '../shared/format'
 import { queuePath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** The type filter's value for every type. */
 const ALL_TYPES = ''
@@ -343,11 +344,7 @@ export function EquipmentHoldsPage() {
           onClear={clearFilters}
         />
 
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
+        {error && <ErrorToast message={error} />}
         {(isLoading || (isStale && error === null)) && (
           <LoadingState label="Loading equipment holds…" />
         )}

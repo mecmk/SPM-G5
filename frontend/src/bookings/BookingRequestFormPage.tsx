@@ -14,7 +14,7 @@ import { useAuth } from '../auth/authContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
 import { SuitabilityNote } from '../components/SuitabilityNote'
-import { ERROR_REGISTRY } from '../errors/registry'
+import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import {
   eventPath,
@@ -47,6 +47,8 @@ import {
   venueDefaultNote,
   type DurationDraft,
 } from './turnaround'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits } from '../shared/inputGuards'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -120,6 +122,7 @@ function DurationFields({ legend, draft, onChange, defaultMinutes }: DurationFie
           <label key={part}>
             {label}
             <input
+              onBeforeInput={refuseNonDigits}
               type="text"
               inputMode="numeric"
               autoComplete="off"
@@ -258,6 +261,8 @@ export function BookingRequestFormPage() {
   const replaced =
     covering !== null && covering.id === replacesId && !isBooked(covering) ? covering : null
   const [sendError, setSendError] = useState<string | null>(null)
+  // The problem whose toast was closed: it still holds, so Send request says it again.
+  const [closedTurnaroundError, setClosedTurnaroundError] = useState<ErrorCode | null>(null)
   const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [justification, setJustification] = useState('')
@@ -274,9 +279,7 @@ export function BookingRequestFormPage() {
   if (error) {
     return (
       <div className="page">
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <ErrorToast message={error} />
       </div>
     )
   }
@@ -315,9 +318,7 @@ export function BookingRequestFormPage() {
           ← {event.name}
         </Link>
         <PageHeader title={`Request ${venue.name}`} subtitle={`For ${event.name}.`} />
-        <p role="alert" className="error">
-          {ERROR_REGISTRY.BOOKING_NOT_REQUESTABLE.message}
-        </p>
+        <ErrorToast message={ERROR_REGISTRY.BOOKING_NOT_REQUESTABLE.message} />
       </div>
     )
   }
@@ -328,9 +329,7 @@ export function BookingRequestFormPage() {
           ← Venue catalogue
         </Link>
         <PageHeader title={`Request ${venue.name}`} subtitle={`For ${event.name}.`} />
-        <p role="alert" className="error">
-          {ERROR_REGISTRY.BOOKING_REQUIREMENT_NOT_FOUND.message}
-        </p>
+        <ErrorToast message={ERROR_REGISTRY.BOOKING_REQUIREMENT_NOT_FOUND.message} />
       </div>
     )
   }
@@ -433,8 +432,12 @@ export function BookingRequestFormPage() {
     submitEvent.preventDefault()
     setSendError(null)
     setCanReturnToResults(false)
-    // f12.1.2 (story 12.1 AC5): the setup's or teardown's problem is already said under its fields.
-    if (turnaroundError !== null) return
+    // f12.1.2 (story 12.1 AC5): a setup or teardown problem sends nothing, and is said again here
+    // if its toast was closed.
+    if (turnaroundError !== null) {
+      setClosedTurnaroundError(null)
+      return
+    }
     if (!requiresJustification) {
       await send(null)
       return
@@ -537,10 +540,11 @@ export function BookingRequestFormPage() {
               defaultMinutes={venue.teardown_minutes_default}
             />
           </div>
-          {turnaroundError !== null && (
-            <p role="alert" className="error">
-              {ERROR_REGISTRY[turnaroundError].message}
-            </p>
+          {turnaroundError !== null && turnaroundError !== closedTurnaroundError && (
+            <ErrorToast
+              message={ERROR_REGISTRY[turnaroundError].message}
+              onDismiss={() => setClosedTurnaroundError(turnaroundError)}
+            />
           )}
           {period !== null && (
             <ul className="check-list">
@@ -564,11 +568,7 @@ export function BookingRequestFormPage() {
         <section aria-labelledby="booking-suitability-heading" className="stack">
           <h2 id="booking-suitability-heading">Suitability</h2>
           {isChecking && <p className="muted">Checking whether this venue suits the event…</p>}
-          {checkError !== null && (
-            <p role="alert" className="error">
-              {checkError}
-            </p>
-          )}
+          {checkError !== null && <ErrorToast message={checkError} />}
           {suitability !== null && (
             <SuitabilityNote
               suitability={suitability}
@@ -593,15 +593,11 @@ export function BookingRequestFormPage() {
 
         <div className="form-actions">
           {bookingsError !== null && (
-            <p role="alert" className="error">
-              {ERROR_REGISTRY.BOOKING_EVENT_BOOKINGS_UNREAD.message} {bookingsError}
-            </p>
+            <ErrorToast
+              message={`${ERROR_REGISTRY.BOOKING_EVENT_BOOKINGS_UNREAD.message} ${bookingsError}`}
+            />
           )}
-          {sendError && (
-            <p role="alert" className="error">
-              {sendError}
-            </p>
-          )}
+          {sendError && <ErrorToast message={sendError} onDismiss={() => setSendError(null)} />}
           {canReturnToResults && (
             <Link to={backTo} className="button secondary">
               Back to the results

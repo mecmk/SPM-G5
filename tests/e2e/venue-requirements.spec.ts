@@ -416,7 +416,7 @@ test('2.7 AC5/AC9/AC10: a venue requirement problem is said next to its field as
 }) => {
   const endsAfter = 'A venue requirement cannot end after the event ends.'
   const duplicate = 'Two venue requirements cannot have the same name.'
-  const startsBefore = 'A venue requirement cannot start before the event starts.'
+  const startsBefore = "A venue requirement can't start before the event."
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page, uniqueName('Live problems'))
   await addRequirement(page, 1, 'Plenary hall', '60')
@@ -748,7 +748,7 @@ test("2.7 AC2/AC14: the starting venue requirement takes the event's times only 
   await page.getByLabel('Proposed start').fill(inFuture(30, 17))
   await page.getByLabel('Proposed end').fill(inFuture(30, 9))
   await expect(
-    page.getByText('The proposed end date and time must be after the start date and time.'),
+    page.getByText('The end must be after the start.'),
   ).toBeVisible()
   await expect(neededFrom).toHaveValue('')
   await expect(neededUntil).toHaveValue('')

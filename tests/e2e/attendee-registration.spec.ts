@@ -69,7 +69,7 @@ const REGISTER_API_PATH = '/registrations'
 const NOT_OPEN_MESSAGE = 'This event is not open for registration.'
 const BACK_TO_LIST = '← Upcoming events'
 const EVENT_FULL_MESSAGE = 'This event is full.'
-const UNREACHABLE_MESSAGE = 'The server could not be reached. Check your connection and try again.'
+const UNREACHABLE_MESSAGE = "Can't reach the server. Check your connection."
 const PHONE = { width: 390, height: 844 }
 // AC9: one unbroken word - a link pasted into the description - that must wrap on a phone.
 const LONG_LINK =

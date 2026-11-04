@@ -19,6 +19,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_STATUS_LABELS } from '../shared/equipmentStatus'
 import { ADDITIONAL_VENUE, formatSchedule } from '../shared/format'
 import { NOT_THERE_REQUESTED, OUT_OF_DATE_NOTE } from './changeRequestValues'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** Story 19.3 AC1: what the assessment says when the change touches nothing already arranged. */
 const NO_IMPACT_MESSAGE = 'No existing arrangements are affected.'
@@ -622,11 +623,7 @@ export function ChangeRequestImpactToggle({ request }: { request: ChangeRequest 
           {isOpen ? 'Hide impact' : 'Show impact'}
         </button>
       </div>
-      {isOpen && error !== null && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {isOpen && error !== null && <ErrorToast message={error} />}
       {isOpen && error === null && impact === null && <LoadingState label={IMPACT_LOADING_LABEL} />}
       {isOpen && impact !== null && <ChangeRequestImpact impact={impact} />}
     </div>

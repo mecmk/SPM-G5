@@ -11,6 +11,7 @@ import { EQUIPMENT_CATALOGUE_PATH, EQUIPMENT_CATALOGUE_TITLE } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
 import { OutOfServiceForm } from './OutOfServiceForm'
 import { OutOfServiceRecords } from './OutOfServiceRecords'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** The type as last loaded, and when, which labels each record In force or Scheduled. */
 interface LoadedType {
@@ -72,11 +73,7 @@ function EquipmentTypeView({ typeId }: { typeId: string }) {
         ← {EQUIPMENT_CATALOGUE_TITLE}
       </Link>
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading the equipment…" />}
 
       {loaded !== null && page !== null && (

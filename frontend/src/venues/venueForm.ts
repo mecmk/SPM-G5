@@ -117,33 +117,36 @@ function isValidFloorArea(value: string): boolean {
 }
 
 /**
- * Story 8.3 AC1/AC3: the first problem with the form as an error-registry code, or null. The
- * backend checks the same rules again; this only saves a round trip. AC11 (fix f2.7.5): a counted
- * facility needs how many the venue has.
+ * Story 8.3 AC1/AC3: every problem with the form as an error-registry code, in the form's order,
+ * or none. The backend checks the same rules again; this only saves a round trip. AC11 (fix
+ * f2.7.5): a counted facility needs how many the venue has.
  */
 export function validateVenueForm(
   form: VenueFormState,
   facilities: readonly FacilityReferenceItem[],
-): ErrorCode | null {
-  if (!form.name.trim()) return 'VENUE_NAME_REQUIRED'
-  if (!form.location.trim()) return 'VENUE_LOCATION_REQUIRED'
-  if (!isPositiveWholeNumber(form.capacity)) return 'VENUE_CAPACITY_INVALID'
-  if (!isValidFloorArea(form.floorAreaSqm)) return 'VENUE_FLOOR_AREA_INVALID'
-  if (!form.opensAt !== !form.closesAt) return 'VENUE_HOURS_INCOMPLETE'
-  if (form.opensAt && form.closesAt <= form.opensAt) return 'VENUE_HOURS_OUT_OF_ORDER'
+): ErrorCode[] {
+  const problems: ErrorCode[] = []
+  if (!form.name.trim()) problems.push('VENUE_NAME_REQUIRED')
+  if (!form.location.trim()) problems.push('VENUE_LOCATION_REQUIRED')
+  if (!isPositiveWholeNumber(form.capacity)) problems.push('VENUE_CAPACITY_INVALID')
+  if (!isValidFloorArea(form.floorAreaSqm)) problems.push('VENUE_FLOOR_AREA_INVALID')
+  if (!form.opensAt !== !form.closesAt) problems.push('VENUE_HOURS_INCOMPLETE')
+  else if (form.opensAt && form.closesAt <= form.opensAt) problems.push('VENUE_HOURS_OUT_OF_ORDER')
   const turnaround = [form.setupMinutes, form.teardownMinutes]
   if (!turnaround.every((minutes) => WHOLE_NUMBER.test(minutes.trim()))) {
-    return 'VENUE_TURNAROUND_INVALID'
+    problems.push('VENUE_TURNAROUND_INVALID')
   }
   const quantities = Object.values(form.facilities).map((facility) => facility.quantity)
-  if (!quantities.every(isBlankOrPositiveWholeNumber)) return 'VENUE_QUANTITY_INVALID'
+  if (!quantities.every(isBlankOrPositiveWholeNumber)) problems.push('VENUE_QUANTITY_INVALID')
   const isCountedLeftBlank = facilities.some(
     (facility) => facility.is_countable && form.facilities[facility.code]?.quantity.trim() === '',
   )
-  if (isCountedLeftBlank) return 'VENUE_FACILITY_QUANTITY_REQUIRED'
+  if (isCountedLeftBlank) problems.push('VENUE_FACILITY_QUANTITY_REQUIRED')
   const layoutCapacities = Object.values(form.layouts).map((layout) => layout.layoutCapacity)
-  if (!layoutCapacities.every(isBlankOrPositiveWholeNumber)) return 'VENUE_LAYOUT_CAPACITY_INVALID'
-  return null
+  if (!layoutCapacities.every(isBlankOrPositiveWholeNumber)) {
+    problems.push('VENUE_LAYOUT_CAPACITY_INVALID')
+  }
+  return problems
 }
 
 function textOrNull(value: string): string | null {

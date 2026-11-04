@@ -652,12 +652,12 @@ th {
   border-radius: var(--radius-card);
 }
 
-/* A dialog taller than the screen scrolls inside itself (centred by transform, it would otherwise
+/* A dialog taller than the screen scrolls inside itself (centred in the screen, it would otherwise
    run off the top and bottom of a short screen), and its buttons stay pinned at its foot, always
    on screen. The negative margin lets the pinned row cover the dialog's bottom padding, so a
    dialog short enough not to scroll keeps App.css's spacing. */
 .dialog {
-  max-height: calc(100svh - 2rem);
+  max-height: calc(100svh - 2rem - var(--error-toasts-space, 0px));
   overflow-y: auto;
 }
 

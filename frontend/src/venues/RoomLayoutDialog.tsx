@@ -90,6 +90,7 @@ export function RoomLayoutDialog({ layout, onSaved, onCancel, onGone }: RoomLayo
       tone="primary"
       isBusy={isSaving}
       error={error}
+      onErrorDismiss={() => setError(null)}
       onConfirm={save}
       onCancel={onCancel}
       canConfirm={!isGone}

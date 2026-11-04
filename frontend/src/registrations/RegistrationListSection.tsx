@@ -13,6 +13,7 @@ import {
   describeGuestOf,
   describePhone,
 } from './registrationLabels'
+import { ErrorToast } from '../components/ErrorToast'
 
 /**
  * Story 18.3 - who has registered for the event, for its organiser and assigned coordinator, on
@@ -60,11 +61,7 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
   return (
     <section className="card stack" aria-labelledby="registration-list-heading">
       <h2 id="registration-list-heading">Registered attendees</h2>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {(isLoading || (isStale && !error)) && <LoadingState label="Loading registrations…" />}
       {/* Another event's rows never show under this one while it loads (useLoaded's isStale). */}
       {list !== null && !isStale && (
@@ -142,9 +139,7 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
             </div>
           )}
           {loadMoreError && (
-            <p role="alert" className="error">
-              {loadMoreError}
-            </p>
+            <ErrorToast message={loadMoreError} onDismiss={() => setLoadMoreError(null)} />
           )}
           {list.items.length < list.total && (
             <div className="load-more">

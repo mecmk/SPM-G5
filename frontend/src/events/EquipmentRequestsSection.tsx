@@ -27,6 +27,8 @@ import {
 } from '../shared/equipmentStatus'
 import { CANCEL, CLOSE, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits } from '../shared/inputGuards'
 
 /** AC2/AC7: the items the coordinator may still edit, mirroring the backend's
  *  `_EDITABLE_ITEM_STATUSES` (backend/app/equipment/service.py). */
@@ -369,9 +371,7 @@ export function EquipmentRequestsSection({
       <h2 id="equipment-heading">Equipment requirements</h2>
       {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
       {hasItems && shortagesError && (
-        <p role="alert" className="error">
-          {shortagesError}
-        </p>
+        <ErrorToast message={shortagesError} onDismiss={() => setShortagesError(null)} />
       )}
       {/* Fix f17.3.1 (17.3 AC9): while anything is held, how long it stays held. */}
       {isHolding && <p className="small muted">{HOLD_LENGTH_SENTENCE}</p>}
@@ -392,6 +392,7 @@ export function EquipmentRequestsSection({
                   <label>
                     Quantity
                     <input
+                      onBeforeInput={refuseNonDigits}
                       type="number"
                       inputMode="numeric"
                       value={editQuantity}
@@ -418,9 +419,7 @@ export function EquipmentRequestsSection({
                     />
                   </label>
                   {editError && (
-                    <p role="alert" className="error">
-                      {editError}
-                    </p>
+                    <ErrorToast message={editError} onDismiss={() => setEditError(null)} />
                   )}
                   <span className="row-actions">
                     <button type="submit" disabled={isSaving}>
@@ -560,9 +559,7 @@ export function EquipmentRequestsSection({
       {canChange && hasWaiting && (
         <div className="stack">
           {submitError && (
-            <p role="alert" className="error">
-              {submitError}
-            </p>
+            <ErrorToast message={submitError} onDismiss={() => setSubmitError(null)} />
           )}
           <div className="page-actions">
             <button type="button" disabled={isSubmitting} onClick={sendToTechnicalSupport}>
@@ -576,9 +573,7 @@ export function EquipmentRequestsSection({
         <form className="stack" aria-label="Add equipment" noValidate onSubmit={handleAdd}>
           <p className="eyebrow">Add equipment</p>
           {availabilityError && (
-            <p role="alert" className="error">
-              {availabilityError}
-            </p>
+            <ErrorToast message={availabilityError} onDismiss={() => setAvailabilityError(null)} />
           )}
           <label>
             Equipment type
@@ -607,6 +602,7 @@ export function EquipmentRequestsSection({
           <label>
             Quantity
             <input
+              onBeforeInput={refuseNonDigits}
               type="number"
               inputMode="numeric"
               value={quantity}
@@ -631,11 +627,7 @@ export function EquipmentRequestsSection({
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
-          {addError && (
-            <p role="alert" className="error">
-              {addError}
-            </p>
-          )}
+          {addError && <ErrorToast message={addError} onDismiss={() => setAddError(null)} />}
           <div className="page-actions">
             <button type="submit" className="secondary" disabled={isAdding}>
               {isAdding ? 'Adding…' : 'Add item'}
@@ -650,6 +642,7 @@ export function EquipmentRequestsSection({
           confirmLabel="Remove"
           isBusy={isRemoving}
           error={removeError}
+          onErrorDismiss={() => setRemoveError(null)}
           onConfirm={confirmRemove}
           onCancel={cancelRemove}
         >
@@ -666,6 +659,7 @@ export function EquipmentRequestsSection({
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
           error={withdrawError}
+          onErrorDismiss={() => setWithdrawError(null)}
           canConfirm={canConfirmWithdrawal}
           cancelLabel={canConfirmWithdrawal ? CANCEL : CLOSE}
           onConfirm={confirmWithdraw}

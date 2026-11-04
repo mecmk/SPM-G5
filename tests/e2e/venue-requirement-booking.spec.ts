@@ -320,7 +320,7 @@ test("12.5 AC11: a request step naming another event's requirement offers no req
     `/events/${WORKSHOP.id}/request-venue/${GRAND_HALL_ID}?requirement=${WORKSHOP_ROOM_ID}`,
   )
 
-  await expect(page.getByRole('alert')).toContainText("not one of the event's")
+  await expect(page.getByRole('alert')).toContainText("isn't the event's")
   await expect(page.getByRole('button', { name: 'Send request' })).toHaveCount(0)
 })
 

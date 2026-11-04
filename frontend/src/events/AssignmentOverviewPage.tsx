@@ -30,6 +30,7 @@ import {
 import { formatSchedule, NOT_RECORDED, NOT_YET_ASSIGNED } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { ReassignDialog } from './ReassignDialog'
+import { ErrorToast } from '../components/ErrorToast'
 
 const PAGE_TITLE = 'Assignments'
 const DEACTIVATED = 'Deactivated'
@@ -237,9 +238,7 @@ export function AssignmentOverviewPage() {
         subtitle="Every active event, and each coordinator's share of them."
       />
       {isShowingNotRefreshed && (
-        <p role="alert" className="error">
-          {ERROR_REGISTRY.REASSIGNED_LIST_NOT_REFRESHED.message}
-        </p>
+        <ErrorToast message={ERROR_REGISTRY.REASSIGNED_LIST_NOT_REFRESHED.message} />
       )}
 
       <nav className="view-switch" aria-label="View">
@@ -303,16 +302,8 @@ export function AssignmentOverviewPage() {
             </label>
           </div>
 
-          {workloads.error && (
-            <p role="alert" className="error">
-              {workloads.error}
-            </p>
-          )}
-          {overview.error && (
-            <p role="alert" className="error">
-              {overview.error}
-            </p>
-          )}
+          {workloads.error && <ErrorToast message={workloads.error} />}
+          {overview.error && <ErrorToast message={overview.error} />}
           {isOverviewLoading && <LoadingState label="Loading active events…" />}
           {freshEvents !== null && freshEvents.length === 0 && (
             <EmptyState>No active events match these filters.</EmptyState>
@@ -377,11 +368,7 @@ interface CoordinatorsViewProps {
 /** Story 5.5 AC2/AC4/AC5: each coordinator, their count (0 included), flag and events. */
 function CoordinatorsView({ workloads, error, backToPage }: CoordinatorsViewProps) {
   if (error) {
-    return (
-      <p role="alert" className="error">
-        {error}
-      </p>
-    )
+    return <ErrorToast message={error} />
   }
   if (workloads === null) return <LoadingState label="Loading coordinators…" />
   if (workloads.length === 0) return <EmptyState>No Event Coordinators yet.</EmptyState>
