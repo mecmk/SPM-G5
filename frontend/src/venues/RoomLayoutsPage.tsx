@@ -19,10 +19,10 @@ type OpenDialog =
 /**
  * Story 8.6 - the room layouts venues can offer. AC1: every layout with its name and description,
  * in the server's order: the standard ones first, then the others from A to Z. AC9: every role
- * that reads venues sees the list; only Venue Staff (venues:manage) get Add layout, and Edit and
- * Delete on each layout (AC2-AC4). The server refuses everyone else regardless. After a change, or
- * a refusal that found a layout deleted elsewhere (AC12), the list is read again: only the newest
- * read's answer is shown, and once a read succeeds an earlier failure's message goes.
+ * holding room_layouts:read sees the list; only Venue Staff (venues:manage) get Add layout, and
+ * Edit and Delete on each layout (AC2-AC4). The server refuses everyone else regardless. After a
+ * change, or a refusal that found a layout deleted elsewhere (AC12), the list is read again: only
+ * the newest read's answer is shown, and once a read succeeds an earlier failure's message goes.
  */
 export function RoomLayoutsPage() {
   const { can } = useAuth()

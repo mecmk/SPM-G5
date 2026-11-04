@@ -18,8 +18,9 @@ AC6  a booking ending at 12:00 and another starting at 12:00 are separate window
 AC7  a multi-day booking, setup and teardown included, is one window covering every day.
 AC9  a rejected, withdrawn or cancelled booking no longer occupies the calendar.
 AC10 a range with nothing in it comes back empty.
-AC11 restricted to every internal role (VENUE_CALENDAR_READ is in _INTERNAL_COMMON, see
-     permissions.py); Event Organiser and Attendee are refused.
+AC11 restricted to the internal roles that read venues (VENUE_CALENDAR_READ is in _VENUE_READ,
+     see permissions.py); Event Organiser, Attendee and Technical Support Staff (f8.6.1) are
+     refused.
 AC12 a booking approved or withdrawn while the calendar is open shows its new state on the next
      request: one window, never two. The tests here approve and reject one; a withdrawn one
      is AC9's test_calendar_ignores_a_booking_that_no_longer_holds_the_venue.
@@ -418,7 +419,7 @@ def test_calendar_for_a_missing_venue_is_404(coordinator_client):
     [
         ("coordinator_client", 200),
         ("venue_staff_client", 200),
-        ("tech_client", 200),
+        ("tech_client", 403),
         ("organiser_client", 403),
         ("attendee_client", 403),
     ],

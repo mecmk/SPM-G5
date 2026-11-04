@@ -501,7 +501,7 @@ def test_search_text_is_literal_and_case_insensitive(coordinator_client, db):
 
 # --- AC4: who may search --------------------------------------------------------------------
 @pytest.mark.story("8.1", ac=4)
-@pytest.mark.parametrize("user", [Users.COORDINATOR, Users.VENUE_STAFF, Users.TECH_SUPPORT])
+@pytest.mark.parametrize("user", [Users.COORDINATOR, Users.VENUE_STAFF])
 def test_internal_roles_can_search(login_as, user):
     client = login_as(user)
 
@@ -509,7 +509,7 @@ def test_internal_roles_can_search(login_as, user):
 
 
 @pytest.mark.story("8.1", ac=4)
-@pytest.mark.parametrize("user", [Users.ORGANISER, Users.ATTENDEE])
+@pytest.mark.parametrize("user", [Users.ORGANISER, Users.ATTENDEE, Users.TECH_SUPPORT])
 def test_other_roles_cannot_search(login_as, user):
     assert login_as(user).get("/venues/search").status_code == 403
 

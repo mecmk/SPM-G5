@@ -163,6 +163,7 @@ def test_the_lead_holds_exactly_the_read_permissions_and_assigning():
     assert permissions_for(LEAD_ROLE) == {
         Permission.VENUES_READ,
         Permission.VENUE_CALENDAR_READ,
+        Permission.ROOM_LAYOUTS_READ,
         Permission.EVENTS_READ_ALL,
         Permission.BOOKINGS_READ,
         Permission.EQUIPMENT_READ,

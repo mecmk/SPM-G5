@@ -119,8 +119,8 @@ def test_a_requirement_that_is_not_the_events_is_refused(coordinator_client, db:
 @pytest.mark.story("11.1", ac=6)
 @pytest.mark.parametrize(
     "user",
-    [Users.VENUE_STAFF, Users.TECH_SUPPORT, Users.COORDINATOR_2],
-    ids=["venue-staff", "tech-support", "unassigned-coordinator"],
+    [Users.VENUE_STAFF, Users.COORDINATOR_2],
+    ids=["venue-staff", "unassigned-coordinator"],
 )
 def test_anyone_but_the_assigned_coordinator_is_not_judged_or_refused(login_as, db: Session, user):
     """The event is Chloe's. Its real requirement is not judged for anyone else, and one that does
