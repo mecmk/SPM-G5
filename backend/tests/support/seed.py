@@ -251,6 +251,12 @@ class Events:
     # Story 21.3: PLANNING, secured, never reviewed; coordinator 1, organiser 1, 10 April 2029. The
     # spec sends it for its safety review and the officer releases its Seminar Room 2.1 booking.
     SAFETY_RELEASE = _e(21301)
+    # Fix f21.2.1: PLANNING, sent back by a review whose finding named (and so released) its Seminar
+    # Room 2.1 booking; Exhibition Foyer requested after it, Pending. Organiser 1, coordinator 1.
+    STUDIO_SHOWCASE = _e(21201)
+    # Fix f21.2.1: PLANNING, sent back by a review whose venue finding names no booking; its
+    # approved Seminar Room 2.1 booking predates it, the Exhibition Foyer request does not.
+    MAKERS_FAIR = _e(21211)
     # Story 12.8: PLANNING; coordinator 1, organiser 1, 22 May 2029. The spec cancels its one
     # booking, Seminar Room 2.1 for "Main hall", approved by Vera.
     PRODUCT_BRIEFING = _e(12801)
@@ -334,6 +340,18 @@ class Bookings:
     # minutes of setup, and its additional venue at Exhibition Foyer; both approved by Vera.
     SAFETY_RELEASE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021303")
     SAFETY_RELEASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021304")
+    # Fix f21.2.1: Events.STUDIO_SHOWCASE's "Studio" at Seminar Room 2.1, released by its review on
+    # 6 Oct 2026, and the Exhibition Foyer request made after it, on 8 Oct 2026, Pending.
+    SAFETY_RELEASED_STUDIO_SHOWCASE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021203")
+    PENDING_STUDIO_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021204")
+    # Fix f21.2.1: Events.MAKERS_FAIR's "Main hall" at Seminar Room 2.1, approved before its review,
+    # and the additional venue at Exhibition Foyer requested after it, Pending.
+    APPROVED_MAKERS_FAIR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021213")
+    PENDING_MAKERS_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021214")
+    # Fix f21.2.1: Events.MAKERS_FAIR's additional venues asked for before its review: Grand Hall,
+    # still Pending, and Garden Atrium, rejected by Vera.
+    PENDING_MAKERS_FAIR_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000021220")
+    REJECTED_MAKERS_FAIR_GARDEN_ATRIUM = uuid.UUID("44444444-0000-0000-0000-000000021221")
     # Story 12.8: Events.PRODUCT_BRIEFING's requirement "Main hall" at Seminar Room 2.1, approved.
     PRODUCT_BRIEFING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012803")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each ended by its closure (see
@@ -537,6 +555,10 @@ class SafetyReviews:
     NIGHT_WALK_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000003")
     # Story 21.2: Events.DATA_SUMMIT's, with one finding flagging its venue bookings.
     DATA_SUMMIT_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000000004")
+    # Fix f21.2.1: Events.STUDIO_SHOWCASE's, whose one finding named its Seminar Room 2.1 booking.
+    STUDIO_SHOWCASE_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000021208")
+    # Fix f21.2.1: Events.MAKERS_FAIR's, whose one venue finding names no booking.
+    MAKERS_FAIR_CHANGES = uuid.UUID("ffffffff-0000-0000-0000-000000021218")
     # c8: every other Confirmed or Completed event's approving review, bar Events.CONFIRMED's (it
     # has none), is ffffffff-0000-0000-0008-<its event's last twelve digits>, e.g. the town hall's.
     TOWN_HALL_APPROVED = uuid.UUID("ffffffff-0000-0000-0008-000000000014")

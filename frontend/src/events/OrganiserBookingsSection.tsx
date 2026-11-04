@@ -34,6 +34,9 @@ export interface OrganiserBookingsSectionProps {
   eventId: string
   /** AC9 (CL-184): the latest safety review flags the event's venue bookings (21.2 AC4). */
   isFlagged: boolean
+  /** Fix f21.2.1 (story 21.2 AC22-AC26): whether the review flagged this booking, so only its card
+   * is highlighted. */
+  isFlaggedBooking: (booking: OrganiserBooking) => boolean
 }
 
 /** Fix f7.1.3 (AC10): a booking the safety review released, the coordinator cancelled or a venue
@@ -54,21 +57,23 @@ function bookingMessage(booking: OrganiserBooking): string {
  *
  * CL-184: AC4 a booking over more than one day names both dates, as the event's schedule does
  * (f7.1.1); AC7 an open hold reads as held, not confirmed, with when it expires; AC9 the section
- * is flagged when the safety review flags venue bookings.
+ * says so when the safety review flags venue bookings, and since fix f21.2.1 only the bookings it
+ * flagged are highlighted, each saying so.
  *
  * Fix f7.1.3 (AC10): a booking the safety review released, the coordinator cancelled or a venue
  * closure cancelled stays as a Cancelled card saying which and why - the closure's reason, never
  * its description - but not who.
  */
-export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookingsSectionProps) {
+export function OrganiserBookingsSection({
+  eventId,
+  isFlagged,
+  isFlaggedBooking,
+}: OrganiserBookingsSectionProps) {
   const loadBookings = useCallback(() => listBookingsForOwnEvent(eventId), [eventId])
   const { data: bookings, error } = useLoaded(loadBookings)
 
   return (
-    <section
-      className={`card stack${isFlagged ? ' card-flagged' : ''}`}
-      aria-labelledby="organiser-bookings-heading"
-    >
+    <section className="card stack" aria-labelledby="organiser-bookings-heading">
       <h2 id="organiser-bookings-heading" className="cluster">
         <Icon name="building" size={20} />
         Venue bookings
@@ -84,11 +89,15 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
             const bookingOutcome = BOOKING_OUTCOME[booking.status]
             const openHold = openHoldExpiry(booking)
             const isOverOneDay = isMultiDay(booking.starts_at, booking.ends_at)
+            const isBookingFlagged = isFlaggedBooking(booking)
             return (
               <li
                 key={booking.id}
-                className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}`}
+                className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}${
+                  isBookingFlagged ? ' booking-outcome-card-flagged' : ''
+                }`}
               >
+                {isBookingFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
                 <div className="booking-outcome-main">
                   <BookingVenueThumb coverUrl={booking.venue_cover_image_url} />
 

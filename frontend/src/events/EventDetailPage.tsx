@@ -96,6 +96,7 @@ import {
   FLAGGED_BY_SAFETY_REVIEW,
   SAFETY_REVIEW_STATUSES,
   flaggedArrangements,
+  isBookingFlagged,
 } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
 import {
@@ -1131,219 +1132,222 @@ export function EventDetailPage() {
         {canReadBooking && bookingError && <ErrorToast message={bookingError} />}
 
         {canReadBooking && bookings && bookings.length > 0 && (
-          <section
-            className={`card stack${isVenueFlagged ? ' card-flagged' : ''}`}
-            aria-labelledby="venue-booking-heading"
-          >
+          <section className="card stack" aria-labelledby="venue-booking-heading">
             <h2 id="venue-booking-heading" className="cluster">
               <Icon name="building" size={20} />
               Venue booking
             </h2>
             {isVenueFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
 
-            {bookings.map((booking) => {
-              const bookingOutcome = BOOKING_OUTCOME[booking.status]
-              const outcomeLabels = bookingOutcomeLabels(booking)
-              const openHold = openHoldExpiry(booking)
-              const forRequirement = bookedRequirementName(event, booking)
-              const isOverOneDay = isMultiDay(booking.starts_at, booking.ends_at)
-              return (
-                <div
-                  key={booking.id}
-                  className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}`}
-                >
-                  <div className="booking-outcome-main">
-                    <BookingVenueThumb coverUrl={booking.venue_cover_image_url} />
+            <ul className="booking-outcome-list">
+              {bookings.map((booking) => {
+                const bookingOutcome = BOOKING_OUTCOME[booking.status]
+                const outcomeLabels = bookingOutcomeLabels(booking)
+                const openHold = openHoldExpiry(booking)
+                const forRequirement = bookedRequirementName(event, booking)
+                const isOverOneDay = isMultiDay(booking.starts_at, booking.ends_at)
+                const isFlagged = isBookingFlagged(safety, booking)
+                return (
+                  <li
+                    key={booking.id}
+                    className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}${
+                      isFlagged ? ' booking-outcome-card-flagged' : ''
+                    }`}
+                  >
+                    {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
+                    <div className="booking-outcome-main">
+                      <BookingVenueThumb coverUrl={booking.venue_cover_image_url} />
 
-                    <div className="booking-outcome-body">
-                      <div className="booking-outcome-heading-row">
-                        <p className="stat-card-value">{booking.venue_name}</p>
-                        <span
-                          className={`booking-status-pill booking-status-pill-${bookingOutcome.tone}`}
-                        >
-                          <Icon name={bookingOutcome.icon} size={14} />
-                          {bookingOutcome.label}
-                        </span>
-                      </div>
-                      {/* Story 12.5 AC4/AC5: the requirement the venue is for. */}
-                      <p className="booking-outcome-purpose">
-                        {forRequirement === null ? 'Additional venue' : `For ${forRequirement}`}
-                      </p>
-                      <p className="muted">{booking.venue_location}</p>
-                      {/* Fix f21.3.1 (story 12.1 AC3): a booking over more than one day names both
-                          dates, as the organiser's section does (7.1 AC4). */}
-                      <div className="booking-outcome-schedule small muted">
-                        {isOverOneDay ? (
-                          <span className="booking-outcome-schedule-item">
-                            <Icon name="calendar" size={14} />
-                            {formatSchedule(booking.starts_at, booking.ends_at)}
+                      <div className="booking-outcome-body">
+                        <div className="booking-outcome-heading-row">
+                          <p className="stat-card-value">{booking.venue_name}</p>
+                          <span
+                            className={`booking-status-pill booking-status-pill-${bookingOutcome.tone}`}
+                          >
+                            <Icon name={bookingOutcome.icon} size={14} />
+                            {bookingOutcome.label}
                           </span>
-                        ) : (
-                          <>
+                        </div>
+                        {/* Story 12.5 AC4/AC5: the requirement the venue is for. */}
+                        <p className="booking-outcome-purpose">
+                          {forRequirement === null ? 'Additional venue' : `For ${forRequirement}`}
+                        </p>
+                        <p className="muted">{booking.venue_location}</p>
+                        {/* Fix f21.3.1 (story 12.1 AC3): a booking over more than one day names both
+                          dates, as the organiser's section does (7.1 AC4). */}
+                        <div className="booking-outcome-schedule small muted">
+                          {isOverOneDay ? (
                             <span className="booking-outcome-schedule-item">
                               <Icon name="calendar" size={14} />
-                              {formatDate(booking.starts_at)}
+                              {formatSchedule(booking.starts_at, booking.ends_at)}
                             </span>
-                            <span className="booking-outcome-schedule-item">
-                              <Icon name="calendar-check" size={14} />
-                              {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
-                            </span>
-                          </>
+                          ) : (
+                            <>
+                              <span className="booking-outcome-schedule-item">
+                                <Icon name="calendar" size={14} />
+                                {formatDate(booking.starts_at)}
+                              </span>
+                              <span className="booking-outcome-schedule-item">
+                                <Icon name="calendar-check" size={14} />
+                                {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <p className="small muted">{turnaroundLine(booking)}</p>
+                      </div>
+                    </div>
+
+                    <div className="booking-outcome-message">
+                      <Icon name={bookingOutcome.icon} size={18} />
+                      <div>
+                        <p>{openHold ? OPEN_HOLD_MESSAGE : bookingMessage(event, booking)}</p>
+                        {/* Story 12.6 AC2-AC4: which booking this replaces, which replaced it - only
+                          once its replacement was approved - or which venue is asked for. */}
+                        {booking.replaces_venue_name !== null && (
+                          <p>
+                            <strong>{replacesLine(booking.replaces_venue_name)}</strong>
+                          </p>
+                        )}
+                        {/* Story 21.3 AC2: a booking the Safety Officer's finding named. Story 12.8
+                          AC2: one its coordinator cancelled. */}
+                        {releasedByLabel(booking) !== null && (
+                          <p>
+                            <strong>{releasedByLabel(booking)}</strong>
+                          </p>
+                        )}
+                        {booking.replaced_by_venue_name !== null && (
+                          <p>
+                            <strong>{replacedByLine(booking.replaced_by_venue_name)}</strong>
+                          </p>
+                        )}
+                        {booking.pending_replacement_venue_name !== null && (
+                          <p>
+                            <strong>
+                              {replacementRequestedLine(booking.pending_replacement_venue_name)}
+                            </strong>
+                          </p>
+                        )}
+                        {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
+                        {openHold && (
+                          <p>
+                            <span className="fact-label">{HOLD_EXPIRES_LABEL}</span>
+                            <br />
+                            {formatDateTime(openHold)}
+                          </p>
+                        )}
+                        {/* Decided 12 Oct 2026: the latest change to that expiry - who, when, why. */}
+                        {openHold &&
+                          booking.hold_expiry_changed_by !== null &&
+                          booking.hold_expiry_changed_at !== null && (
+                            <p>
+                              <span className="small muted">
+                                Changed by {booking.hold_expiry_changed_by.full_name} on{' '}
+                                {formatDateTime(booking.hold_expiry_changed_at)}
+                              </span>
+                              <br />
+                              <span className="fact-label">{REASON_LABEL}</span>
+                              <br />
+                              {booking.hold_expiry_change_reason}
+                            </p>
+                          )}
+                        {booking.decided_at !== null && (
+                          <p>
+                            <span className="fact-label">{outcomeLabels.when}</span>
+                            <br />
+                            {formatDateTime(closedAt(booking) ?? booking.decided_at)}
+                          </p>
+                        )}
+                        {/* Story 6.2 AC16: when the booking was cancelled. */}
+                        {booking.cancelled_at !== null && (
+                          <p>
+                            <span className="fact-label">{CANCELLED_AT_LABEL}</span>
+                            <br />
+                            {formatDateTime(booking.cancelled_at)}
+                          </p>
+                        )}
+                        {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}
+                        {booking.status === EXPIRED_BOOKING_STATUS && booking.hold_expires_at && (
+                          <p>
+                            <span className="fact-label">{HOLD_EXPIRED_LABEL}</span>
+                            <br />
+                            {formatDateTime(booking.hold_expires_at)}
+                          </p>
+                        )}
+                        {/* Story 9.5 AC2: a booking a venue closure cancelled says why, and the
+                          closure's description, which the organiser's section leaves out. */}
+                        {closureReasonLine(booking) !== null && <p>{closureReasonLine(booking)}</p>}
+                        {booking.closure_description !== null && (
+                          <p className="small muted">{booking.closure_description}</p>
+                        )}
+                        {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
+                          <venue>" above, which is also its reason, so it is not said twice. */}
+                        {closingReason(booking) !== null &&
+                          booking.replaced_by_venue_name === null && (
+                            <p>
+                              <span className="fact-label">{outcomeLabels.why}</span>
+                              <br />
+                              {closingReason(booking)}
+                            </p>
+                          )}
+                        {/* Story 11.1 AC6: why a venue that did not suit was requested. */}
+                        {booking.suitability_override_reason !== null && (
+                          <p>
+                            <span className="fact-label">Justification</span>
+                            <br />
+                            {booking.suitability_override_reason}
+                          </p>
                         )}
                       </div>
-                      <p className="small muted">{turnaroundLine(booking)}</p>
                     </div>
-                  </div>
 
-                  <div className="booking-outcome-message">
-                    <Icon name={bookingOutcome.icon} size={18} />
-                    <div>
-                      <p>{openHold ? OPEN_HOLD_MESSAGE : bookingMessage(event, booking)}</p>
-                      {/* Story 12.6 AC2-AC4: which booking this replaces, which replaced it - only
-                          once its replacement was approved - or which venue is asked for. */}
-                      {booking.replaces_venue_name !== null && (
-                        <p>
-                          <strong>{replacesLine(booking.replaces_venue_name)}</strong>
-                        </p>
-                      )}
-                      {/* Story 21.3 AC2: a booking the Safety Officer's finding named. Story 12.8
-                          AC2: one its coordinator cancelled. */}
-                      {releasedByLabel(booking) !== null && (
-                        <p>
-                          <strong>{releasedByLabel(booking)}</strong>
-                        </p>
-                      )}
-                      {booking.replaced_by_venue_name !== null && (
-                        <p>
-                          <strong>{replacedByLine(booking.replaced_by_venue_name)}</strong>
-                        </p>
-                      )}
-                      {booking.pending_replacement_venue_name !== null && (
-                        <p>
-                          <strong>
-                            {replacementRequestedLine(booking.pending_replacement_venue_name)}
-                          </strong>
-                        </p>
-                      )}
-                      {/* Story 12.7 AC1: when an approved booking's open hold expires. */}
-                      {openHold && (
-                        <p>
-                          <span className="fact-label">{HOLD_EXPIRES_LABEL}</span>
-                          <br />
-                          {formatDateTime(openHold)}
-                        </p>
-                      )}
-                      {/* Decided 12 Oct 2026: the latest change to that expiry - who, when, why. */}
-                      {openHold &&
-                        booking.hold_expiry_changed_by !== null &&
-                        booking.hold_expiry_changed_at !== null && (
-                          <p>
-                            <span className="small muted">
-                              Changed by {booking.hold_expiry_changed_by.full_name} on{' '}
-                              {formatDateTime(booking.hold_expiry_changed_at)}
-                            </span>
-                            <br />
-                            <span className="fact-label">{REASON_LABEL}</span>
-                            <br />
-                            {booking.hold_expiry_change_reason}
-                          </p>
-                        )}
-                      {booking.decided_at !== null && (
-                        <p>
-                          <span className="fact-label">{outcomeLabels.when}</span>
-                          <br />
-                          {formatDateTime(closedAt(booking) ?? booking.decided_at)}
-                        </p>
-                      )}
-                      {/* Story 6.2 AC16: when the booking was cancelled. */}
-                      {booking.cancelled_at !== null && (
-                        <p>
-                          <span className="fact-label">{CANCELLED_AT_LABEL}</span>
-                          <br />
-                          {formatDateTime(booking.cancelled_at)}
-                        </p>
-                      )}
-                      {/* Story 12.7 AC8: when an expired booking's hold lapsed. */}
-                      {booking.status === EXPIRED_BOOKING_STATUS && booking.hold_expires_at && (
-                        <p>
-                          <span className="fact-label">{HOLD_EXPIRED_LABEL}</span>
-                          <br />
-                          {formatDateTime(booking.hold_expires_at)}
-                        </p>
-                      )}
-                      {/* Story 9.5 AC2: a booking a venue closure cancelled says why, and the
-                          closure's description, which the organiser's section leaves out. */}
-                      {closureReasonLine(booking) !== null && <p>{closureReasonLine(booking)}</p>}
-                      {booking.closure_description !== null && (
-                        <p className="small muted">{booking.closure_description}</p>
-                      )}
-                      {/* Story 12.6 AC3: an original released by its replacement is told "Replaced by
-                          <venue>" above, which is also its reason, so it is not said twice. */}
-                      {closingReason(booking) !== null &&
-                        booking.replaced_by_venue_name === null && (
-                          <p>
-                            <span className="fact-label">{outcomeLabels.why}</span>
-                            <br />
-                            {closingReason(booking)}
-                          </p>
-                        )}
-                      {/* Story 11.1 AC6: why a venue that did not suit was requested. */}
-                      {booking.suitability_override_reason !== null && (
-                        <p>
-                          <span className="fact-label">Justification</span>
-                          <br />
-                          {booking.suitability_override_reason}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Story 12.2 AC1/AC6: only the event's own assigned coordinator may withdraw,
-                   *  and only while the request is still pending - mirrors the backend's own
-                   *  relationship and status checks. */}
-                  {booking.status === PENDING_BOOKING_STATUS && isAssignedCoordinator && (
-                    <div className="cluster">
-                      {/* Story 12.5 AC8: named for its venue and requirement, since an event
-                       *  can have several pending at once. */}
-                      <button
-                        type="button"
-                        className="secondary button-sm"
-                        aria-label={
-                          forRequirement === null
-                            ? `Withdraw ${booking.venue_name}`
-                            : `Withdraw ${booking.venue_name} for ${forRequirement}`
-                        }
-                        onClick={() => askToWithdraw(booking)}
-                      >
-                        Withdraw
-                      </button>
-                    </div>
-                  )}
-                  {/* Story 12.8 AC1/AC8: only the event's own assigned coordinator may cancel, and
-                   *  only an approved booking (a replacement still pending from before story 9.5
-                   *  does not stop it, AC7), before the cut-off (AC4) - mirrors the backend's own
-                   *  checks. */}
-                  {booking.status === APPROVED_BOOKING_STATUS &&
-                    !isBookingCancelClosed &&
-                    isAssignedCoordinator && (
+                    {/* Story 12.2 AC1/AC6: only the event's own assigned coordinator may withdraw,
+                     *  and only while the request is still pending - mirrors the backend's own
+                     *  relationship and status checks. */}
+                    {booking.status === PENDING_BOOKING_STATUS && isAssignedCoordinator && (
                       <div className="cluster">
+                        {/* Story 12.5 AC8: named for its venue and requirement, since an event
+                         *  can have several pending at once. */}
                         <button
                           type="button"
                           className="secondary button-sm"
                           aria-label={
                             forRequirement === null
-                              ? `Cancel the booking of ${booking.venue_name}`
-                              : `Cancel the booking of ${booking.venue_name} for ${forRequirement}`
+                              ? `Withdraw ${booking.venue_name}`
+                              : `Withdraw ${booking.venue_name} for ${forRequirement}`
                           }
-                          onClick={() => askToCancelBooking(booking)}
+                          onClick={() => askToWithdraw(booking)}
                         >
-                          Cancel booking
+                          Withdraw
                         </button>
                       </div>
                     )}
-                </div>
-              )
-            })}
+                    {/* Story 12.8 AC1/AC8: only the event's own assigned coordinator may cancel, and
+                     *  only an approved booking (a replacement still pending from before story 9.5
+                     *  does not stop it, AC7), before the cut-off (AC4) - mirrors the backend's own
+                     *  checks. */}
+                    {booking.status === APPROVED_BOOKING_STATUS &&
+                      !isBookingCancelClosed &&
+                      isAssignedCoordinator && (
+                        <div className="cluster">
+                          <button
+                            type="button"
+                            className="secondary button-sm"
+                            aria-label={
+                              forRequirement === null
+                                ? `Cancel the booking of ${booking.venue_name}`
+                                : `Cancel the booking of ${booking.venue_name} for ${forRequirement}`
+                            }
+                            onClick={() => askToCancelBooking(booking)}
+                          >
+                            Cancel booking
+                          </button>
+                        </div>
+                      )}
+                  </li>
+                )
+              })}
+            </ul>
           </section>
         )}
 
@@ -1356,7 +1360,11 @@ export function EventDetailPage() {
         )}
 
         {canReadOwnBookings && (
-          <OrganiserBookingsSection eventId={event.id} isFlagged={isVenueFlagged} />
+          <OrganiserBookingsSection
+            eventId={event.id}
+            isFlagged={isVenueFlagged}
+            isFlaggedBooking={(booking) => isBookingFlagged(safety, booking)}
+          />
         )}
 
         <EquipmentRequestsSection
