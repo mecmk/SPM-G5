@@ -216,6 +216,10 @@ export interface BookingQueueEntry {
   held_until: string
   venue_operating_hours_start: string | null
   venue_operating_hours_end: string | null
+  /** f12.1.3 (story 12.1 AC19): the venue's setup and turnaround defaults as they stand now, to
+   * show the request's own figures against. */
+  venue_setup_minutes_default: number
+  venue_teardown_minutes_default: number
   /** Story 12.6 AC3: for a replacement, the venue it replaces and the venue approving it will
    * release (only while that booking still holds its venue); null for any other request. */
   replaces_venue_name: string | null

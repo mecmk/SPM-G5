@@ -43,6 +43,7 @@ import { queueBackPath } from '../shared/queueView'
 import { singaporeDateOf, startOfMonthOf, useVenueCalendar } from '../shared/useVenueCalendar'
 import { holdExpiryRefusal } from './holdExpiry'
 import { venueStaffOutsideHoursNotice } from './turnaround'
+import { TurnaroundAgainstDefaults } from './TurnaroundAgainstDefaults'
 
 const NOT_RECORDED = 'Not recorded'
 
@@ -120,6 +121,9 @@ function BookingVenueAvailability({ booking }: { booking: Booking }) {
  *
  * f12.1.2 (story 12.1 AC17): a request whose setup or teardown runs outside the venue's opening
  * hours says so under its title, with the booked period, so Venue Staff weigh it as they decide.
+ *
+ * f12.1.3 (story 12.1 AC19): the request's setup and teardown show against the venue's defaults,
+ * read with the venue record, a changed one marked.
  *
  * Story 13.3 AC7: the back link returns to the queue as it was left - tab, search, order and page -
  * when the queue opened this page.
@@ -473,6 +477,12 @@ export function BookingRequestDetailPage() {
                 <p className="fact-label">Room layout</p>
                 <p className="fact-value">{layoutName(venue, booking.required_layout_code)}</p>
               </div>
+              <TurnaroundAgainstDefaults
+                setupMinutes={booking.setup_minutes}
+                teardownMinutes={booking.teardown_minutes}
+                setupDefault={venue.setup_minutes_default}
+                teardownDefault={venue.teardown_minutes_default}
+              />
               <div>
                 <p className="fact-label">Required facilities</p>
                 <div className="cluster">

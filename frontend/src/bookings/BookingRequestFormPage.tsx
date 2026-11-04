@@ -39,11 +39,12 @@ import {
   bookedPeriod,
   durationMinutes,
   isWithinOpeningHours,
+  minutesToDuration,
   outsideHoursFact,
   TURNAROUND_HINT,
   turnaroundProblem,
   VENUE_STAFF_DECIDE,
-  ZERO_DURATION,
+  venueDefaultNote,
   type DurationDraft,
 } from './turnaround'
 
@@ -98,10 +99,15 @@ interface DurationFieldsProps {
   legend: string
   draft: DurationDraft
   onChange: (draft: DurationDraft) => void
+  /** f12.1.3 (story 12.1 AC18): the venue's default for it, in minutes. */
+  defaultMinutes: number
 }
 
-/** f12.1.2 (story 12.1 AC1): a setup's or a teardown's days, hours and minutes, as typed. */
-function DurationFields({ legend, draft, onChange }: DurationFieldsProps) {
+/** f12.1.2 (story 12.1 AC1): a setup's or a teardown's days, hours and minutes, as typed, and
+ * f12.1.3 (AC18) how it stands against the venue's default. */
+function DurationFields({ legend, draft, onChange, defaultMinutes }: DurationFieldsProps) {
+  const minutes = durationMinutes(draft)
+
   function handlePartChange(part: keyof DurationDraft, value: string) {
     onChange({ ...draft, [part]: value })
   }
@@ -124,6 +130,9 @@ function DurationFields({ legend, draft, onChange }: DurationFieldsProps) {
           </label>
         ))}
       </div>
+      <p className={minutes === defaultMinutes ? 'small muted' : 'small'}>
+        {venueDefaultNote(minutes, defaultMinutes)}
+      </p>
     </fieldset>
   )
 }
@@ -186,6 +195,12 @@ function DurationFields({ legend, draft, onChange }: DurationFieldsProps) {
  * said under the booked period, with the hours and that Venue Staff decide whether to allow it,
  * before anything is sent (AC17). Such a request can still be sent, the hours being checked on its
  * own times (AC16).
+ *
+ * f12.1.3: the setup and teardown open at the venue's configured defaults, read with the venue
+ * when the step opens, not 0, and each says how it stands against its default - marked once
+ * changed (AC18). A default of 0 opens at 0, and one over 14 days is refused under the fields like
+ * a typed one (AC20). Switch to this venue opens the step for the new venue, so its defaults
+ * (AC21). The server takes whatever is sent (AC22).
  */
 export function BookingRequestFormPage() {
   const { eventId = '', venueId = '' } = useParams()
@@ -252,10 +267,10 @@ export function BookingRequestFormPage() {
   const [reread, setReread] = useState<{ error: string | null } | null>(null)
   // The backend refused a send for want of a justification, and no later read has said otherwise.
   const [serverAskedForJustification, setServerAskedForJustification] = useState(false)
-  // f12.1.2 (story 12.1 AC1): the setup and teardown as typed, 0 until the coordinator changes
-  // them.
-  const [setupDraft, setSetupDraft] = useState(ZERO_DURATION)
-  const [teardownDraft, setTeardownDraft] = useState(ZERO_DURATION)
+  // f12.1.2 (story 12.1 AC1): the setup and teardown as typed - f12.1.3 (AC18): null until the
+  // coordinator changes them, which stands for the venue's default.
+  const [typedSetup, setTypedSetup] = useState<DurationDraft | null>(null)
+  const [typedTeardown, setTypedTeardown] = useState<DurationDraft | null>(null)
   if (error) {
     return (
       <div className="page">
@@ -275,6 +290,10 @@ export function BookingRequestFormPage() {
   }
 
   const { event, venue } = subject
+  // f12.1.3 (story 12.1 AC18/AC21): the venue's defaults until the coordinator types, read from
+  // the venue record this step opened with.
+  const setupDraft = typedSetup ?? minutesToDuration(venue.setup_minutes_default)
+  const teardownDraft = typedTeardown ?? minutesToDuration(venue.teardown_minutes_default)
   // Story 12.5 AC1: what the request carries - its venue requirement's own, or the event's own
   // for an additional venue.
   const { startsAt, endsAt, capacity, layoutName, facilities } = venueRequirementTerms(
@@ -505,8 +524,18 @@ export function BookingRequestFormPage() {
           <h2 id="booking-turnaround-heading">Setup and teardown</h2>
           <p className="muted">{TURNAROUND_HINT}</p>
           <div className="turnaround-fields">
-            <DurationFields legend="Setup" draft={setupDraft} onChange={setSetupDraft} />
-            <DurationFields legend="Teardown" draft={teardownDraft} onChange={setTeardownDraft} />
+            <DurationFields
+              legend="Setup"
+              draft={setupDraft}
+              onChange={setTypedSetup}
+              defaultMinutes={venue.setup_minutes_default}
+            />
+            <DurationFields
+              legend="Teardown"
+              draft={teardownDraft}
+              onChange={setTypedTeardown}
+              defaultMinutes={venue.teardown_minutes_default}
+            />
           </div>
           {turnaroundError !== null && (
             <p role="alert" className="error">

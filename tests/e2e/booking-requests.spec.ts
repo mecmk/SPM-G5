@@ -82,6 +82,19 @@
  * outside the hours is the server's to refuse (AC16), so the step says nothing about its setup
  * and teardown then.
  *
+ * f12.1.3: the request step opens with the venue's configured setup and turnaround times, says
+ * they are the venue's, and marks a figure changed from its default, with the default (AC18).
+ * Venue Staff see the requested figures against the venue's defaults on the queue card and the
+ * request's page (AC19). A venue whose defaults are 0 opens at 0, and a default over 14 days is
+ * refused under the fields like a typed one (AC20). Switch to this venue opens with the new
+ * venue's defaults, not the replaced request's figures (AC21). Seminar Room 2.1's defaults are 30
+ * minutes of setup and 15 of teardown, Exhibition Foyer's 45 and 45. The f12.1.2 cases set every
+ * field to 0 first, so they start where they did before f12.1.3. That changing a venue's defaults
+ * leaves a raised request alone (AC21), and that the server takes whatever is sent (AC22), are
+ * `backend/tests/bookings/test_venue_default_turnaround.py`'s. AC19's cases read Nimbus's seeded
+ * Breakout room request (Seminar Room 2.1, at its 30 and 15) and, opened only, switch it to
+ * Exhibition Foyer for AC21 without sending.
+ *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
  * people, 25 Nov 2026 09:00-18:00), Regional Sales Summit (Planning: Theatre only, 220 people,
@@ -135,6 +148,9 @@ const SETUP_OUTSIDE = "Setup runs outside the venue's opening hours, 08:00–20:
 const TEARDOWN_OUTSIDE = "Teardown runs outside the venue's opening hours, 08:00–20:00."
 const BOTH_OUTSIDE = "Setup and teardown run outside the venue's opening hours, 08:00–20:00."
 const STAFF_DECIDE = 'Venue Staff decide whether to allow it when they approve.'
+// f12.1.3 (12.1 AC18/AC19): how a setup or teardown stands against the venue's default.
+const venueDefault = (duration: string) => `Venue's default: ${duration}.`
+const changedFromDefault = (duration: string) => `Changed from the venue's default: ${duration}.`
 
 /** Nimbus's Main venue in the seed, already booked (Grand Hall, approved). */
 const NIMBUS_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000003'
@@ -142,6 +158,11 @@ const NIMBUS_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000003'
 const INDUCTION_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000046'
 /** Partner Appreciation Dinner's Main venue in the seed, 18:30-22:00 (f12.1.2). */
 const DINNER_MAIN_VENUE = 'cccccccc-0000-0000-0000-000000000013'
+/** Nimbus's Breakout room in the seed, and its pending request: Seminar Room 2.1, "Breakout track
+ * B.", with 30 minutes of setup and 15 of teardown, that venue's defaults (f12.1.3). */
+const NIMBUS_BREAKOUT = 'cccccccc-0000-0000-0003-000000000002'
+const NIMBUS_BREAKOUT_REQUEST = '44444444-0000-0000-0000-000000000002'
+const BREAKOUT_NOTES = 'Breakout track B.'
 
 /** The address Nimbus's Find a venue writes, as 8.1's panel reads it (AC15). Story 12.5 AC5: both
  * its requirements have a request in the seed, so it selects none - an additional venue - and
@@ -215,10 +236,13 @@ async function openRequestStep(page: Page) {
 }
 
 /** f12.1.2: the request step for Supplier Induction Morning's Main venue at `venue` (Seminar Room
- * 2.1 unless said), opened by its address, and its Setup and teardown section once loaded. */
+ * 2.1 unless said), opened by its address, and its Setup and teardown section once loaded.
+ * f12.1.3: every field is then set to 0, where f12.1.2's cases start, unless `atDefaults` keeps
+ * the venue's defaults the step opens with (12.1 AC18). */
 async function openInductionStep(
   page: Page,
   venue = { id: SEMINAR_ROOM_ID, name: ONBOARDING_VENUE },
+  { atDefaults = false } = {},
 ) {
   await page.goto(
     `/events/${INDUCTION.id}/request-venue/${venue.id}?requirement=${INDUCTION_MAIN_VENUE}`,
@@ -226,12 +250,54 @@ async function openInductionStep(
   await expect(page.getByRole('heading', { name: `Request ${venue.name}`, level: 1 })).toBeVisible()
   const turnaround = page.getByRole('region', { name: 'Setup and teardown' })
   await expect(turnaround).toBeVisible()
+  if (!atDefaults) await clearTurnaround(turnaround)
   return turnaround
+}
+
+/** One of the step's Setup and Teardown groups (12.1 AC1). */
+function turnaroundGroup(turnaround: Locator, part: string): Locator {
+  return turnaround.getByRole('group', { name: part, exact: true })
 }
 
 /** One field of the step's Setup or Teardown (12.1 AC1): its Days, Hours or Minutes. */
 function turnaroundField(turnaround: Locator, part: string, unit: string): Locator {
-  return turnaround.getByRole('group', { name: part, exact: true }).getByLabel(unit)
+  return turnaroundGroup(turnaround, part).getByLabel(unit)
+}
+
+/** f12.1.3: every field of the step's Setup and Teardown set to 0, in place of the venue's
+ * defaults the step opens with (12.1 AC18). */
+async function clearTurnaround(turnaround: Locator) {
+  for (const part of ['Setup', 'Teardown']) {
+    for (const unit of ['Days', 'Hours', 'Minutes']) {
+      await turnaroundField(turnaround, part, unit).fill('0')
+    }
+  }
+}
+
+/** f12.1.3 (12.1 AC18/AC20): what the step's Setup or Teardown fields hold, days to minutes. */
+async function expectTurnaround(
+  turnaround: Locator,
+  part: string,
+  values: [string, string, string],
+) {
+  const units = ['Days', 'Hours', 'Minutes']
+  for (const [index, unit] of units.entries()) {
+    await expect(turnaroundField(turnaround, part, unit)).toHaveValue(values[index])
+  }
+}
+
+/** f12.1.3 (12.1 AC20): the step's venue as Seminar Room 2.1's real record, with `setup` and
+ * `teardown` minutes in place of its setup and turnaround times. */
+async function withSeminarRoomDefaults(page: Page, setup: number, teardown: number) {
+  await page.route(`**/venues/${SEMINAR_ROOM_ID}`, async (route) => {
+    if (route.request().resourceType() !== 'fetch') return route.fallback()
+    const response = await route.fetch()
+    const venue = await response.json()
+    return route.fulfill({
+      response,
+      json: { ...venue, setup_minutes_default: setup, teardown_minutes_default: teardown },
+    })
+  })
 }
 
 test('12.1 AC15: a coordinator finds a venue from the event and opens its request', async ({
@@ -570,19 +636,11 @@ test('12.1 AC4: Venue Staff are not offered a way to raise a request', async ({ 
   ).toHaveCount(0)
 })
 
-test('12.1 AC1/AC5: setup and teardown start at 0, and the booked period follows them', async ({
-  page,
-}) => {
+test('12.1 AC1/AC5: the booked period follows the setup and teardown', async ({ page }) => {
   await signIn(page, ACCOUNTS.coordinator)
   const turnaround = await openInductionStep(page)
 
-  // AC1: nothing is added until the coordinator enters it, so the booked period is the Main
-  // venue's own times.
-  for (const part of ['Setup', 'Teardown']) {
-    for (const unit of ['Days', 'Hours', 'Minutes']) {
-      await expect(turnaroundField(turnaround, part, unit)).toHaveValue('0')
-    }
-  }
+  // AC1: with both set to 0, the booked period is the Main venue's own times.
   await expect(turnaround).toContainText('Booked period')
   await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 09:00–12:00')
 
@@ -693,6 +751,7 @@ test("12.1 AC17: the step says nothing about setup or teardown when the event's 
     page.getByRole('heading', { name: `Request ${ONBOARDING_VENUE}`, level: 1 }),
   ).toBeVisible()
   const turnaround = page.getByRole('region', { name: 'Setup and teardown' })
+  await clearTurnaround(turnaround)
 
   await turnaroundField(turnaround, 'Teardown', 'Minutes').fill('15')
   await expect(turnaround).toContainText('Wed, 10 Feb 2027 · 18:30–22:15')
@@ -713,7 +772,7 @@ test('12.1 AC17: a venue with no opening hours recorded says nothing about setup
   await expect(turnaround.getByText(OUTSIDE_HOURS)).toHaveCount(0)
 })
 
-test('12.1 AC17: Venue Staff see on the request that its setup runs outside the opening hours', async ({
+test("12.1 AC17/AC19: Venue Staff see on the request that its setup runs outside the opening hours, against the venue's defaults", async ({
   page,
 }) => {
   const staffNotice = `${SETUP_OUTSIDE} Booked period: Wed, 3 Feb 2027 · 07:30–12:30.`
@@ -744,9 +803,117 @@ test('12.1 AC17: Venue Staff see on the request that its setup runs outside the 
   await page.goto('/venue-staff/booking-requests')
   const card = page.getByRole('listitem').filter({ hasText: INDUCTION.name })
   await expect(card).toContainText(staffNotice)
+  // AC19: both figures differ from Seminar Room 2.1's 30 and 15 minutes, so each is marked, with
+  // the default beside it.
+  await expect(card).toContainText(`1 hr 30 min${changedFromDefault('30 min')}`)
+  await expect(card).toContainText(`30 min${changedFromDefault('15 min')}`)
   await card.getByRole('link', { name: INDUCTION.name }).click()
   await expect(page.getByRole('heading', { name: INDUCTION.name, level: 1 })).toBeVisible()
   await expect(page.getByText(staffNotice)).toBeVisible()
+  await expect(page.getByText(changedFromDefault('30 min'))).toBeVisible()
+  await expect(page.getByText(changedFromDefault('15 min'))).toBeVisible()
+})
+
+test("12.1 AC18: the request step starts at the venue's setup and turnaround times, and marks a change", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  const turnaround = await openInductionStep(page, undefined, { atDefaults: true })
+  const setup = turnaroundGroup(turnaround, 'Setup')
+  const teardown = turnaroundGroup(turnaround, 'Teardown')
+
+  // Seminar Room 2.1's 30 minutes of setup and 15 of teardown, named as the venue's, and the
+  // booked period they make around the Main venue's 09:00-12:00.
+  await expectTurnaround(turnaround, 'Setup', ['0', '0', '30'])
+  await expectTurnaround(turnaround, 'Teardown', ['0', '0', '15'])
+  await expect(turnaround).toContainText("Both start at the venue's own setup and turnaround times")
+  await expect(setup).toContainText(venueDefault('30 min'))
+  await expect(teardown).toContainText(venueDefault('15 min'))
+  await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 08:30–12:15')
+
+  // A changed setup is marked against the default; the teardown, untouched, is not.
+  await turnaroundField(turnaround, 'Setup', 'Minutes').fill('45')
+  await expect(setup).toContainText(changedFromDefault('30 min'))
+  await expect(teardown).toContainText(venueDefault('15 min'))
+  await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 08:15–12:15')
+
+  // The same figure in other units is the default again.
+  await turnaroundField(turnaround, 'Setup', 'Minutes').fill('0')
+  await turnaroundField(turnaround, 'Setup', 'Hours').fill('0')
+  await turnaroundField(turnaround, 'Setup', 'Minutes').fill('30')
+  await expect(setup).toContainText(venueDefault('30 min'))
+})
+
+test('12.1 AC20: a venue whose setup and turnaround times are 0 opens at 0', async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await withSeminarRoomDefaults(page, 0, 0)
+  const turnaround = await openInductionStep(page, undefined, { atDefaults: true })
+
+  await expectTurnaround(turnaround, 'Setup', ['0', '0', '0'])
+  await expectTurnaround(turnaround, 'Teardown', ['0', '0', '0'])
+  await expect(turnaroundGroup(turnaround, 'Setup')).toContainText(venueDefault('None'))
+  await expect(turnaroundGroup(turnaround, 'Teardown')).toContainText(venueDefault('None'))
+  await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 09:00–12:00')
+})
+
+test("12.1 AC20: a venue's default over 14 days is refused before it is sent, like a typed one", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  let sends = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/bookings') sends += 1
+  })
+  // 14 days and a minute of setup, and exactly 14 days of teardown.
+  await withSeminarRoomDefaults(page, 14 * 24 * 60 + 1, 14 * 24 * 60)
+  const turnaround = await openInductionStep(page, undefined, { atDefaults: true })
+  const problem = turnaround.getByRole('alert')
+
+  await expectTurnaround(turnaround, 'Setup', ['14', '0', '1'])
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+  await page.getByRole('button', { name: 'Send request' }).click()
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+
+  // The 14 days of teardown are allowed, so taking the minute off the setup clears it.
+  await turnaroundField(turnaround, 'Setup', 'Minutes').fill('0')
+  await expect(problem).toHaveCount(0)
+  expect(sends).toBe(0)
+})
+
+test("12.1 AC19: Venue Staff see a request at the venue's setup and turnaround times as its defaults", async ({
+  page,
+}) => {
+  // Nimbus's Breakout room request asks Seminar Room 2.1 for its own 30 and 15 minutes.
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venue-staff/booking-requests')
+  const card = page.getByRole('listitem').filter({ hasText: BREAKOUT_NOTES })
+  await expect(card).toContainText(`30 min${venueDefault('30 min')}`)
+  await expect(card).toContainText(`15 min${venueDefault('15 min')}`)
+  await expect(card).not.toContainText('Changed from')
+
+  await card.getByRole('link', { name: NIMBUS.name }).click()
+  await expect(page.getByRole('heading', { name: NIMBUS.name, level: 1 })).toBeVisible()
+  await expect(page.getByText(venueDefault('30 min'))).toBeVisible()
+  await expect(page.getByText(venueDefault('15 min'))).toBeVisible()
+})
+
+test("12.1 AC21: Switch to this venue starts at the new venue's times, not the replaced request's", async ({
+  page,
+}) => {
+  // Opened as Switch to this venue opens it, for Nimbus's Breakout room, whose pending request is
+  // Seminar Room 2.1's 30 and 15 minutes. Nothing is sent.
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(
+    `/events/${NIMBUS.id}/request-venue/${FOYER.id}?requirement=${NIMBUS_BREAKOUT}&replaces=${NIMBUS_BREAKOUT_REQUEST}`,
+  )
+  await expect(page.getByRole('heading', { name: `Request ${FOYER.name}`, level: 1 })).toBeVisible()
+  await expect(page.getByText(`replaces the request for ${ONBOARDING_VENUE}`)).toBeVisible()
+  const turnaround = page.getByRole('region', { name: 'Setup and teardown' })
+
+  await expectTurnaround(turnaround, 'Setup', ['0', '0', '45'])
+  await expectTurnaround(turnaround, 'Teardown', ['0', '0', '45'])
+  await expect(turnaroundGroup(turnaround, 'Setup')).toContainText(venueDefault('45 min'))
+  await expect(turnaroundGroup(turnaround, 'Teardown')).toContainText(venueDefault('45 min'))
 })
 
 test('12.2 AC1/AC2/AC4: a coordinator withdraws a pending request from the event page', async ({
