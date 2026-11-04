@@ -1,6 +1,5 @@
 import { Link } from 'react-router'
 import { useAuth } from '../auth/authContext'
-import { Chip } from '../components/Chip'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { visibleNavSections } from '../layout/navigation'
@@ -37,7 +36,6 @@ export function HomePage() {
                   </span>
                   <h3 className="tile-title">{item.label}</h3>
                   <p className="tile-text">{item.description}</p>
-                  <Chip label="Open" tone="success" />
                 </Link>
               ))}
             </div>
