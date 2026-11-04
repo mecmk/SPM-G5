@@ -3509,6 +3509,12 @@ tbody tr:hover td {
   height: var(--error-toasts-space, 0px);
 }
 
+/* Whatever is scrolled into view - a field Tab moves to, the button a refused save leaves focused
+   (toastStack.ts) - stops above the toasts instead of under them (WCAG 2.4.11). */
+html {
+  scroll-padding-bottom: var(--error-toasts-space, 0px);
+}
+
 .error-toast-message {
   flex: 1;
   min-width: 0;

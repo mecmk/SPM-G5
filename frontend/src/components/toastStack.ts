@@ -17,10 +17,40 @@ const SPACE_VARIABLE = '--error-toasts-space'
 let shown: { id: string; height: number }[] = []
 const listeners = new Set<() => void>()
 
+let isClearingFocus = false
+
 function announce() {
   const space = shown.length > 0 ? heightOf(shown) + EDGE_PX : 0
   document.documentElement.style.setProperty(SPACE_VARIABLE, `${space}px`)
   listeners.forEach((listener) => listener())
+  if (shown.length > 0) clearFocusOfToasts()
+}
+
+/**
+ * Once the toasts have moved into place, scrolls the focused element up out from under them. A
+ * refused save leaves focus on its button, and the toasts it raises can land on top of it (WCAG
+ * 2.4.11, focus not obscured). `html`'s scroll-padding-bottom (App.css) stops the scroll above them.
+ */
+function clearFocusOfToasts() {
+  if (isClearingFocus) return
+  isClearingFocus = true
+  requestAnimationFrame(() => {
+    isClearingFocus = false
+    const focused = document.activeElement
+    if (!(focused instanceof HTMLElement) || focused === document.body) return
+    if (focused.closest('.error-toast')) return
+    const box = focused.getBoundingClientRect()
+    const isCovered = [...document.querySelectorAll('.error-toast')].some((toast) => {
+      const cover = toast.getBoundingClientRect()
+      return (
+        cover.left < box.right &&
+        box.left < cover.right &&
+        cover.top < box.bottom &&
+        box.top < cover.bottom
+      )
+    })
+    if (isCovered) focused.scrollIntoView({ block: 'nearest' })
+  })
 }
 
 function subscribe(listener: () => void) {
