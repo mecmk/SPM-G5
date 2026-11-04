@@ -1197,7 +1197,10 @@ test('13.1 AC2/13.2 AC1: a one-day booking reads as before in the Venue Staff vi
 
   await card.getByRole('link', { name: CHOIR_SHOWCASE }).click()
   await expect(page.getByRole('heading', { name: CHOIR_SHOWCASE, level: 1 })).toBeVisible()
-  await expect(page.getByText(CHOIR_DATE, { exact: true })).toBeVisible()
+  // The Date tile, in the booking summary: the day panel of Venue availability, once its calendar
+  // has loaded, heads itself with the same date.
+  const summary = page.getByRole('region', { name: 'Booking summary' })
+  await expect(summary.getByText(CHOIR_DATE, { exact: true })).toBeVisible()
   await expect(page.getByText('18:00 – 21:00', { exact: true })).toBeVisible()
   await expect(page.getByText(SECOND_DATE)).toHaveCount(0)
 

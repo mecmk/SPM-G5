@@ -7,8 +7,9 @@ endpoint, behind ``bookings:read_own``, that answers only for the caller's own e
 
 AC1 The organiser sees each approved or pending booking of their event (Q91, CL-183 (3): a
     pending one shows a venue is being sought), with its venue name, location, requirement,
-    start and end, and its setup and teardown. Closed bookings - rejected, withdrawn,
-    cancelled, expired - hold nothing, so they are left out. Only those fields are returned.
+    start and end, its setup and teardown, and when it was requested (f21.2.1). Closed bookings
+    - rejected, withdrawn, cancelled, expired - hold nothing, so they are left out. Only those
+    fields are returned.
 AC2 Another organiser's event, or one that does not exist, is not found; every other role is
     refused, and an organiser is still refused ``/bookings/for-event``.
 AC5 Rejected, withdrawn, cancelled and expired bookings are not shown to the organiser, except
@@ -76,6 +77,9 @@ _SAFE_FIELDS = {
     "release_cause",
     "release_reason",
     "closure_reason",
+    # Fix f21.2.1: when it was requested, so the page can tell a booking a safety review saw from
+    # one requested after it (story 21.2 AC23/AC24).
+    "created_at",
 }
 
 

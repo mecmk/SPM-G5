@@ -22,6 +22,12 @@ export function describeOutPeriod(record: OutOfServiceRecord): string {
   return `From ${formatDateTime(record.starts_at)} until ${until}`
 }
 
+/** Story 16.2 AC2: a record's period as one range, from its start to its end or "no end date". */
+export function describeOutRange(record: OutOfServiceRecord): string {
+  const end = record.ends_at === null ? 'no end date' : formatDateTime(record.ends_at)
+  return `${formatDateTime(record.starts_at)} – ${end}`
+}
+
 /** Story 16.2 AC2: whether a record's units are out now - by the page's clock; the server decides
  *  again whether it is ended or removed. */
 export function hasStarted(record: OutOfServiceRecord, now: number): boolean {
