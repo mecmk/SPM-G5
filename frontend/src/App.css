@@ -358,6 +358,13 @@
   --booking-divider: var(--neutral-border);
 }
 
+/* Fix f21.2.1: a booking the safety review flagged keeps its status colour, outlined in the
+   flag's amber, so a Pending card's own amber is not read as a flag. */
+.booking-outcome-card-flagged {
+  border-color: var(--warning-deep);
+  box-shadow: 0 0 0 1px var(--warning-deep);
+}
+
 .booking-outcome-thumb {
   display: flex;
   align-items: center;
