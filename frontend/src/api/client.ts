@@ -117,8 +117,9 @@ export interface RequestOptions {
   /** Registry codes for statuses this endpoint gives a specific meaning. */
   errorCodes?: StatusErrorCodes
   /**
-   * The notice for a successful change. `false` keeps the call out of the notification centre;
-   * only sign-in and sign-out use it, because they change who is signed in.
+   * The notice for a successful change. `false` keeps the call out of the notification centre,
+   * for a call that is not a save of the user's own: signing in or out, marking notifications
+   * read, or a venue picture sent as part of a save whose own notice covers it.
    */
   notify?: MutationNotice | false
 }

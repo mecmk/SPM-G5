@@ -102,8 +102,6 @@ from tests.support.replacement import (
 )
 from tests.support.seed import Users
 
-# --- AC2: the replacement is raised pending and linked ------------------------------------------
-
 
 # --- AC4: until it is approved ------------------------------------------------------------------
 @pytest.mark.story("12.6", ac=4)
@@ -146,9 +144,6 @@ def test_the_event_list_names_the_pending_replacement_on_the_original(coordinato
     assert replacement["pending_replacement_venue_name"] is None
 
 
-# --- AC5: rejected or withdrawn -----------------------------------------------------------------
-
-
 # --- AC6: the unavailability ends first ---------------------------------------------------------
 
 
@@ -162,12 +157,6 @@ def test_a_pending_replacement_can_still_be_withdrawn(login_as, db):
     assert withdrawn.status_code == 200, withdrawn.text
     db.expire_all()
     assert db.get(VenueBooking, scene.original.id).status == BookingStatus.APPROVED
-
-
-# --- AC7: no change request ---------------------------------------------------------------------
-
-
-# --- AC8: a cancelled event ---------------------------------------------------------------------
 
 
 # --- AC9: who, and for which booking ------------------------------------------------------------

@@ -50,11 +50,11 @@ export interface ChangeRequestDecisionDialogProps {
 /**
  * Story 19.2 - the Approve and Reject dialogs, shared by the coordinator's queue and the event
  * page. AC2: Approve shows what changes, now beside requested, before applying it; AC5/AC8: it
- * says what the change may release, and that an event past Planning goes back to it. AC3/AC4: Reject
- * asks for a reason and refuses a blank or spaces-only one before anything is sent. AC5/AC7/AC8:
- * a refusal stays in the dialog with the backend's sentence, and one caused by the request or its
- * event moving on has the page reload it. The confirm button is disabled while the decision is
- * saved, and a click that lands meanwhile is ignored, so a double-click decides once.
+ * says what the change may release, and that an event past Planning goes back to it. AC3/AC4:
+ * Reject asks for a reason and refuses a blank or spaces-only one before anything is sent.
+ * AC5/AC7/AC8: a refusal stays in the dialog with the backend's sentence, and one caused by the
+ * request or its event moving on has the page reload it. The confirm button is disabled while the
+ * decision is saved, and a click that lands meanwhile is ignored, so a double-click decides once.
  *
  * Story 19.3: Approve loads the backend's assessment of what the change affects when it opens, and
  * offers Approve only once it has (AC1, AC3). The approval carries that assessment's fingerprint;

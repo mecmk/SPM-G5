@@ -20,7 +20,7 @@
  * The rules - the expiry's bounds, the warnings and the expiry itself, the event's confirmation
  * completing a hold, who may change an expiry, the server's refusals and the confirmation racing
  * the expiry - are backend cases: backend/tests/bookings/test_hold_expiry.py. So is AC7's notice
- * to the coordinator, since no page lists the server's notifications until story 20.2.
+ * to the coordinator.
  *
  * Seed (backend/db/seed/020_sample_data.sql), Chloe's and only used here: Community Craft Fair,
  * 12 Jul 2028 10:00-16:00, 120 people. Its one requirement, Craft hall (120, Exhibition, Wi-Fi),

@@ -27,6 +27,7 @@ import {
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { useLoaded } from '../shared/useLoaded'
 import { BOOKING_OUTCOME, OPEN_HOLD_MESSAGE } from './bookingOutcome'
+import { BookingVenueThumb } from './BookingVenueThumb'
 
 export interface OrganiserBookingsSectionProps {
   eventId: string
@@ -92,9 +93,7 @@ export function OrganiserBookingsSection({ eventId, isFlagged }: OrganiserBookin
                 className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}`}
               >
                 <div className="booking-outcome-main">
-                  <div className="booking-outcome-thumb" aria-hidden="true">
-                    <Icon name="image" size={28} />
-                  </div>
+                  <BookingVenueThumb coverUrl={booking.venue_cover_image_url} />
 
                   <div className="booking-outcome-body">
                     <div className="booking-outcome-heading-row">

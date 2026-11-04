@@ -37,6 +37,7 @@ def test_returns_every_seeded_booking_for_the_event(venue_staff_client):
     approved = by_id[str(Bookings.APPROVED_GRAND_HALL)]
     assert approved["venue_name"] == "Grand Hall"
     assert approved["venue_location"] == "Tower A, Level 1"
+    assert approved["venue_cover_image_url"] == "/images/venues/grand-hall.jpg"
     assert approved["status"] == "APPROVED"
     assert approved["decision_reason"] is None
 

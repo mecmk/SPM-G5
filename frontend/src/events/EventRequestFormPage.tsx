@@ -229,9 +229,9 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     byType: Record<string, number>
   } | null>(null)
   const [availabilityRefresh, setAvailabilityRefresh] = useState(0)
-  // The field a refused save is about, tied to the form as it was then, so any edit clears it.
   // A date field left half-typed, noticed as the person types or leaves it.
   const [incompleteDateId, setIncompleteDateId] = useState<string | null>(null)
+  // The field a refused save is about, tied to the form as it was then, so any edit clears it.
   const [invalidField, setInvalidField] = useState<{ id: string; form: EventFormState } | null>(
     null,
   )

@@ -174,9 +174,9 @@ def test_approved_event_leaves_the_review_queue(coordinator_client):
 
 @pytest.mark.story("4.4", ac=3)
 def test_approving_a_request_clears_a_stale_decision_reason(coordinator_client, db: Session):
-    # decision_reason is shared with rejection and (story 6.5) cancellation; simulates a request
-    # that carries one from an earlier round-trip (e.g. a future clarification request) and is
-    # now being approved instead - the reason must not survive onto an approved request.
+    # decision_reason is shared with rejection; simulates a request that carries one from an
+    # earlier round-trip and is now being approved instead - the reason must not survive onto an
+    # approved request.
     event = make_event(
         db,
         status=EventStatus.CLARIFICATION_REQUESTED,
@@ -215,7 +215,8 @@ def test_owning_organiser_can_read_the_approved_outcome(login_as):
 @pytest.mark.story("4.4", ac=4)
 def test_a_different_organiser_cannot_read_the_event(login_as):
     # Existence is not revealed to an organiser it does not belong to (see the module docstring
-    # of app/events/service.py) - same 404, not 403, as test_event_request_details.py:1184.
+    # of app/events/service.py) - same 404, not 403, as test_event_request_details.py's
+    # test_another_organiser_cannot_read_a_submitted_request.
     response = login_as(Users.ORGANISER).get(f"/events/{Events.UNDER_REVIEW}")
     assert response.status_code == 404
 

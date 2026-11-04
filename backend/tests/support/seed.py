@@ -95,8 +95,8 @@ class Venues:
     OLD_ANNEX = _v(5)  # WITHDRAWN
     # Story 9.4's e2e spec; each dedicated to it, with no operating hours.
     GARDEN_ATRIUM = _v(6)  # no booking: a closure is added, edited and ended here
-    HARBOUR_PAVILION = _v(7)  # one pending request (Events.CHOIR_SHOWCASE), for the preview
-    SUNRISE_STUDIO = _v(8)  # one pending request (Events.ART_MARKET), for the marked request
+    HARBOUR_PAVILION = _v(7)  # one pending request (Events.CHOIR_SHOWCASE); no spec closes over it
+    SUNRISE_STUDIO = _v(8)  # one pending request (Events.ART_MARKET); no spec closes over it
 
 
 def _e(n: int) -> uuid.UUID:
@@ -211,24 +211,24 @@ class Events:
     # Story 12.6's e2e events, organiser 2, February 2029, each with a booking at Exhibition Foyer
     # that its day's closure (Unavailability.FOYER_*) covered. Story 9.5's migration ended those
     # bookings (cancelled or rejected, with the closure's reason), as saving the closure would
-    # now. Coordinator 1's unless said otherwise; see the seed's note for each one's flow.
-    LANTERN_SHOWCASE = _e(12662)  # read only; its booking was cancelled by the closure
+    # now, and no e2e spec uses them any more. Coordinator 1's unless said otherwise.
+    LANTERN_SHOWCASE = _e(12662)  # its booking was cancelled by the closure
     MAKER_FAIRE = _e(
         12663
     )  # an additional venue cancelled by the closure beside a requirement booked
-    SPRING_EXPO = _e(12664)  # the spec raises a replacement
-    AWARDS_EVENING = _e(12665)  # ... and Venue Staff approve it
-    PITCH_NIGHT = _e(12666)  # ... and the coordinator withdraws it, then asks again
-    NEIGHBOURHOOD_SUMMIT = _e(12667)  # ... and Venue Staff remove the closure first
+    SPRING_EXPO = _e(12664)  # its booking was cancelled by the closure
+    AWARDS_EVENING = _e(12665)  # its booking was cancelled by the closure
+    PITCH_NIGHT = _e(12666)  # its booking was cancelled by the closure
+    NEIGHBOURHOOD_SUMMIT = _e(12667)  # its booking was cancelled by the closure
     HERITAGE_WALK = _e(12668)  # CANCELLED, its booking released with it (EVENT_CANCELLED)
     PRODUCT_SHOWCASE = _e(12669)  # a PENDING request the closure rejected
-    ROBOTICS_OPEN_HOUSE = _e(12678)  # coordinator 2's; read only
-    WELLNESS_EXPO = _e(12679)  # coordinator 2's; the spec raises a replacement
-    CRAFT_MARKET = _e(12680)  # an additional venue, marked: its closure is removed, then a request
-    HARVEST_FAIR = _e(12681)  # an additional venue, marked: the spec replaces it, then presses Back
-    OPEN_STUDIOS = _e(12682)  # a rejected replacement of a booking that still holds: read only
-    NIGHT_BAZAAR = _e(12683)  # a pending additional venue the closure rejected: read only
-    SPRING_FAIR = _e(12684)  # the spec raises a replacement and Venue Staff reject it
+    ROBOTICS_OPEN_HOUSE = _e(12678)  # coordinator 2's; its booking was cancelled by the closure
+    WELLNESS_EXPO = _e(12679)  # coordinator 2's; its booking was cancelled by the closure
+    CRAFT_MARKET = _e(12680)  # an additional venue cancelled by the closure, a requirement booked
+    HARVEST_FAIR = _e(12681)  # an additional venue cancelled by the closure, a requirement booked
+    OPEN_STUDIOS = _e(12682)  # a rejected replacement of a booking that still holds
+    NIGHT_BAZAAR = _e(12683)  # a pending additional venue the closure rejected
+    SPRING_FAIR = _e(12684)  # its booking was cancelled by the closure
     GARDEN_FAIR = _e(12685)  # a pending request and an older withdrawn one for one requirement
     # Story 9.5's e2e events, organiser 1, coordinator 1, October 2028 (the 0095NN block): Seminar
     # Room 2.1 is closed over the first two on 24 October, and the third is a replaced pair.
@@ -340,7 +340,7 @@ class Bookings:
     # Events): cancelled, except the product showcase's, which was pending and is rejected.
     LANTERN_SHOWCASE_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012622")
     MAKER_FAIRE_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012623")  # unaffected
-    # Marked, and for no requirement: an additional venue.
+    # For no requirement: an additional venue.
     MAKER_FAIRE_ADDITIONAL_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012624")
     SPRING_EXPO_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012625")
     AWARDS_EVENING_FOYER = uuid.UUID("44444444-0000-0000-0000-000000012626")
@@ -401,8 +401,8 @@ class Unavailability:
     # 4 to 6 Jun 2029: still ahead when a test searches for it or requests the venue.
     MAINTENANCE_SEMINAR_ROOM_AHEAD = uuid.UUID("88888888-0000-0000-0000-000000000002")
     # Story 12.6: Exhibition Foyer closed on each of its events' days, in the story's 0126NN block
-    # (8888..0126NN), one after another in the order of the events; the marks on its bookings are
-    # this closure's doing.
+    # (8888..0126NN), one after another in the order of the events; story 9.5's migration ended
+    # the bookings these closures covered.
     FOYER_LANTERN_SHOWCASE = uuid.UUID("88888888-0000-0000-0000-000000012602")
     FOYER_NEIGHBOURHOOD_SUMMIT = uuid.UUID("88888888-0000-0000-0000-000000012607")
 
@@ -434,8 +434,8 @@ class VenueRequirements:
     FORUM_EXPO_HALL = uuid.UUID("cccccccc-0000-0000-0029-000000000001")  # STANDING, 200
     FORUM_WORKSHOP_ROOM = uuid.UUID("cccccccc-0000-0000-0029-000000000002")  # CLASSROOM, 40
     FORUM_NETWORKING_LOUNGE = uuid.UUID("cccccccc-0000-0000-0029-000000000003")  # STANDING, 100
-    # Story 12.6: Events.LANTERN_SHOWCASE's two - Main hall, whose booking is marked, and Breakout
-    # room, which has none.
+    # Story 12.6: Events.LANTERN_SHOWCASE's two - Main hall, whose booking the closure cancelled,
+    # and Breakout room, which has none.
     LANTERN_MAIN_HALL = uuid.UUID("cccccccc-0000-0000-0126-000000006201")  # STANDING, 100
     LANTERN_BREAKOUT_ROOM = uuid.UUID("cccccccc-0000-0000-0126-000000006202")  # CLASSROOM, 40
     WORKSHOP_MEETING_ROOM = uuid.UUID("cccccccc-0000-0000-0030-000000000001")  # CLASSROOM, 12

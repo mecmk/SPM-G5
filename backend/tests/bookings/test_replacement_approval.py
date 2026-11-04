@@ -432,9 +432,6 @@ def test_the_approve_endpoint_locks_the_original_before_the_replacement(login_as
     assert locked == [[scene.original.id], [replacement_id]]
 
 
-# --- AC6: approved after the unavailability ended ------------------------------------------------
-
-
 # --- AC8: never approved, never "replaced" -------------------------------------------------------
 @pytest.mark.story("12.6", ac=8)
 def test_a_never_approved_replacement_is_not_shown_as_replacing_when_both_are_cancelled(

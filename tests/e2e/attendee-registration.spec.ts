@@ -17,12 +17,11 @@ import {
 } from './support'
 
 /**
- * Story 18.1 - browse and register for an event. END-TO-END tests: what an attendee clicks.
+ * Story 18.1 - browse and register for an event: what an attendee clicks.
  *
- * Level: e2e. Each test drives the real app and API in a browser. The rules behind what it shows -
- * the last place, the closing and opening times, which events are listed or have a page, who may
- * register, the races - are proven in backend/tests/registrations/ (unit and integration), not
- * repeated here.
+ * The rules behind what the pages show - the last place, the closing and opening times, which
+ * events are listed or have a page, who may register, the races - are proven in
+ * backend/tests/registrations/ (unit and integration), not repeated here.
  *
  * AC1 Confirmed, Public events with registration enabled that have not started are listed
  *     soonest first, a page at a time. Each card shows the event's cover picture, name, date and

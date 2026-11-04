@@ -1,5 +1,7 @@
-"""Request / response shapes for venue bookings: raising a request (story 12.1), the venue
-staff queue (story 13.1), and approval / rejection / read (stories 13.2, 13.2.1).
+"""Request / response shapes for venue bookings: raising a request (story 12.1) and switching it
+(story 12.5), the venue staff queue (stories 13.1, 13.3), approval / rejection / read (stories
+13.2, 13.2.1), a hold's expiry (story 12.7), cancelling an approved booking (story 12.8) and an
+organiser's view of their own event's bookings (fix f7.1.2).
 """
 
 from __future__ import annotations
@@ -69,11 +71,11 @@ class BookingRequestIn(BaseModel):
     venue that does not suit the event. Trimmed, and blank counts as not given; the service
     decides whether one is needed.
 
-    f12.1.2 (story 12.1 AC1/AC5 in the backlog's current numbering): a client sends the setup and
-    teardown as well, in whole minutes, which widen the booked period before the request's own
-    start and after its own end. Each is 0 when not sent and at most ``TURNAROUND_MAX_MINUTES``
-    (14 days), so a negative, fractional or longer value is refused (422) - and, as the event's
-    own whole numbers are (story 2.1 AC3), ``StrictInt`` refuses "90" and true as well.
+    f12.1.2 (story 12.1 AC1/AC5): a client sends the setup and teardown as well, in whole
+    minutes, which widen the booked period before the request's own start and after its own end.
+    Each is 0 when not sent and at most ``TURNAROUND_MAX_MINUTES`` (14 days), so a negative,
+    fractional or longer value is refused (422) - and, as the event's own whole numbers are
+    (story 2.1 AC3), ``StrictInt`` refuses "90" and true as well.
     """
 
     event_id: uuid.UUID
@@ -403,6 +405,8 @@ class OrganiserBooking(BaseModel):
     id: uuid.UUID
     venue_name: str
     venue_location: str
+    # The venue's first picture, as on its catalogue card; None when it has none.
+    venue_cover_image_url: str | None
     # None for an additional venue (story 12.5 AC5).
     venue_requirement_name: str | None
     starts_at: datetime
@@ -425,6 +429,7 @@ class OrganiserBooking(BaseModel):
             id=booking.id,
             venue_name=booking.venue.name,
             venue_location=booking.venue.location,
+            venue_cover_image_url=booking.venue.cover_image_url,
             venue_requirement_name=(
                 None if booking.venue_requirement is None else booking.venue_requirement.name
             ),
@@ -450,6 +455,8 @@ class BookingOutcome(BaseModel):
     venue_id: uuid.UUID
     venue_name: str
     venue_location: str
+    # The venue's first picture, as on its catalogue card; None when it has none.
+    venue_cover_image_url: str | None
     # Story 12.5 AC2/AC4: the venue requirement the booking is for, so the event's page and the
     # catalogue's banner can say which requirements are covered. Both None for an additional
     # venue (AC5).
@@ -502,6 +509,7 @@ class BookingOutcome(BaseModel):
             venue_id=booking.venue_id,
             venue_name=booking.venue.name,
             venue_location=booking.venue.location,
+            venue_cover_image_url=booking.venue.cover_image_url,
             venue_requirement_id=booking.venue_requirement_id,
             venue_requirement_name=(
                 None if booking.venue_requirement is None else booking.venue_requirement.name

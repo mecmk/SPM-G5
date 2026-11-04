@@ -26,10 +26,11 @@ export interface EquipmentDecisionDialogProps {
 
 /**
  * Story 16.1 - the Accept and Decline dialogs, shared by the queue and a request's own page.
- * AC1: Accept asks before reserving, naming the event's whole period, which the hold covers. AC2/AC4: Decline asks for a reason and refuses a blank or
- * spaces-only one before anything is sent. AC6/AC7/AC9: a refusal stays in the dialog with the
- * backend's sentence. AC9: the confirm button is disabled while the decision is saved, and a
- * click that lands meanwhile is ignored, so a double-click decides once.
+ * AC1: Accept asks before reserving, naming the event's whole period, which the hold covers.
+ * AC2/AC4: Decline asks for a reason and refuses a blank or spaces-only one before anything is
+ * sent. AC6/AC7/AC9: a refusal stays in the dialog with the backend's sentence. AC9: the confirm
+ * button is disabled while the decision is saved, and a click that lands meanwhile is ignored, so
+ * a double-click decides once.
  * AC7/AC9: a refusal other than a shortfall, or a request gone meanwhile, has the page load it
  * again behind the dialog, so it stops offering a decision that can no longer be made.
  * AC6: when the request is short - as its card showed, or as a refused accept reported - Accept

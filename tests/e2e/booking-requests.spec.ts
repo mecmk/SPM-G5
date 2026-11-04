@@ -50,8 +50,8 @@
  * Story 12.5: a request is for one venue requirement, and both of Nimbus's have one in the seed
  * (its Main venue booked, its Breakout room requested), so its Find a venue reads "All required
  * venues booked" and opens the catalogue for an additional venue: the event's own dates,
- * attendance and accessibility needs. Sending a request
- * for an event whose only requirement then has one opens the event's page (12.5 AC6).
+ * attendance and accessibility needs. Sending a request for an event whose only requirement then
+ * has one opens the event's page (12.5 AC6).
  *
  * AC14 (built with s8.1): a venue that stopped being available since the search is refused, and
  * the step leads back to the same results.

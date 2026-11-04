@@ -191,8 +191,9 @@ def _hold(
 
 
 def _confirm(db: Session, event: Event) -> None:
-    """The event becomes Confirmed. 21.2 AC12's Confirm is not built yet, so the status is written
-    directly; the trigger completes the event's holds as it would for any route (R4)."""
+    """The event becomes Confirmed, written directly rather than through 21.2's Confirm, which
+    needs a safety approval first; the trigger completes the event's holds as it would for any
+    route (R4)."""
     event.status = EventStatus.CONFIRMED
     db.flush()
     db.expire_all()

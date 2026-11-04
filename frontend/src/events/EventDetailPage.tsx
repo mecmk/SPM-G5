@@ -105,6 +105,7 @@ import {
   unnamedRequirementLabel,
   venueSearchFor,
 } from '../shared/venueRequest'
+import { BookingVenueThumb } from './BookingVenueThumb'
 import { ChangeHistorySection } from './ChangeHistorySection'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import { EquipmentRequestsSection } from './EquipmentRequestsSection'
@@ -711,12 +712,12 @@ export function EventDetailPage() {
     event.assigned_coordinator_id !== null &&
     ACTIVE_EVENT_STATUSES.includes(event.status)
 
-  /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
-   *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
-   *  mirroring the backend's own checks. Everyone else sees the list alone. */
   // Story 21.2 AC4: the sections the latest review says must change.
   const flagged = flaggedArrangements(safety)
   const isVenueFlagged = flagged.includes('VENUE_BOOKINGS')
+  /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
+   *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
+   *  mirroring the backend's own checks. Everyone else sees the list alone. */
   const canChangeEquipment =
     can(PERMISSIONS.EQUIPMENT_REQUEST) &&
     isAssignedCoordinator &&
@@ -760,8 +761,9 @@ export function EventDetailPage() {
     mayRequestChanges && requestWindow?.eventId === eventId ? requestWindow : null
   const shownRequestWindow = readRequestWindow?.window ?? null
   const canRequestChanges = shownRequestWindow?.is_open === true
-  /** Story 12.8 AC4: cancelling a booking closes when change requests do. Only a closed window the
-   *  server sent hides the cancel; until it is read, or if it can't be, the server still refuses. */
+  /** Story 12.8 AC4: cancelling a booking closes when change requests do. Only a closed window
+   *  the server sent hides the cancel; until it is read, or if it can't be, the server still
+   *  refuses. */
   const isBookingCancelClosed =
     requestWindow?.eventId === eventId && requestWindow.window?.is_open === false
   /** Story 19.1 AC1: the organiser and the assigned coordinator read the change requests of an
@@ -1158,9 +1160,7 @@ export function EventDetailPage() {
                   className={`booking-outcome-card booking-outcome-card-${bookingOutcome.tone}`}
                 >
                   <div className="booking-outcome-main">
-                    <div className="booking-outcome-thumb" aria-hidden="true">
-                      <Icon name="image" size={28} />
-                    </div>
+                    <BookingVenueThumb coverUrl={booking.venue_cover_image_url} />
 
                     <div className="booking-outcome-body">
                       <div className="booking-outcome-heading-row">
@@ -1327,9 +1327,9 @@ export function EventDetailPage() {
                     </div>
                   )}
                   {/* Story 12.8 AC1/AC8: only the event's own assigned coordinator may cancel, and
-                   *  only an approved booking (a replacement still pending from before story 9.5 does not
-                   *  stop it, AC7), before the
-                   *  cut-off (AC4) - mirrors the backend's own checks. */}
+                   *  only an approved booking (a replacement still pending from before story 9.5
+                   *  does not stop it, AC7), before the cut-off (AC4) - mirrors the backend's own
+                   *  checks. */}
                   {booking.status === APPROVED_BOOKING_STATUS &&
                     !isBookingCancelClosed &&
                     isAssignedCoordinator && (

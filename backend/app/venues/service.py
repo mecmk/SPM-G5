@@ -1,5 +1,5 @@
 """Business logic for the venue catalogue (story 8.3 create/update/delete; reads for 8.1/8.2),
-a venue's pictures (story 8.3 AC5-AC10), its search (story 8.1, Sprint 2), its availability
+a venue's pictures (story 8.3 AC5-AC10), its search (story 8.1), its availability
 calendar (story 9.1) and the room layouts venues can offer (story 8.6).
 
 Routers translate the exceptions raised here into HTTP statuses; keeping the rules in plain
@@ -410,7 +410,7 @@ def get_venue_calendar(
     return windows
 
 
-# --- search (story 8.1, Sprint 2) --------------------------------------------------------
+# --- search (story 8.1) ------------------------------------------------------------------
 def search_venues(db: Session, query: VenueSearchQuery, *, actor: User) -> VenueSearchResult:
     """Story 8.1 AC1/AC3: the venues matching every filter, by name - in service only, unless
     ``include_withdrawn`` (AC12's Show withdrawn venues). With a period, only venues free for all
@@ -1800,8 +1800,11 @@ def _delete_venue_image_files(urls: Iterable[str]) -> None:
     """Remove the files behind ``urls``. An absent file is not an error, and neither is one that
     cannot be removed (locked on Windows, say): this runs after the change was committed, so
     failing here would report a change that worked as a failure. It is logged, and the file is
-    left behind."""
+    left behind. A url that is not one of ours (a seeded picture served by the frontend) has no file
+    here and is skipped."""
     for url in urls:
+        if not url.startswith(VENUE_IMAGE_URL_PREFIX):
+            continue
         path = venue_image_path(url.removeprefix(VENUE_IMAGE_URL_PREFIX))
         try:
             path.unlink(missing_ok=True)

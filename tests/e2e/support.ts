@@ -128,16 +128,16 @@ export const EVENTS = {
   // Story 12.6, organiser: organiser2, February 2029: the heritage walk, CANCELLED by Omar (c8),
   // which cancelled its Exhibition Foyer booking with it; only read.
   heritageWalk: '33333333-0000-0000-0000-000000012668',
-  // Story 9.5, organiser: organiser, coordinator, October 2028 (the 0095NN block). Seminar Room 2.1 is
-  // closed on the 24th by venue-closure-ends-bookings.spec.ts over the first two; the third is a
-  // booking already replaced, only read.
+  // Story 9.5, organiser: organiser, coordinator, October 2028 (the 0095NN block). Seminar Room
+  // 2.1 is closed on the 24th by venue-closure-ends-bookings.spec.ts over the first two; the third
+  // is a booking already replaced, only read.
   closureConfirmed: '33333333-0000-0000-0000-000000009501', // Confirmed; its approved booking 09:00-12:00
   closurePlanning: '33333333-0000-0000-0000-000000009504', // Planning; its pending request 14:00-17:00
   closureReplaced: '33333333-0000-0000-0000-000000009507', // the original at Grand Hall replaced by Seminar Room 2.1
   // Story 21.2: four events of the organiser's, coordinated by the coordinator, each with Seminar
-  // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is secured and never reviewed;
-  // the clinic and the workshop await the check; the summit was sent back with its venue flagged
-  // and still has the same venue.
+  // Room 2.1 booked in November 2028; one flow of safety-decision.spec.ts each. The bootcamp is
+  // secured and never reviewed; the clinic and the workshop await the check; the summit was sent
+  // back with its venue flagged and still has the same venue.
   codingBootcamp: '33333333-0000-0000-0000-000000000050',
   cyberClinic: '33333333-0000-0000-0000-000000000047',
   dataSummit: '33333333-0000-0000-0000-000000000048',
@@ -161,8 +161,8 @@ export const EVENTS = {
   // 2026 with Aiden and Bella registered, so its list never changes and is only read.
   charityQuiz: '33333333-0000-0000-0000-000000018407',
   foodTastingWalk: '33333333-0000-0000-0000-000000018408',
-  // Story 18.5, both Confirmed and open, organiser: organiser2, January 2029. Gina registers for the
-  // batik workshop with two guests; Hana, registered alone for the kite afternoon, adds one.
+  // Story 18.5, both Confirmed and open, organiser: organiser2, January 2029. Gina registers for
+  // the batik workshop with two guests; Hana, registered alone for the kite afternoon, adds one.
   batikWorkshop: '33333333-0000-0000-0000-000000018503',
   kiteAfternoon: '33333333-0000-0000-0000-000000018504',
   // Story 21.3: Planning, secured, never reviewed; organiser, coordinator. safety-release.spec.ts
@@ -341,9 +341,8 @@ export const COORDINATORS = [
 /**
  * Story 5.4 AC9: a submitted request waits unassigned until the Event Coordinator Lead assigns it.
  * Called on the request's page by its organiser (Olivia), this signs in as the Lead, assigns it to
- * Chloe from the unassigned queue, then signs Olivia back in on the same page. Returns Chloe, plus
- * the other coordinator - the shape story 5.1's round-robin helper returned, so specs that went on
- * as "whoever was assigned" keep working unchanged.
+ * Chloe from the unassigned queue, then signs Olivia back in on the same page. Returns Chloe, with
+ * the other coordinator as `other`.
  */
 export async function assignByLead(page: Page) {
   const eventPath = new URL(page.url()).pathname

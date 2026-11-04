@@ -189,7 +189,8 @@
   color: var(--text-muted);
 }
 
-/* A sentence on its own line under a subtitle's status badge (story 7.2's coordinator edit page). */
+/* A sentence on its own line under a subtitle's status badge (story 7.2's coordinator edit
+   page). */
 .page-subtitle-note {
   display: block;
   margin-top: 0.5rem;
@@ -367,6 +368,13 @@
   border-radius: var(--radius-sm);
   background: var(--surface-alt);
   color: var(--text-muted);
+  overflow: hidden;
+}
+
+.booking-outcome-thumb-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .booking-outcome-body {
@@ -4362,7 +4370,7 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
-/* Fix f19.1.1: on a phone, the organiser's Request a change - now also on a Confirmed event - is at
+/* Fix f19.1.1: on a phone, the organiser's Request a change - on a Confirmed event too - is at
    least 44px tall, to be pressed with a thumb. Only that button: the form's own buttons keep their
    size. */
 @media (max-width: 640px) {
@@ -4384,7 +4392,7 @@ button.requirement-choice.requirement-covered:hover,
   }
 }
 
-/* ---------- attendee details: My profile, an event's page, the registration list (story 18.4) ---------- */
+/* ---------- attendee details: My profile, an event's page, the registration list (story 18.4) */
 
 /* AC1: the email on My profile - a label over its value. Labels look like the form's. */
 .attendee-details-list {

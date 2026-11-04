@@ -259,7 +259,7 @@ export function deleteVenue(venueId: string, venueName: string): Promise<void> {
   })
 }
 
-/** Mirrors `VenueSearchQuery`: the filters of `GET /venues/search` (story 8.1, Sprint 2).
+/** Mirrors `VenueSearchQuery`: the filters of `GET /venues/search` (story 8.1).
  * `starts_at` / `ends_at` are instants with their offset; send both or neither. */
 export interface VenueSearchQuery {
   search?: string

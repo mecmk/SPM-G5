@@ -14,12 +14,12 @@ import {
 } from './support'
 
 /**
- * Story 18.2 - view and withdraw my registrations. END-TO-END tests: what an attendee clicks.
+ * Story 18.2 - view and withdraw my registrations: what an attendee clicks.
  *
- * Level: e2e. Each test drives the real app and API in a browser. The rules behind what it shows -
- * which status a registration takes, the event's start as the last moment to withdraw, one active
- * registration at a time, whose registrations the API sends, which events have a page, the races
- * - are proven in backend/tests/registrations/ (unit and integration), not repeated here.
+ * The rules behind what the pages show - which status a registration takes, the event's start as
+ * the last moment to withdraw, one active registration at a time, whose registrations the API
+ * sends, which events have a page, the races - are proven in backend/tests/registrations/ (unit
+ * and integration), not repeated here.
  *
  * AC1 The attendee sees their registrations, each card with its event's name, picture, date and
  *     status, and when they registered while they still are - no history of when they withdrew.

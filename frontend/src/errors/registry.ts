@@ -1014,7 +1014,6 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   },
 }
 
-/** Registry codes an endpoint assigns to specific HTTP statuses, e.g. `{ 409: 'CONFLICT' }`. */
 /**
  * Story 1.1 AC6: the sign-in page's live lock message. `lead` is followed by the minutes left
  * (`formatTimeLeft`), counting down; `ended` replaces it once the time is up.
@@ -1024,6 +1023,7 @@ export const LOGIN_LOCKED_COUNTDOWN = {
   ended: 'You can try signing in again now.',
 } as const
 
+/** Registry codes an endpoint assigns to specific HTTP statuses, e.g. `{ 409: 'CONFLICT' }`. */
 export type StatusErrorCodes = Partial<Record<number, ErrorCode>>
 
 const STATUS_DEFAULTS: StatusErrorCodes = {

@@ -151,8 +151,7 @@ interface RequestingEventBannerProps {
  * (AC10). With several, each is a choice that sets the filters from that requirement (AC3), the
  * selected one pressed (AC1); with one, it is shown alone, with nothing to switch between (AC5);
  * with none - an event approved before fix f2.7.4 (story 2.7 AC19) - none are listed (AC6). Once
- * the filters are changed by hand, it
- * says how to restore the selected requirement's own (AC7).
+ * the filters are changed by hand, it says how to restore the selected requirement's own (AC7).
  *
  * Story 12.5 AC2: for whoever may read the event's bookings, each requirement also says whether it
  * has a venue. As decided on 10 Oct 2026, those that do are greyed and listed after those that

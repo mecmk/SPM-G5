@@ -20,11 +20,11 @@ export interface VenueDayPanelProps {
 /**
  * Story 9.1: the list a pressed calendar day opens - every booking, hold and closure that
  * falls on it, in time order. Each row gives the time first, then the event's name, then a text
- * label ("Booked", "Held – pending", "Unavailable – Maintenance", "Ended – Maintenance") so the difference is never carried
- * by colour alone, then, when the venue is blocked for longer than the event runs, the whole
- * blocked stretch. AC5/AC6: rows are separate, so several events on one day, or two that meet at
- * 12:00, are each listed. AC7: a multi-day booking's row holds only the part on this day. Story
- * 12.7 AC1: an approved booking's row also says when its open hold expires.
+ * label ("Booked", "Held – pending", "Unavailable – Maintenance", "Ended – Maintenance") so the
+ * difference is never carried by colour alone, then, when the venue is blocked for longer than the
+ * event runs, the whole blocked stretch. AC5/AC6: rows are separate, so several events on one day,
+ * or two that meet at 12:00, are each listed. AC7: a multi-day booking's row holds only the part on
+ * this day. Story 12.7 AC1: an approved booking's row also says when its open hold expires.
  *
  * The list sits below the grid and legend, which on a phone is below the fold, so opening (or
  * switching to) a day scrolls it into view - only as far as needed. Focus is left on the day's
