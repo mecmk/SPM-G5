@@ -4564,7 +4564,8 @@ button.requirement-choice.requirement-covered:hover,
   text-decoration: underline;
 }
 
-.equipment-catalogue a:hover {
+.equipment-catalogue a:hover,
+.equipment-catalogue a:focus-visible {
   color: var(--accent);
 }
 

@@ -305,7 +305,6 @@ test.describe('records units out of service', () => {
     await expect(row.getByRole('cell').nth(3)).toContainText('Scheduled')
     await expect(row.getByRole('cell').nth(3)).toContainText(' – ')
 
-
     await row.getByRole('cell').nth(4).click()
     await expect(page.getByRole('heading', { level: 1, name: VIDEO_CAMERA })).toBeVisible()
     await record(page, note).getByRole('button', { name: 'End' }).click()

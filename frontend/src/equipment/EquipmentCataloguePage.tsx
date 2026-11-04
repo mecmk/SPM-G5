@@ -46,8 +46,7 @@ function PeriodRow({ record, loadedAt }: { record: OutOfServiceRecord; loadedAt:
 /**
  * Story 16.2 AC2 - the equipment catalogue, for Technical Support: totals across the types, then
  * every active type, by name, with its stock, the units out of service now and every period they
- * are out - in force or scheduled, from when to when - each
- * opening the type's page. AC6: App.tsx guards the route with equipment:manage, and the backend
+ * are out - in force or scheduled, from when to when - each opening the type's page. AC6: App.tsx guards the route with equipment:manage, and the backend
  * refuses everyone else. On a phone the headers and names wrap (App.css), so the columns fit and
  * nothing scrolls sideways.
  */
@@ -100,7 +99,6 @@ export function EquipmentCataloguePage() {
             />
           </section>
 
-          {}
           <div className="table-wrap">
             <table aria-label="Equipment types" className="equipment-catalogue">
               <thead>
