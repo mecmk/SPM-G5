@@ -437,7 +437,9 @@ export function listEventShortages(eventId: string): Promise<EquipmentShortage[]
 export type HeldItemStatus = 'REQUESTED' | 'PENDING' | 'ACCEPTED'
 
 /** Mirrors `EquipmentHoldOut`: story 17.3 AC1, one hold - its event, the units it still holds, the
- *  dates it runs from and to, and its item's status. AC4: `item_id` opens a sent hold's request. */
+ *  dates it runs from and to, and its item's status. AC4: `item_id` opens a sent hold's request.
+ *  Fix f16.2.2 (16.2 AC9): `units_short`, how many units out of service leave it short, 0 when
+ *  none. */
 export interface EquipmentHold {
   id: string
   event_id: string
@@ -447,6 +449,7 @@ export interface EquipmentHold {
   starts_at: string
   ends_at: string
   status: HeldItemStatus
+  units_short: number
 }
 
 /** Mirrors `EquipmentHoldTypeOut`: story 17.3 AC3, an active type the filter offers. */

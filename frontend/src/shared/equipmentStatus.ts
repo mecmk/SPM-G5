@@ -47,7 +47,35 @@ export function withdrawnWhenAndBy(withdrawnAt: string, withdrawnByName: string 
 }
 
 /** Story 16.2 AC4: the mark on an event's item that units out of service leave short, as its
- *  coordinator reads it on the event's page. */
+ *  coordinator reads it on the event's page. Fix f16.2.2 (16.2 AC9): the holds schedule marks
+ *  the hold the same way. */
 export function describeItemShort(unitsShort: number, quantity: number): string {
   return `Short: ${unitsShort} of ${quantity} out of service`
+}
+
+/** Fix f16.2.2 (16.2 AC8): what to do about a short item - withdraw one sent to Technical Support
+ *  (17.2), or remove one never sent. */
+const SHORT_WITHDRAW_ADVICE =
+  "Technical Support can't supply these until the units are back; withdraw it if you need another type."
+const SHORT_REMOVE_ADVICE =
+  "Technical Support can't supply these until the units are back; remove it if you need another type."
+
+/** Fix f16.2.2 (16.2 AC8): a short item's mark on its event's page, with what to do about it. */
+export function describeItemShortWithAdvice(
+  unitsShort: number,
+  quantity: number,
+  isSent: boolean,
+): string {
+  const advice = isSent ? SHORT_WITHDRAW_ADVICE : SHORT_REMOVE_ADVICE
+  return `${describeItemShort(unitsShort, quantity)}. ${advice}`
+}
+
+/** Fix f16.2.2 (16.2 AC8/AC9): an accepted item left short reads Accepted, not Accepted
+ *  (reserved), since its units can't all be supplied. Its status, the decision, stays Accepted:
+ *  the mark follows the records (16.2 AC4). */
+const ACCEPTED_SHORT_LABEL = 'Accepted'
+
+/** Story 15.1 AC1 with fix f16.2.2: how an item's status reads, given whether it is short. */
+export function equipmentStatusLabel(status: EquipmentItemStatus, isShort: boolean): string {
+  return status === 'ACCEPTED' && isShort ? ACCEPTED_SHORT_LABEL : EQUIPMENT_STATUS_LABELS[status]
 }

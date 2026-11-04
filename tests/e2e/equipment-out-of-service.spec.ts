@@ -24,6 +24,12 @@ import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, mainOverflow, signI
  * AC5 Before saving, the page lists the holds the record would leave short and asks to confirm;
  *     Cancel saves nothing.
  * AC6 Only Technical Support has the catalogue; anyone else is told it is not permitted.
+ * AC8 (f16.2.2) A short item says what to do about it: withdraw it, or remove it if it was never
+ *     sent. An accepted one reads Accepted, not Accepted (reserved). Seeded for the accepted
+ *     screens; every status at once from stubbed shortages, since no seeded record leaves a
+ *     Pending or unsent hold short and one that did would move figures other specs read.
+ * AC9 (f16.2.2) Technical Support's holds schedule marks the same hold short. Which holds, and by
+ *     how many, are backend cases.
  *
  * Specs share one database and run in parallel, so each flow that records units uses a window
  * of its own on a type no other flow here records against: the conference phones in 2031, and
@@ -48,6 +54,13 @@ const END_NOT_AFTER_START_MESSAGE = 'The end must be after the start.'
 const START_IN_THE_PAST_MESSAGE = 'The start cannot be in the past.'
 const DATE_INCOMPLETE_MESSAGE = 'Enter a complete, real date and time'
 const DATE_INVALID_MESSAGE = 'Enter a valid date and time, with a four-digit year.'
+
+// AC8 (f16.2.2): what a short item tells whoever reads the event's equipment.
+const SHORT_WITHDRAW_ADVICE =
+  "Technical Support can't supply these until the units are back; withdraw it if you need another type."
+const SHORT_REMOVE_ADVICE =
+  "Technical Support can't supply these until the units are back; remove it if you need another type."
+const HOLDS_PATH = '/equipment/holds'
 
 /** Singapore's clock, which every date field reads (frontend/src/shared/format.ts). */
 const SINGAPORE_OFFSET_MS = 8 * 60 * 60 * 1000
@@ -459,7 +472,7 @@ test('16.2 AC3: more units than are free over the period are refused by the serv
 test.describe('takes a seeded hold short once', () => {
   test.describe.configure({ retries: 0 })
 
-  test('16.2 AC4/AC5: a record that leaves a hold short lists it first, and once confirmed the coordinator sees the item short on the event', async ({
+  test('16.2 AC4/AC5/AC8/AC9: a record that leaves a hold short lists it first, and once confirmed the coordinator sees the item short on the event and Technical Support sees the hold short on the schedule', async ({
     page,
   }) => {
     const pixels = `Dead pixels across the top row ${Date.now()}`
@@ -491,6 +504,23 @@ test.describe('takes a seeded hold short once', () => {
     await page.goto(`/events/${EVENTS.lightShowcase}`)
     const item = page.getByRole('listitem').filter({ hasText: LED_SCREEN })
     await expect(item).toContainText('Short: 1 of 3 out of service')
+    // AC8: the accepted item no longer reads as reserved, and says what to do.
+    await expect(item.getByText('Accepted', { exact: true })).toBeVisible()
+    await expect(item).not.toContainText('(reserved)')
+    await expect(item).toContainText(SHORT_WITHDRAW_ADVICE)
+
+    // AC9: Technical Support's holds schedule marks the same hold.
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await signIn(page, ACCOUNTS.techSupport)
+    await page.goto(`${HOLDS_PATH}?type=LED_SCREEN`)
+    const held = page
+      .getByRole('main')
+      .getByRole('region', { name: LED_SCREEN, exact: true })
+      .getByRole('row')
+      .filter({ hasText: LIGHT_SHOWCASE })
+    await expect(held).toContainText('Short: 1 of 3 out of service')
+    await expect(held.getByText('Accepted', { exact: true })).toBeVisible()
+    await expect(held).not.toContainText('(reserved)')
   })
 
   test('16.2 AC5: Cancel on the list of holds left short saves nothing', async ({ page }) => {
@@ -515,6 +545,50 @@ test.describe('takes a seeded hold short once', () => {
     await expect(record(page, note)).toHaveCount(0)
     expect(saves).toHaveLength(0)
   })
+})
+
+// --- AC8 (f16.2.2): what a short item says, whatever its status -----------------------------------
+test('16.2 AC8: a short item says to withdraw it, or to remove it if it was never sent, and an accepted one reads Accepted, not reserved', async ({
+  page,
+}) => {
+  // The showcase's three holding items - microphones accepted, a speaker set pending, laptops not
+  // yet sent - each stubbed short by one, so every status is seen without a record taking units.
+  const eventPath = `/events/${EVENTS.productShowcase}`
+  let holdingItems: string[] = []
+  await page.route(`**${eventPath}`, async (route) => {
+    if (route.request().resourceType() !== 'fetch') return route.fallback()
+    const response = await route.fetch()
+    const event = await response.json()
+    holdingItems = event.equipment
+      .filter((item: { status: string }) =>
+        ['REQUESTED', 'PENDING', 'ACCEPTED'].includes(item.status),
+      )
+      .map((item: { id: string }) => item.id)
+    return route.fulfill({ response, json: event })
+  })
+  await page.route(`**${eventPath}/equipment-shortages`, async (route) => {
+    const response = await route.fetch()
+    const json = holdingItems.map((id) => ({ item_id: id, units_short: 1 }))
+    return route.fulfill({ response, json })
+  })
+
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto(eventPath)
+  const section = page.getByRole('region', { name: 'Equipment requirements' })
+  const item = (name: string) => section.getByRole('listitem').filter({ hasText: name })
+
+  const mics = item('Wireless microphone')
+  await expect(mics).toContainText(`Short: 1 of 3 out of service. ${SHORT_WITHDRAW_ADVICE}`)
+  await expect(mics.getByText('Accepted', { exact: true })).toBeVisible()
+  await expect(mics).not.toContainText('(reserved)')
+
+  const speakers = item('Portable speaker set')
+  await expect(speakers).toContainText(`Short: 1 of 1 out of service. ${SHORT_WITHDRAW_ADVICE}`)
+  await expect(speakers.getByText('Pending', { exact: true })).toBeVisible()
+
+  await expect(item('Presentation laptop')).toContainText(
+    `Short: 1 of 2 out of service. ${SHORT_REMOVE_ADVICE}`,
+  )
 })
 
 // --- On a phone -----------------------------------------------------------------------------------

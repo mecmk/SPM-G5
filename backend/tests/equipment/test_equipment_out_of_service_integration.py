@@ -39,6 +39,9 @@ AC6 Only Technical Support Staff can open the catalogue and the type pages, and 
     end records: others get 403 and signed-out users 401.
 AC7 Records that overlap in time add up and never exceed the stock, also when two are saved at
     once, or one is saved as a hold is placed or accepted.
+AC9 (fix f16.2.2) Technical Support's holds schedule (17.3) marks each hold short by the units
+    AC4 marks on its event, and none on a hold left whole. (AC8, the event page's wording, is
+    e2e-tested.)
 """
 
 from __future__ import annotations
@@ -78,6 +81,7 @@ from tests.support.factories import (
 from tests.support.seed import Users
 
 TYPES_PATH = "/equipment-types"
+HOLDS_PATH = "/equipment-holds"
 RECORD_KEYS = {"id", "quantity", "reason", "notes", "starts_at", "ends_at"}
 CATALOGUE_KEYS = {"id", "code", "name", "total_quantity", "out_of_service_now", "records"}
 TYPE_PAGE_KEYS = CATALOGUE_KEYS | {"description", "storage_location", "records"}
@@ -1297,6 +1301,66 @@ def test_an_events_shortages_are_read_by_internal_roles_and_not_by_its_organiser
         assert client.get(f"/events/{event.id}/equipment-shortages").status_code == expected
     client.login(Users.COORDINATOR)
     assert client.get(f"/events/{uuid.uuid4()}/equipment-shortages").status_code == 404
+
+
+# =============================================================================================
+# AC9 (fix f16.2.2) - the holds schedule marks a short hold as its event's equipment does
+# =============================================================================================
+def _schedule_shortfalls(client, kind: EquipmentType) -> dict[str, int]:
+    """Each hold of ``kind`` on the holds schedule (17.3), by id, with the units it is short."""
+    response = client.get(HOLDS_PATH, params={"type": kind.code})
+    assert response.status_code == 200, response.text
+    [group] = response.json()["groups"]
+    return {hold["id"]: hold["units_short"] for hold in group["holds"]}
+
+
+@pytest.mark.story("16.2", ac=9)
+def test_the_holds_schedule_says_how_many_units_a_hold_is_short(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=3)
+    hold = _held(db, _event(db), kit, 3)
+
+    tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+
+    assert _schedule_shortfalls(tech_client, kit) == {str(hold.id): 2}
+
+
+@pytest.mark.story("16.2", ac=9)
+def test_the_schedule_marks_the_hold_its_event_shows_short_the_latest_placed_first(
+    tech_client, db: Session
+):
+    kit = make_equipment_type(db, total_quantity=2)
+    first_event, later_event = _event(db), _event(db)
+    first = _held(db, first_event, kit, 1, placed_days_ago=9)
+    later = _held(db, later_event, kit, 1, placed_days_ago=1)
+    _out(db, kit, 1, start=1, end=None)
+
+    assert _schedule_shortfalls(tech_client, kit) == {str(first.id): 0, str(later.id): 1}
+    tech_client.login(Users.COORDINATOR)
+    assert _shortages(tech_client, first_event) == []
+    assert _shortages(tech_client, later_event) == [
+        {"item_id": str(_item_of(db, later)), "units_short": 1}
+    ]
+
+
+@pytest.mark.story("16.2", ac=9)
+def test_the_schedules_mark_follows_the_records(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=1)
+    hold = _held(db, _event(db), kit, 1)
+    record = _out(db, kit, 1, start=-1, end=None)
+    assert _schedule_shortfalls(tech_client, kit) == {str(hold.id): 1}
+
+    tech_client.patch(_record_path(kit.id, record.id), json={"end_now": True})
+
+    assert _schedule_shortfalls(tech_client, kit) == {str(hold.id): 0}
+
+
+@pytest.mark.story("16.2", ac=9)
+def test_a_record_of_another_type_leaves_the_schedules_holds_whole(tech_client, db: Session):
+    kit, other = make_equipment_type(db, total_quantity=1), make_equipment_type(db)
+    hold = _held(db, _event(db), kit, 1)
+    _out(db, other, 1, start=1, end=None)
+
+    assert _schedule_shortfalls(tech_client, kit) == {str(hold.id): 0}
 
 
 # =============================================================================================
