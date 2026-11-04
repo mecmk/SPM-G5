@@ -34,6 +34,11 @@
  * more than one day, and a one-day booking reads as before. The two-day test reads only the venue
  * and its dates, since the AC4/AC8 test above can cancel the same event before or after it.
  *
+ * f13.1.5 (7.1 AC1): the event page's Date tile names both dates of an event over more than one
+ * day, "14 Mar 2028 – 15 Mar 2028", and a one-day event reads as before. The seeded Smart Cities
+ * Expo and Nimbus Developer Conference are only read, so no run order matters; the Time tile is
+ * as it was, and the top line, which has the full schedule, is not read here.
+ *
  * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
  * to the reviewing Event Coordinator (backend/tests/events/test_event_request_registration.py,
  * test_event_request_visibility.py), also render on this page.
@@ -253,6 +258,34 @@ test("12.1 AC3: a one-day booking's card reads as before", async ({ page }) => {
   await expect(card.getByText('Wed, 25 Nov 2026', { exact: true })).toHaveCount(1)
   await expect(card.getByText('09:00–18:00', { exact: true })).toHaveCount(1)
   await expect(card.getByText(/^Wed, 25 Nov 2026, /)).toHaveCount(0)
+})
+
+/**
+ * f13.1.5: one of the event page's stat tiles: the innermost block holding its label and its text,
+ * both matched whole. A tile has no role or label of its own.
+ */
+function statTile(page: Page, label: string, text: string) {
+  return page
+    .locator('div')
+    .filter({ has: page.getByText(label, { exact: true }) })
+    .filter({ has: page.getByText(text, { exact: true }) })
+    .last()
+}
+
+test("7.1 AC1: the event page's Date tile names both dates of a multi-day event, and a one-day event reads as before", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+
+  // The seeded Smart Cities Expo runs 14 Mar 2028 09:00 to 15 Mar 2028 18:00.
+  await page.goto(`/events/${EVENTS.smartCitiesExpo}`)
+  await expect(statTile(page, 'Date', '14 Mar 2028 – 15 Mar 2028')).toBeVisible()
+  await expect(statTile(page, 'Time', '09:00–18:00')).toBeVisible()
+
+  // The seeded Nimbus Developer Conference runs 25 Nov 2026, 09:00 to 18:00.
+  await page.goto(`/events/${EVENTS.approved}`)
+  await expect(statTile(page, 'Date', 'Wed, 25 Nov 2026')).toBeVisible()
+  await expect(statTile(page, 'Time', '09:00–18:00')).toBeVisible()
 })
 
 test('7.1 AC1: a draft with no dates or attendance shows clear empty states', async ({ page }) => {

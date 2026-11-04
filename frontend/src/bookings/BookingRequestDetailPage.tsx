@@ -29,14 +29,18 @@ import {
   openHoldExpiry,
   PENDING_BOOKING_STATUS,
   releasedByLabel,
+  turnaroundLine,
 } from '../shared/bookingStatus'
 import {
   CANCELLED_AT_LABEL,
   formatDate,
   formatDateTime,
+  formatPeriodDays,
+  formatSchedule,
   formatTime,
   inputToInstant,
   instantToInput,
+  isMultiDay,
   nowAsInput,
 } from '../shared/format'
 import { queueBackPath } from '../shared/queueView'
@@ -452,7 +456,10 @@ export function BookingRequestDetailPage() {
           </div>
           <div className="stat-card">
             <Icon name="calendar" size={20} />
-            <p className="stat-card-value">{formatDate(booking.starts_at)}</p>
+            {/* Fix f13.1.5 (CL-217): a booking over more than one day names both days. */}
+            <p className="stat-card-value">
+              {formatPeriodDays(booking.starts_at, booking.ends_at)}
+            </p>
             <p className="fact-label">Date</p>
           </div>
           <div className="stat-card">
@@ -468,6 +475,8 @@ export function BookingRequestDetailPage() {
             <p className="fact-label">Expected attendance</p>
           </div>
         </section>
+        {/* Fix f13.1.5 (CL-217): what the period is made of, as the event page's card says it. */}
+        <p className="small muted">{turnaroundLine(booking)}</p>
 
         <div className="booking-detail-split">
           <div className="stack">
@@ -550,9 +559,17 @@ export function BookingRequestDetailPage() {
           onConfirm={confirmApprove}
           onCancel={cancelApprove}
         >
+          {/* Fix f13.1.5 (13.2 AC1): a booking over more than one day names both dates. */}
           <p>
-            {venue.name} will be booked for {event.name} from {formatDate(booking.starts_at)},{' '}
-            {formatTime(booking.starts_at)}–{formatTime(booking.ends_at)}.
+            {venue.name} will be booked for {event.name} from{' '}
+            {isMultiDay(booking.starts_at, booking.ends_at) ? (
+              <>{formatSchedule(booking.starts_at, booking.ends_at)}.</>
+            ) : (
+              <>
+                {formatDate(booking.starts_at)}, {formatTime(booking.starts_at)}–
+                {formatTime(booking.ends_at)}.
+              </>
+            )}
           </p>
           {/* Story 12.7 AC1/AC5: the hold this approval starts, and when it expires. */}
           <p>
