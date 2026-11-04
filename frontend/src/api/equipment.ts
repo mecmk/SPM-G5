@@ -273,6 +273,7 @@ export interface EquipmentCatalogueEntry {
   name: string
   total_quantity: number
   out_of_service_now: number
+  records: OutOfServiceRecord[]
 }
 
 /** Mirrors `OutOfServiceOut`: story 16.2 AC2, one record. `ends_at` null: out until ended. */
@@ -290,7 +291,6 @@ export interface OutOfServiceRecord {
 export interface EquipmentTypePage extends EquipmentCatalogueEntry {
   description: string | null
   storage_location: string | null
-  records: OutOfServiceRecord[]
 }
 
 /** Mirrors `OutOfServiceIn`: story 16.2 AC1, a record as Technical Support sends it. */
