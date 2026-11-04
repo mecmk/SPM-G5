@@ -87,14 +87,16 @@ def _venue_suited_to_nimbus(db: Session, **overrides) -> Venue:
     """A venue that suits Nimbus's venue requirement (story 11.1): room for 350 in Theatre, a
     projector, sound system and stage, wheelchair access and a hearing loop. No opening hours are
     recorded, so it is open whenever Nimbus runs, and its status is left to the database. No seeded
-    venue will do: Grand Hall, the only one that suits Nimbus, is already booked for it."""
-    return make_venue(
+    venue will do: Grand Hall, the only one that suits Nimbus, is already booked for it. Nimbus asks
+    for one projector (fix f2.7.5: a counted facility states how many), so it has one."""
+    venue = make_venue(
         db,
         layouts={EVENT_LAYOUT: None},
         facilities=("PROJECTOR", "SOUND_SYSTEM", "STAGE"),
         accessibility=("WHEELCHAIR_ACCESS", "HEARING_LOOP"),
         **{"capacity": EVENT_ATTENDANCE, **overrides},
     )
+    return _with_quantity(db, venue, "PROJECTOR", 1)
 
 
 @pytest.fixture
@@ -308,7 +310,7 @@ def test_the_request_states_the_events_required_facilities_to_venue_staff(
 def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     coordinator_client, db: Session
 ):
-    """A facility's quantity and note have to reach Venue Staff: "3 breakout rooms with HDMI"
+    """A facility's quantity and note have to reach Venue Staff: "3 whiteboards with HDMI"
     understates what the venue must provide if only the name arrives, and both columns exist on
     ``venue_requirement_facilities`` (``event_required_facilities`` until migration 012).
     """
@@ -320,10 +322,10 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     requirement_id = make_venue_requirement(
         db,
         event.id,
-        facilities=(("BREAKOUT_ROOMS", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
+        facilities=(("WHITEBOARD", 3, "HDMI input needed"), ("PROJECTOR", None, None)),
     )
     venue = _with_quantity(
-        db, make_venue(db, facilities=("BREAKOUT_ROOMS", "PROJECTOR")), "BREAKOUT_ROOMS", 3
+        db, make_venue(db, facilities=("WHITEBOARD", "PROJECTOR")), "WHITEBOARD", 3
     )
 
     response = coordinator_client.post(
@@ -336,7 +338,7 @@ def test_a_facility_carries_the_quantity_and_note_recorded_against_it(
     )
 
     notes = response.json()["requirement_notes"]
-    assert "Breakout rooms ×3 (HDMI input needed)" in notes
+    assert "Whiteboard / flipchart ×3 (HDMI input needed)" in notes
     # A facility with neither recorded still reads as just its name.
     assert "Projector & screen," in notes or notes.endswith("Projector & screen.")
 

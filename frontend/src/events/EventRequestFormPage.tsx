@@ -59,6 +59,7 @@ import {
   getLatestEndInput,
   getLatestStartInput,
   getLiveProblems,
+  findBlankCountedQuantity,
   getMissingForSubmission,
   getVenueRequirementFieldId,
   isEquipmentTypeTaken,
@@ -380,7 +381,8 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
       ? { [FIELD_ID.name]: 'EVENT_NAME_REQUIRED' as ErrorCode }
       : {}),
   }
-  const missingForSubmission = form ? getMissingForSubmission(form) : []
+  const missingForSubmission =
+    form && reference ? getMissingForSubmission(form, reference.facilities) : []
   const isDetailsChanged =
     form !== null &&
     event !== null &&
@@ -643,13 +645,18 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
           isEquipmentLeftOut: isEquipmentApproved,
         })
     if (problem) {
-      setSaveError(ERROR_REGISTRY[problem.code].message)
-      setInvalidField({ id: problem.fieldId, form: current })
-      document.getElementById(problem.fieldId)?.focus()
+      showFormProblem(current, problem)
       return false
     }
     setSaveError(null)
     return true
+  }
+
+  /** Say a problem the browser found, mark its field and move to it. */
+  function showFormProblem(current: EventFormState, problem: FormProblem) {
+    setSaveError(ERROR_REGISTRY[problem.code].message)
+    setInvalidField({ id: problem.fieldId, form: current })
+    document.getElementById(problem.fieldId)?.focus()
   }
 
   /**
@@ -722,9 +729,16 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   /**
    * AC9-AC11: save the details, then submit them. If the backend refuses the submission (it names
    * whatever is missing), the details stay saved as a draft, and the message is shown on the
-   * draft's edit page.
+   * draft's edit page. Story 2.7 AC21 (fix f2.7.5): a counted facility without how many stops it
+   * before anything is sent, even the draft.
    */
   async function handleSubmitRequest() {
+    const blankQuantity =
+      form && reference ? findBlankCountedQuantity(form, reference.facilities) : null
+    if (form && blankQuantity) {
+      showFormProblem(form, blankQuantity)
+      return
+    }
     setIsSaving(true)
     try {
       const result = await saveDraft(false)
@@ -1202,22 +1216,26 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                           </label>
                           {selected && (
                             <div className="inline-fields">
-                              <input
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                step={1}
-                                className="inline-number"
-                                placeholder="How many"
-                                aria-label={`${item.name} quantity, ${requirementLabel}`}
-                                {...fieldProps(quantityId)}
-                                value={selected.quantity}
-                                onChange={(e) =>
-                                  updateRequirementFacility(requirement, item.code, {
-                                    quantity: e.target.value,
-                                  })
-                                }
-                              />
+                              {/* 2.7 AC21/AC22 (fix f2.7.5): only a counted facility asks how
+                                  many. */}
+                              {item.is_countable && (
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={1}
+                                  step={1}
+                                  className="inline-number"
+                                  placeholder="How many"
+                                  aria-label={`${item.name} quantity, ${requirementLabel}`}
+                                  {...fieldProps(quantityId)}
+                                  value={selected.quantity}
+                                  onChange={(e) =>
+                                    updateRequirementFacility(requirement, item.code, {
+                                      quantity: e.target.value,
+                                    })
+                                  }
+                                />
+                              )}
                               <input
                                 placeholder="Notes"
                                 aria-label={`${item.name} notes, ${requirementLabel}`}

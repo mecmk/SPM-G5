@@ -241,6 +241,13 @@ class ReferenceItemOut(BaseModel):
     description: str | None
 
 
+class FacilityReferenceItemOut(ReferenceItemOut):
+    """A facility a venue requirement can ask for. Story 2.7 AC21/AC22 (fix f2.7.5): whether it is
+    counted, so the form asks how many only of those."""
+
+    is_countable: bool
+
+
 class EquipmentAvailabilityOut(BaseModel):
     """AC6: how many units of one equipment type are free for a period. No defaults."""
 
@@ -252,7 +259,7 @@ class EventReferenceData(BaseModel):
     """The pick-lists for the request form (AC4-AC6)."""
 
     layouts: list[ReferenceItemOut]
-    facilities: list[ReferenceItemOut]
+    facilities: list[FacilityReferenceItemOut]
     accessibility_features: list[ReferenceItemOut]
     equipment_types: list[ReferenceItemOut]
 

@@ -87,7 +87,7 @@ INSERT INTO venue_facilities (venue_id, facility_code, quantity, notes) VALUES
     ('22222222-0000-0000-0000-000000000002', 'VIDEO_CONFERENCING', NULL, 'Zoom Rooms'),
     ('22222222-0000-0000-0000-000000000002', 'WIFI', NULL, NULL),
     ('22222222-0000-0000-0000-000000000003', 'VIDEO_CONFERENCING', NULL, NULL),
-    ('22222222-0000-0000-0000-000000000003', 'WHITEBOARD', NULL, NULL),
+    ('22222222-0000-0000-0000-000000000003', 'WHITEBOARD', 2, NULL),
     ('22222222-0000-0000-0000-000000000003', 'WIFI', NULL, NULL),
     ('22222222-0000-0000-0000-000000000004', 'WIFI', NULL, NULL),
     ('22222222-0000-0000-0000-000000000004', 'CATERING_AREA', NULL, NULL)
@@ -589,16 +589,16 @@ ON CONFLICT (id) DO UPDATE SET
 
 DROP TABLE sample_venue_requirements;
 
-INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
-    ('cccccccc-0000-0000-0000-000000000002', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0000-000000000002', 'WIFI'),
-    ('cccccccc-0000-0000-0000-000000000003', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0000-000000000003', 'SOUND_SYSTEM'),
-    ('cccccccc-0000-0000-0000-000000000003', 'STAGE'),
-    ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0000-000000000033', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0000-000000000046', 'PROJECTOR')
-ON CONFLICT DO NOTHING;
+INSERT INTO venue_requirement_facilities (requirement_id, facility_code, quantity) VALUES
+    ('cccccccc-0000-0000-0000-000000000002', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0000-000000000002', 'WIFI', NULL),
+    ('cccccccc-0000-0000-0000-000000000003', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0000-000000000003', 'SOUND_SYSTEM', NULL),
+    ('cccccccc-0000-0000-0000-000000000003', 'STAGE', NULL),
+    ('cccccccc-0000-0000-0000-000000000018', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0000-000000000033', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0000-000000000046', 'PROJECTOR', 1)
+ON CONFLICT (requirement_id, facility_code) DO UPDATE SET quantity = EXCLUDED.quantity;
 
 -- Story 8.4: the Smart Cities Expo (3333..28) records three venue requirements, each with its own
 -- times and number of people inside the event's, numbered within their event (cccc..0028-..0N).
@@ -686,20 +686,20 @@ ON CONFLICT (id) DO UPDATE SET
     capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
     layout_code = EXCLUDED.layout_code, notes = EXCLUDED.notes;
 
-INSERT INTO venue_requirement_facilities (requirement_id, facility_code) VALUES
-    ('cccccccc-0000-0000-0003-000000000002', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0029-000000000001', 'WIFI'),
-    ('cccccccc-0000-0000-0029-000000000002', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0031-000000000001', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0032-000000000002', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0032-000000000003', 'WIFI'),
-    ('cccccccc-0000-0000-0034-000000000001', 'WIFI'),
-    ('cccccccc-0000-0000-0028-000000000001', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0028-000000000001', 'SOUND_SYSTEM'),
-    ('cccccccc-0000-0000-0028-000000000001', 'STAGE'),
-    ('cccccccc-0000-0000-0028-000000000002', 'PROJECTOR'),
-    ('cccccccc-0000-0000-0028-000000000003', 'WIFI')
-ON CONFLICT DO NOTHING;
+INSERT INTO venue_requirement_facilities (requirement_id, facility_code, quantity) VALUES
+    ('cccccccc-0000-0000-0003-000000000002', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0029-000000000001', 'WIFI', NULL),
+    ('cccccccc-0000-0000-0029-000000000002', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0031-000000000001', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0032-000000000002', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0032-000000000003', 'WIFI', NULL),
+    ('cccccccc-0000-0000-0034-000000000001', 'WIFI', NULL),
+    ('cccccccc-0000-0000-0028-000000000001', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0028-000000000001', 'SOUND_SYSTEM', NULL),
+    ('cccccccc-0000-0000-0028-000000000001', 'STAGE', NULL),
+    ('cccccccc-0000-0000-0028-000000000002', 'PROJECTOR', 1),
+    ('cccccccc-0000-0000-0028-000000000003', 'WIFI', NULL)
+ON CONFLICT (requirement_id, facility_code) DO UPDATE SET quantity = EXCLUDED.quantity;
 
 INSERT INTO event_accessibility_needs (event_id, feature_code, notes) VALUES
     ('33333333-0000-0000-0000-000000000003', 'WHEELCHAIR_ACCESS', 'Two wheelchair users expected'),
