@@ -113,6 +113,12 @@ function findIncompleteDateField(): string | null {
   return null
 }
 
+/** The problems a half-typed date gives, which the browser knows of rather than the form state. */
+const INCOMPLETE_DATE_CODES: ErrorCode[] = [
+  'EVENT_DATE_INCOMPLETE',
+  'EVENT_REGISTRATION_DATE_INCOMPLETE',
+]
+
 /** The message a refused submission leaves for the edit page it lands on after saving. */
 function noticeFrom(state: unknown): string | null {
   if (state && typeof state === 'object' && 'notice' in state && typeof state.notice === 'string') {
@@ -668,12 +674,25 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     setFormProblems((current) => current.filter((problem) => problem !== code))
   }
 
-  /** The last save's refusal, and every problem the form's own check found, each a toast. */
+  /**
+   * The last save's refusal, and every problem the form's own check found, each a toast. A problem
+   * the form no longer has closes its toast: an error toast has no timer, so fixing the field is
+   * what takes it away, besides its close button.
+   */
   function renderSaveErrors() {
+    const heldCodes = new Set(
+      form
+        ? validateEventForm(form, event, judgedAvailability, {
+            isEquipmentLeftOut: isEquipmentApproved,
+          }).map((problem) => problem.code)
+        : [],
+    )
+    const isStillHeld = (code: ErrorCode) =>
+      INCOMPLETE_DATE_CODES.includes(code) ? incompleteDateId !== null : heldCodes.has(code)
     return (
       <>
         {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
-        {formProblems.map((code) => (
+        {formProblems.filter(isStillHeld).map((code) => (
           <ErrorToast
             key={code}
             message={ERROR_REGISTRY[code].message}

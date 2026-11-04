@@ -647,13 +647,16 @@ export function VenueFormPage() {
 
           <div className="form-actions">
             {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
-            {formProblems.map((code) => (
-              <ErrorToast
-                key={code}
-                message={ERROR_REGISTRY[code].message}
-                onDismiss={() => dismissFormProblem(code)}
-              />
-            ))}
+            {/* A problem the form no longer has closes its toast, as error toasts have no timer. */}
+            {formProblems
+              .filter((code) => form && validateVenueForm(form).includes(code))
+              .map((code) => (
+                <ErrorToast
+                  key={code}
+                  message={ERROR_REGISTRY[code].message}
+                  onDismiss={() => dismissFormProblem(code)}
+                />
+              ))}
             <Link to={VENUE_CATALOGUE_PATH} className="button secondary">
               {CANCEL}
             </Link>

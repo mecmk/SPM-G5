@@ -1,9 +1,11 @@
 import type { InputEvent } from 'react'
 
 /**
- * Guards for `onBeforeInput` that refuse a character a field can never hold, as it is typed or
- * pasted, so the mistake is never made rather than reported on save. The form's own checks still
- * run on save, for what a guard cannot stop (an empty field, a value out of range).
+ * Guards for `onBeforeInput` that refuse a character a field can never hold, so the mistake is
+ * rarely made rather than reported on save. React builds `onBeforeInput` from the browser's
+ * `textInput` event where it has one (Chromium, Safari: typing and pasting) and from key presses
+ * where it does not, so in Firefox a paste or a drop can get past it. The form's own checks still
+ * run on save, for that and for what a guard cannot stop (an empty field, a value out of range).
  */
 
 const NOT_DIGIT = /\D/

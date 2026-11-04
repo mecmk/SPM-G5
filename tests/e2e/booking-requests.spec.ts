@@ -663,10 +663,14 @@ test('12.1 AC5: a negative, fractional or over-long setup or teardown is refused
   const problem = turnaround.getByRole('alert')
   const sendRequest = page.getByRole('button', { name: 'Send request' })
 
-  // A sign or a decimal point cannot be typed, so a negative or fractional time never gets in.
+  // A sign or a decimal point cannot be typed, so a negative or fractional time never gets in:
+  // the whole entry is refused, and the field keeps what it held. That Send request sends nothing
+  // while a time is wrong is shown by the over-long cases below.
+  const setupHours = turnaroundField(turnaround, 'Setup', 'Hours')
+  const heldHours = await setupHours.inputValue()
   for (const hours of ['-1', '1.5']) {
-    await turnaroundField(turnaround, 'Setup', 'Hours').fill(hours)
-    await expect(turnaroundField(turnaround, 'Setup', 'Hours')).not.toHaveValue(hours)
+    await setupHours.fill(hours)
+    await expect(setupHours).toHaveValue(heldHours)
   }
 
   // Each is at most 14 days, the longest an event may run.

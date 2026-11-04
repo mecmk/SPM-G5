@@ -219,10 +219,11 @@ test('2.1 AC3: attendance, facility and equipment quantities must be positive wh
   })
   await fillEssentials(page, uniqueName('Numbers'))
 
-  // A sign or a decimal point cannot be typed, so only 0 is left to refuse.
+  // A sign or a decimal point cannot be typed: the entry is refused and the field keeps the 60 it
+  // held, so only 0 is left to refuse.
   for (const value of ['-3', '1.5']) {
     await page.getByLabel('Expected attendance').fill(value)
-    await expect(page.getByLabel('Expected attendance')).not.toHaveValue(value)
+    await expect(page.getByLabel('Expected attendance')).toHaveValue('60')
   }
   await page.getByLabel('Expected attendance').fill('0')
   await page.getByRole('button', { name: 'Save draft' }).click()
@@ -1555,9 +1556,9 @@ test('2.1 AC22: an expected attendance above 100,000 is told the largest accepte
     await expect(attendance).toHaveAttribute('aria-invalid', 'true')
   }
 
-  // A sign cannot be typed, so a large negative never gets in.
+  // A sign cannot be typed: a large negative is refused and the field keeps the number it held.
   await attendance.fill('-100001')
-  await expect(attendance).not.toHaveValue('-100001')
+  await expect(attendance).toHaveValue('99999999999999999999')
   await expect(wrongNumber).toHaveCount(0)
 
   await attendance.fill('100001')
@@ -1632,6 +1633,31 @@ test('2.1 AC3: two problems on one save are each said in a toast that stays unti
   await expect(email).toBeVisible()
 
   await attendance.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(attendance).toHaveCount(0)
+  await expect(email).toBeVisible()
+})
+
+test('2.1 AC3: a problem fixed in its field closes its toast, and the other stays', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('Fixed problem'))
+  await page.getByLabel('Expected attendance').fill('0')
+  await page.getByLabel('Contact email').fill('nope')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  const toast = (message: string) =>
+    page
+      .getByRole('alert')
+      .filter({ hasText: message })
+      .filter({ has: page.getByRole('button', { name: 'Dismiss' }) })
+  const attendance = toast('Expected attendance must be a positive whole number.')
+  const email = toast('Enter an email address like name@example.com.')
+  await expect(attendance).toBeVisible()
+  await expect(email).toBeVisible()
+
+  await page.getByLabel('Expected attendance').fill('60')
   await expect(attendance).toHaveCount(0)
   await expect(email).toBeVisible()
 })
