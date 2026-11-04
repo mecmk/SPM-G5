@@ -47,6 +47,9 @@ export const EVENTS = {
   draft: '33333333-0000-0000-0000-000000000001',
   planning: '33333333-0000-0000-0000-000000000012', // organiser: organiser, coordinator, Theatre only
   partnerBriefing: '33333333-0000-0000-0000-000000000018', // coordinator; no spec writes a request for it
+  // Story 17.3, Planning, organiser2, coordinator2, 9 Apr 2031: one equipment item in each status
+  // that holds units, and one declined. Only read.
+  productShowcase: '33333333-0000-0000-0000-000000017301',
   // Story 6.2, Cancelled by its organiser, organiser2, with a reason; only read.
   cancelled: '33333333-0000-0000-0000-000000000015',
   // Story 6.2 AC14-AC16, Planning, organiser: organiser, coordinator, March 2029: an approved

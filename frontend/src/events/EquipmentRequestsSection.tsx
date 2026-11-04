@@ -20,6 +20,8 @@ import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import {
   EQUIPMENT_STATUS_LABELS,
+  HOLDING_STATUSES,
+  HOLD_LENGTH_SENTENCE,
   describeItemShort,
   withdrawnWhenAndBy,
 } from '../shared/equipmentStatus'
@@ -219,6 +221,7 @@ export function EquipmentRequestsSection({
   const editAvailable = editing ? availableByCode.get(editing.equipment_type_code) : undefined
   const isEditQuantityAllowed = isQuantityAllowed(editQuantity, editAvailable)
   const hasWaiting = equipment.some((item) => item.status === 'REQUESTED')
+  const isHolding = equipment.some((item) => HOLDING_STATUSES.includes(item.status))
 
   function reloadAvailability() {
     setAvailabilityVersion((version) => version + 1)
@@ -370,6 +373,8 @@ export function EquipmentRequestsSection({
       {hasItems && shortagesError && (
         <ErrorToast message={shortagesError} onDismiss={() => setShortagesError(null)} />
       )}
+      {/* Fix f17.3.1 (17.3 AC9): while anything is held, how long it stays held. */}
+      {isHolding && <p className="small muted">{HOLD_LENGTH_SENTENCE}</p>}
       {equipment.length === 0 ? (
         <p className="muted">No equipment requested.</p>
       ) : (
