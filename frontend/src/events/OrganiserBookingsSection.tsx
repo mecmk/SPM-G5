@@ -5,6 +5,7 @@ import { Icon } from '../components/Icon'
 import {
   CANCELLED_BY_CLOSURE_MESSAGE,
   CANCELLED_BY_COORDINATOR_MESSAGE,
+  capacityLine,
   closureReasonLine,
   HOLD_EXPIRES_LABEL,
   isCancelledByClosure,
@@ -117,6 +118,8 @@ export function OrganiserBookingsSection({
                         : `For ${booking.venue_requirement_name}`}
                     </p>
                     <p className="muted">{booking.venue_location}</p>
+                    {/* Fix f13.2.1.1 (13.2.1 AC7): the venue's capacity, and the booked layout's. */}
+                    <p className="small muted">{capacityLine(booking)}</p>
                     <div className="booking-outcome-schedule small muted">
                       {isOverOneDay ? (
                         <span className="booking-outcome-schedule-item">

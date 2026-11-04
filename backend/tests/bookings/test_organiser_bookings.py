@@ -66,6 +66,10 @@ _SAFE_FIELDS = {
     "venue_name",
     "venue_location",
     "venue_cover_image_url",
+    # Fix f13.2.1.1 (13.2.1 AC7): the venue's capacity and the booked layout's.
+    "venue_capacity",
+    "layout_name",
+    "layout_capacity",
     "venue_requirement_name",
     "starts_at",
     "ends_at",
