@@ -1082,13 +1082,11 @@ def test_only_venue_staff_may_preview(db, login_as, role):
 
 
 @pytest.mark.story("9.4", ac=9)
-@pytest.mark.parametrize(
-    "role", [Users.COORDINATOR, Users.LEAD, Users.TECH_SUPPORT, Users.SAFETY_OFFICER]
-)
+@pytest.mark.parametrize("role", [Users.COORDINATOR, Users.LEAD, Users.SAFETY_OFFICER])
 def test_other_internal_roles_read_the_reason_on_the_calendar(db, login_as, role):
     """AC9. cannot fail first, for the read half: 9.1 already shows a closure's reason to
     these roles, and the Safety Officer (21.1) has venues:read and venue_calendar:read through
-    the internal roles' common set. Written through the new POST so it is red with it."""
+    the roles' shared venue reads. Written through the new POST so it is red with it."""
     venue = make_venue(db)
     starts_at, ends_at = _days_from_now(10), _days_from_now(12)
     staff = login_as(Users.VENUE_STAFF)
@@ -1114,8 +1112,8 @@ def test_other_internal_roles_read_the_reason_on_the_calendar(db, login_as, role
 
 
 @pytest.mark.story("9.4", ac=9)
-@pytest.mark.parametrize("role", [Users.ORGANISER, Users.ATTENDEE])
-def test_organisers_and_attendees_see_no_calendar(db, login_as, role):
+@pytest.mark.parametrize("role", [Users.ORGANISER, Users.ATTENDEE, Users.TECH_SUPPORT])
+def test_roles_that_read_no_venues_see_no_calendar(db, login_as, role):
     """AC9. cannot fail first: they hold neither venues:read nor venue_calendar:read today
     (9.1 AC11), so the refusal is already in place; pinned so a later change cannot expose a
     closure's reason to them."""

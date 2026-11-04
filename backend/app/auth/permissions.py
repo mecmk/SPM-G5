@@ -42,13 +42,14 @@ class Permission(StrEnum):
     """Functions a role may perform. Grouped by functionality area / backlog epic."""
 
     # --- Venue catalogue (8.x) & availability (9.x) ---
-    # Browse catalogue, view characteristics (8.1, 8.2). AC3 names Event Coordinator and Venue
-    # Staff; Technical Support Staff keeps it too via _INTERNAL_COMMON rather than carving out
-    # a venues-specific permission.
+    # Browse catalogue, view characteristics (8.1, 8.2). Technical Support Staff hold none of the
+    # venue reads (f8.6.1).
     VENUES_READ = "venues:read"
     VENUES_MANAGE = "venues:manage"  # create / update / withdraw venues (8.3, 8.4)
     VENUE_UNAVAILABILITY_MANAGE = "venue_unavailability:manage"  # mark a venue unavailable (9.4)
     VENUE_CALENDAR_READ = "venue_calendar:read"  # availability calendar & search (9.x, 10.x)
+    # The Room layouts page (8.6 AC9). Apart from venues:read, since organisers hold it (f8.6.1).
+    ROOM_LAYOUTS_READ = "room_layouts:read"
 
     # --- Event requests (2.x, 3.x) ---
     EVENTS_CREATE = "events:create"  # raise / submit requests, answer clarification (2.1, 3.x, 4.3)
@@ -87,9 +88,13 @@ class Permission(StrEnum):
     USERS_READ_INTERNAL = "users:read_internal"  # e.g. pick a coordinator to assign (5.1)
 
 
-_INTERNAL_COMMON = {
+_VENUE_READ = {
     Permission.VENUES_READ,
     Permission.VENUE_CALENDAR_READ,
+    Permission.ROOM_LAYOUTS_READ,
+}
+
+_INTERNAL_COMMON = {
     Permission.EVENTS_READ_ALL,
     Permission.BOOKINGS_READ,
     Permission.EQUIPMENT_READ,
@@ -106,11 +111,13 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             Permission.EVENTS_CANCEL,
             Permission.EVENT_CHANGE_REQUESTS_CREATE,
             Permission.REGISTRATIONS_VIEW,
+            Permission.ROOM_LAYOUTS_READ,
             Permission.NOTIFICATIONS_READ_OWN,
         }
     ),
     RoleCode.EVENT_COORDINATOR: frozenset(
         _INTERNAL_COMMON
+        | _VENUE_READ
         | {
             Permission.EVENTS_REVIEW,
             Permission.EVENTS_EDIT_ROUTINE,
@@ -122,6 +129,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     ),
     RoleCode.VENUE_STAFF: frozenset(
         _INTERNAL_COMMON
+        | _VENUE_READ
         | {
             Permission.VENUES_MANAGE,
             Permission.VENUE_UNAVAILABILITY_MANAGE,
@@ -129,13 +137,15 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         }
     ),
     RoleCode.TECH_SUPPORT_STAFF: frozenset(_INTERNAL_COMMON | {Permission.EQUIPMENT_MANAGE}),
-    RoleCode.SAFETY_OFFICER: frozenset(_INTERNAL_COMMON | {Permission.SAFETY_REVIEW}),
+    RoleCode.SAFETY_OFFICER: frozenset(_INTERNAL_COMMON | _VENUE_READ | {Permission.SAFETY_REVIEW}),
     RoleCode.ATTENDEE: frozenset(
         {Permission.REGISTRATIONS_SELF, Permission.NOTIFICATIONS_READ_OWN}
     ),
     # Story 5.4 AC1/AC7: reads every event and the coordinators like other internal staff, and
     # alone assigns an unassigned event. Not events:review - the Lead never decides an event (AC6).
-    RoleCode.EVENT_COORDINATOR_LEAD: frozenset(_INTERNAL_COMMON | {Permission.EVENTS_ASSIGN}),
+    RoleCode.EVENT_COORDINATOR_LEAD: frozenset(
+        _INTERNAL_COMMON | _VENUE_READ | {Permission.EVENTS_ASSIGN}
+    ),
 }
 
 
