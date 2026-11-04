@@ -23,7 +23,9 @@
  * AC7 another role is told the page is not permitted; the API's 401 and 403 are backend cases.
  * AC8 (f17.3.1) the schedule says a hold has no expiry and what ends it.
  * AC9 (f17.3.1) an event's Equipment requirements section says the same while it holds equipment
- *     (the showcase, as its coordinator), and not when it holds none (the seeded partner briefing).
+ *     (the showcase, as its coordinator), and not when it holds none: no items (the seeded partner
+ *     briefing), or items that all hold nothing (the showcase stubbed as withdrawn, declined and
+ *     released, since no Planning event is seeded like that).
  * A failed load says why (stubbed 500), and on a phone the page does not scroll sideways.
  *
  * Every flow reads the seeded Bayfront Product Showcase (backend/db/seed/020_sample_data.sql) on
@@ -53,10 +55,10 @@ const BEFORE_SHOWCASE_DAY = '2031-04-08'
 // The seeded roadshow's microphones, accepted, in June 2027: outside the showcase's day.
 const ROADSHOW = 'Regional Partner Roadshow'
 // The showcase's event page; coordinator 2 is its coordinator.
-const SHOWCASE_EVENT_PATH = '/events/33333333-0000-0000-0000-000000017301'
+const SHOWCASE_EVENT_PATH = `/events/${EVENTS.productShowcase}`
 
 const HOLD_LENGTH =
-  "Equipment is held for the event's dates, with no expiry, until the item is withdrawn or removed, Technical Support decline it, or the event is cancelled or rejected."
+  "Equipment is held for the event's dates, with no expiry, until the item is withdrawn or removed, Technical Support declines it, an approved change removes it, the event moves to dates it can't be held for, or the event is cancelled or rejected."
 
 const START_BEFORE_TODAY = 'The start date cannot be before today.'
 const END_BEFORE_START = 'The end date cannot be before the start date.'
@@ -193,6 +195,39 @@ test("17.3 AC9: an event's equipment section says how long its equipment is held
   const section = page.getByRole('region', { name: 'Equipment requirements' })
   await expect(section.getByText('Wireless microphone')).toBeVisible()
   await expect(section.getByText(HOLD_LENGTH)).toBeVisible()
+})
+
+test("17.3 AC9: an event whose items all hold nothing doesn't say how long equipment is held", async ({
+  page,
+}) => {
+  // The showcase as it would be once its accepted item is withdrawn, its pending one declined and
+  // its unsent one released: every item still listed, none holding units.
+  const holdingNothing: Record<string, Record<string, string>> = {
+    ACCEPTED: {
+      status: 'WITHDRAWN',
+      withdrawn_at: '2026-10-23T02:00:00Z',
+      withdrawn_by_name: 'Carl Coordinator',
+    },
+    PENDING: { status: 'DECLINED', decision_reason: 'None free that day.' },
+    REQUESTED: { status: 'CANCELLED' },
+  }
+  await page.route(`**/events/${EVENTS.productShowcase}`, async (route) => {
+    if (route.request().resourceType() !== 'fetch') return route.fallback()
+    const response = await route.fetch()
+    const event = await response.json()
+    const equipment = event.equipment.map((item: { status: string }) => ({
+      ...item,
+      ...holdingNothing[item.status],
+    }))
+    return route.fulfill({ response, json: { ...event, equipment } })
+  })
+
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto(SHOWCASE_EVENT_PATH)
+  const section = page.getByRole('region', { name: 'Equipment requirements' })
+  await expect(section.getByText('Wireless microphone')).toBeVisible()
+  await expect(section.getByText('Withdrawn', { exact: true })).toBeVisible()
+  await expect(section.getByText(HOLD_LENGTH)).toHaveCount(0)
 })
 
 test("17.3 AC9: an event holding no equipment doesn't say how long it is held", async ({

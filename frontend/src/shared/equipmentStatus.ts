@@ -32,7 +32,7 @@ export const NOT_CORRECTED_STATUSES: readonly EquipmentItemStatus[] = [
  *  (12.7), an equipment hold has no expiry; the backend's `_release_holds` callers
  *  (backend/app/equipment/service.py) are what end one. */
 export const HOLD_LENGTH_SENTENCE =
-  "Equipment is held for the event's dates, with no expiry, until the item is withdrawn or removed, Technical Support decline it, or the event is cancelled or rejected."
+  "Equipment is held for the event's dates, with no expiry, until the item is withdrawn or removed, Technical Support declines it, an approved change removes it, the event moves to dates it can't be held for, or the event is cancelled or rejected."
 
 /** The item statuses that hold units for the event (`_held_by_event`'s RESERVED holds): not yet
  *  sent, waiting on Technical Support, or accepted. */
