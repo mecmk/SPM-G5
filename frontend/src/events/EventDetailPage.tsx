@@ -1409,7 +1409,79 @@ export function EventDetailPage() {
             entries={clarificationEntries}
             error={clarificationsError}
             currentUserId={user?.id ?? null}
-          />
+          >
+            {canRequestClarification && (
+              <section
+                className="clarification-reply stack"
+                aria-labelledby="post-clarification-heading"
+              >
+                <p className="eyebrow" id="post-clarification-heading">
+                  Ask the organiser
+                </p>
+                <label>
+                  Message
+                  <textarea
+                    rows={3}
+                    maxLength={CLARIFICATION_MESSAGE_MAX_LENGTH}
+                    placeholder="What do you need clarified before deciding?"
+                    value={clarificationMessage}
+                    onChange={(e) => setClarificationMessage(e.target.value)}
+                  />
+                </label>
+                {clarificationRequestError && (
+                  <p role="alert" className="error">
+                    {clarificationRequestError}
+                  </p>
+                )}
+                <div className="page-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={isRequestingClarification}
+                    onClick={confirmRequestClarification}
+                  >
+                    {isRequestingClarification ? 'Sending…' : 'Send clarification request'}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {canRespondToClarification && (
+              <section
+                className="clarification-reply stack"
+                aria-labelledby="respond-clarification-heading"
+              >
+                <p className="eyebrow" id="respond-clarification-heading">
+                  Respond to the coordinator
+                </p>
+                <label>
+                  Message
+                  <textarea
+                    rows={3}
+                    maxLength={CLARIFICATION_MESSAGE_MAX_LENGTH}
+                    placeholder="Answer the coordinator's question."
+                    value={responseMessage}
+                    onChange={(e) => setResponseMessage(e.target.value)}
+                  />
+                </label>
+                {responseError && (
+                  <p role="alert" className="error">
+                    {responseError}
+                  </p>
+                )}
+                <div className="page-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={isResponding}
+                    onClick={confirmRespondToClarification}
+                  >
+                    {isResponding ? 'Sending…' : 'Send response'}
+                  </button>
+                </div>
+              </section>
+            )}
+          </ClarificationHistory>
         )}
 
         {/* Story 7.4 AC5: the change history, for the same two people as the clarifications. */}
@@ -1419,72 +1491,6 @@ export function EventDetailPage() {
             version={`${event.updated_at}#${reloadCount}`}
             references={references}
           />
-        )}
-
-        {canRequestClarification && (
-          <section className="card stack" aria-labelledby="post-clarification-heading">
-            <p className="eyebrow" id="post-clarification-heading">
-              Ask the organiser
-            </p>
-            <label>
-              Message
-              <textarea
-                rows={3}
-                maxLength={CLARIFICATION_MESSAGE_MAX_LENGTH}
-                placeholder="What do you need clarified before deciding?"
-                value={clarificationMessage}
-                onChange={(e) => setClarificationMessage(e.target.value)}
-              />
-            </label>
-            {clarificationRequestError && (
-              <p role="alert" className="error">
-                {clarificationRequestError}
-              </p>
-            )}
-            <div className="page-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={isRequestingClarification}
-                onClick={confirmRequestClarification}
-              >
-                {isRequestingClarification ? 'Sending…' : 'Send clarification request'}
-              </button>
-            </div>
-          </section>
-        )}
-
-        {canRespondToClarification && (
-          <section className="card stack" aria-labelledby="respond-clarification-heading">
-            <p className="eyebrow" id="respond-clarification-heading">
-              Respond to the coordinator
-            </p>
-            <label>
-              Message
-              <textarea
-                rows={3}
-                maxLength={CLARIFICATION_MESSAGE_MAX_LENGTH}
-                placeholder="Answer the coordinator's question."
-                value={responseMessage}
-                onChange={(e) => setResponseMessage(e.target.value)}
-              />
-            </label>
-            {responseError && (
-              <p role="alert" className="error">
-                {responseError}
-              </p>
-            )}
-            <div className="page-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={isResponding}
-                onClick={confirmRespondToClarification}
-              >
-                {isResponding ? 'Sending…' : 'Send response'}
-              </button>
-            </div>
-          </section>
         )}
       </div>
 

@@ -4,12 +4,13 @@
  *     as one sentence above the clarification thread; a pending decision shows placeholder copy,
  *     with an extra hint when the coordinator has asked for clarification.
  * AC2 the clarification conversation renders oldest first, with each entry's author, kind and
- *     timestamp.
+ *     timestamp; the box to write the next message sits in the same card, under the newest one,
+ *     so a sent message appears just above where it was written (c20).
  * Permission boundaries (403 for an unrelated internal role, 404 for another organiser's
  * request), ordering edge cases and immutability are backend cases:
  * backend/tests/events/test_decision_history.py.
  */
-import { expect, test } from '@playwright/test'
+import { type Page, expect, test } from '@playwright/test'
 import { ACCOUNTS, EVENTS, clarificationsSection, signIn } from './support'
 
 test('4.6 AC1: a request awaiting decision shows the decision has not been made yet', async ({
@@ -83,4 +84,32 @@ test('4.6 AC2: the clarification thread renders oldest first with author, kind a
   await expect(messages.nth(1)).toContainText(
     'About 60 from Engineering, 50 from Sales and 40 from Operations.',
   )
+})
+
+/** The box named `name` is inside the Clarifications card and starts below its newest message. */
+async function expectReplyBoxUnderThread(page: Page, name: string) {
+  const section = clarificationsSection(page)
+  const replyBox = section.getByRole('region', { name })
+  await expect(replyBox).toBeVisible()
+  const newest = await section.getByRole('listitem').last().boundingBox()
+  const box = await replyBox.boundingBox()
+  expect(box!.y).toBeGreaterThanOrEqual(newest!.y + newest!.height)
+}
+
+test("4.6 AC2: the organiser's reply box sits in the thread, under the newest message", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await page.goto(`/events/${EVENTS.clarificationRequested}`)
+
+  await expectReplyBoxUnderThread(page, 'Respond to the coordinator')
+})
+
+test("4.6 AC2: the coordinator's question box sits in the thread, under the newest message", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.clarificationRequested}`)
+
+  await expectReplyBoxUnderThread(page, 'Ask the organiser')
 })
