@@ -394,6 +394,7 @@ class EquipmentCatalogueEntryOut(BaseModel):
     name: str
     total_quantity: int
     out_of_service_now: int
+    back_in_service_at: datetime | None
 
     @classmethod
     def from_entry(cls, entry: CatalogueEntry) -> EquipmentCatalogueEntryOut:
@@ -404,6 +405,7 @@ class EquipmentCatalogueEntryOut(BaseModel):
             name=kind.name,
             total_quantity=kind.total_quantity,
             out_of_service_now=entry.out_of_service_now,
+            back_in_service_at=entry.back_in_service_at,
         )
 
 
@@ -424,6 +426,7 @@ class EquipmentTypePageOut(EquipmentCatalogueEntryOut):
             name=kind.name,
             total_quantity=kind.total_quantity,
             out_of_service_now=page.out_of_service_now,
+            back_in_service_at=page.back_in_service_at,
             description=kind.description,
             storage_location=kind.storage_location,
             records=[OutOfServiceOut.from_record(record) for record in page.records],

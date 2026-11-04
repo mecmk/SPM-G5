@@ -79,7 +79,14 @@ from tests.support.seed import Users
 
 TYPES_PATH = "/equipment-types"
 RECORD_KEYS = {"id", "quantity", "reason", "notes", "starts_at", "ends_at"}
-CATALOGUE_KEYS = {"id", "code", "name", "total_quantity", "out_of_service_now"}
+CATALOGUE_KEYS = {
+    "id",
+    "code",
+    "name",
+    "total_quantity",
+    "out_of_service_now",
+    "back_in_service_at",
+}
 TYPE_PAGE_KEYS = CATALOGUE_KEYS | {"description", "storage_location", "records"}
 SHORT_HOLD_KEYS = {
     "event_id",
@@ -248,6 +255,31 @@ def test_the_catalogue_lists_each_type_with_its_stock_and_the_units_out_of_servi
     assert set(entry) == CATALOGUE_KEYS
     assert (entry["name"], entry["code"]) == ("Aaa catalogue kit", kit.code)
     assert (entry["total_quantity"], entry["out_of_service_now"]) == (7, 2)
+
+
+@pytest.mark.story("16.2", ac=2)
+def test_the_catalogue_and_a_types_page_say_when_the_first_units_out_are_back_in_service(
+    tech_client, db: Session
+):
+    kit = make_equipment_type(db, total_quantity=9)
+    sooner = _out(db, kit, 1, start=-1, end=2)
+    _out(db, kit, 1, start=-1, end=5)
+    _out(db, kit, 1, start=-1, end=None)  # open-ended: never the answer
+    _out(db, kit, 1, start=1, end=1.5)  # still to come: not out yet
+    _out(db, kit, 1, start=-4, end=-1)  # ended
+    open_only = make_equipment_type(db, total_quantity=4)
+    _out(db, open_only, 1, start=-1, end=None)
+    untouched = make_equipment_type(db, total_quantity=4)
+    _out(db, untouched, 1, start=1, end=2)
+
+    entries = {each["id"]: each for each in tech_client.get(TYPES_PATH).json()}
+
+    expected = sooner.ends_at.isoformat().replace("+00:00", "Z")
+    assert entries[str(kit.id)]["back_in_service_at"].replace("+00:00", "Z") == expected
+    assert entries[str(open_only.id)]["back_in_service_at"] is None
+    assert entries[str(untouched.id)]["back_in_service_at"] is None
+    page = tech_client.get(f"{TYPES_PATH}/{kit.id}").json()
+    assert page["back_in_service_at"].replace("+00:00", "Z") == expected
 
 
 @pytest.mark.story("16.2", ac=2)

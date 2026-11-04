@@ -4551,6 +4551,17 @@ button.requirement-choice.requirement-covered:hover,
   white-space: normal;
 }
 
+/* A type's name stays underlined so it reads as clickable, in the table's text colour rather than
+   the default link blue; the accent colour appears on hover and focus. */
+.equipment-catalogue a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.equipment-catalogue a:hover {
+  color: var(--accent);
+}
+
 .out-of-service-form h2 {
   margin: 0;
 }

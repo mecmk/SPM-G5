@@ -273,6 +273,7 @@ export interface EquipmentCatalogueEntry {
   name: string
   total_quantity: number
   out_of_service_now: number
+  back_in_service_at: string | null
 }
 
 /** Mirrors `OutOfServiceOut`: story 16.2 AC2, one record. `ends_at` null: out until ended. */

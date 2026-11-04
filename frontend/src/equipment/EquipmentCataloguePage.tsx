@@ -5,12 +5,13 @@ import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_CATALOGUE_TITLE, equipmentTypePath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
+import { describeBackInService } from './outOfServiceLabels'
 
 /**
  * Story 16.2 AC2 - the equipment catalogue, for Technical Support: every active type, by name,
- * with its stock and the units out of service now, each opening the type's page. AC6: App.tsx
+ * with its stock, the units out of service now and when the first are back, each opening the type's page. AC6: App.tsx
  * guards the route with equipment:manage, and the backend refuses everyone else. On a phone the
- * headers and names wrap (App.css), so the three columns fit and nothing scrolls sideways.
+ * headers and names wrap (App.css), so the four columns fit and nothing scrolls sideways.
  */
 export function EquipmentCataloguePage() {
   const { data: types, error, isLoading } = useLoaded(listEquipmentCatalogue)
@@ -41,6 +42,7 @@ export function EquipmentCataloguePage() {
                 <th>Equipment</th>
                 <th>In stock</th>
                 <th>Out of service now</th>
+                <th>Back in service</th>
               </tr>
             </thead>
             <tbody>
@@ -51,6 +53,7 @@ export function EquipmentCataloguePage() {
                   </td>
                   <td className="mono">{kind.total_quantity}</td>
                   <td className="mono">{kind.out_of_service_now}</td>
+                  <td>{describeBackInService(kind.out_of_service_now, kind.back_in_service_at)}</td>
                 </tr>
               ))}
             </tbody>
