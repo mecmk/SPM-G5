@@ -657,7 +657,9 @@ def list_bookings_for_event(db: Session, event_id: uuid.UUID) -> list[VenueBooki
             select(VenueBooking)
             .where(VenueBooking.event_id == event_id)
             .options(
-                joinedload(VenueBooking.venue), joinedload(VenueBooking.hold_expiry_changed_by)
+                joinedload(VenueBooking.venue),
+                joinedload(VenueBooking.required_layout),
+                joinedload(VenueBooking.hold_expiry_changed_by),
             )
             .order_by(VenueBooking.created_at.desc(), VenueBooking.id.desc())
         ).all()
@@ -686,7 +688,11 @@ def list_bookings_for_own_event(
                     VenueBooking.release_cause.in_(_RELEASES_THE_ORGANISER_SEES),
                 ),
             )
-            .options(joinedload(VenueBooking.venue), joinedload(VenueBooking.venue_requirement))
+            .options(
+                joinedload(VenueBooking.venue),
+                joinedload(VenueBooking.required_layout),
+                joinedload(VenueBooking.venue_requirement),
+            )
             .order_by(VenueBooking.created_at.desc(), VenueBooking.id.desc())
         ).all()
     )

@@ -39,6 +39,10 @@
  * Expo and Nimbus Developer Conference are only read, so no run order matters; the Time tile is
  * as it was, and the top line, which has the full schedule, is not read here.
  *
+ * f13.2.1.1 (13.2.1 AC7): the organiser's Venue bookings cards show each booked venue's capacity,
+ * as the coordinator's card does (bookings.spec.ts). What the API returns, the layout's own
+ * capacity included, is proven in backend/tests/bookings/test_booking_card_capacity.py.
+ *
  * Story 2.1 AC8/AC19: the registration choice/dates and visibility, already returned by the API
  * to the reviewing Event Coordinator (backend/tests/events/test_event_request_registration.py,
  * test_event_request_visibility.py), also render on this page.
@@ -126,6 +130,27 @@ test("7.1 AC1: the organiser's venue bookings render as read-only cards", async 
   await expect(bookings.getByRole('listitem').filter({ hasText: 'Seminar Room 2.1' })).toBeVisible()
   await expect(bookings.getByRole('button')).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Venue booking', exact: true })).toHaveCount(0)
+})
+
+test("13.2.1 AC7: the organiser's venue booking cards show each venue's capacity", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser2)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  const bookings = organiserBookings(page)
+  await expect(
+    bookings
+      .getByRole('listitem')
+      .filter({ hasText: 'Grand Hall' })
+      .getByText('Capacity: 400 people'),
+  ).toBeVisible()
+  await expect(
+    bookings
+      .getByRole('listitem')
+      .filter({ hasText: 'Seminar Room 2.1' })
+      .getByText('Capacity: 80 people'),
+  ).toBeVisible()
 })
 
 /** f7.1.2: the organiser's Venue bookings section. */

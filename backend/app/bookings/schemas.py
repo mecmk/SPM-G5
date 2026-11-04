@@ -16,6 +16,16 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, fie
 from app.bookings.models import BookingStatus, VenueBooking
 
 
+def _booked_layout_capacity(booking: VenueBooking) -> int | None:
+    """Fix f13.2.1.1 (13.2.1 AC7): the capacity the venue gives the booked layout (8.6), as the
+    venue stands now; None when no layout is asked for, the venue gives it no figure of its own,
+    or no longer offers it."""
+    for offered in booking.venue.layouts:
+        if offered.layout_code == booking.required_layout_code:
+            return offered.layout_capacity
+    return None
+
+
 def _strip(value: str | None) -> str | None:
     return value.strip() if isinstance(value, str) else value
 
@@ -415,6 +425,12 @@ class OrganiserBooking(BaseModel):
     venue_location: str
     # The venue's first picture, as on its catalogue card; None when it has none.
     venue_cover_image_url: str | None
+    # Fix f13.2.1.1 (13.2.1 AC7): the venue's capacity, and the booked layout with the capacity
+    # the venue gives it, as the venue stands now. Both layout fields None when no layout is asked
+    # for; layout_capacity None too when the venue gives the layout no figure of its own.
+    venue_capacity: int
+    layout_name: str | None
+    layout_capacity: int | None
     # None for an additional venue (story 12.5 AC5).
     venue_requirement_name: str | None
     starts_at: datetime
@@ -441,6 +457,9 @@ class OrganiserBooking(BaseModel):
             venue_name=booking.venue.name,
             venue_location=booking.venue.location,
             venue_cover_image_url=booking.venue.cover_image_url,
+            venue_capacity=booking.venue.capacity,
+            layout_name=None if booking.required_layout is None else booking.required_layout.name,
+            layout_capacity=_booked_layout_capacity(booking),
             venue_requirement_name=(
                 None if booking.venue_requirement is None else booking.venue_requirement.name
             ),
@@ -469,6 +488,12 @@ class BookingOutcome(BaseModel):
     venue_location: str
     # The venue's first picture, as on its catalogue card; None when it has none.
     venue_cover_image_url: str | None
+    # Fix f13.2.1.1 (13.2.1 AC7): the venue's capacity, and the booked layout with the capacity
+    # the venue gives it, as the venue stands now. Both layout fields None when no layout is asked
+    # for; layout_capacity None too when the venue gives the layout no figure of its own.
+    venue_capacity: int
+    layout_name: str | None
+    layout_capacity: int | None
     # Story 12.5 AC2/AC4: the venue requirement the booking is for, so the event's page and the
     # catalogue's banner can say which requirements are covered. Both None for an additional
     # venue (AC5).
@@ -525,6 +550,9 @@ class BookingOutcome(BaseModel):
             venue_name=booking.venue.name,
             venue_location=booking.venue.location,
             venue_cover_image_url=booking.venue.cover_image_url,
+            venue_capacity=booking.venue.capacity,
+            layout_name=None if booking.required_layout is None else booking.required_layout.name,
+            layout_capacity=_booked_layout_capacity(booking),
             venue_requirement_id=booking.venue_requirement_id,
             venue_requirement_name=(
                 None if booking.venue_requirement is None else booking.venue_requirement.name
