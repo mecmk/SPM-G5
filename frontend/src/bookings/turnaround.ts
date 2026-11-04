@@ -159,11 +159,12 @@ function outsideOpeningHours(
 
 /**
  * f12.1.2 (story 12.1 AC16): whether a request's own times, `startsAt` to `endsAt`, are within the
- * venue's opening hours as the server reads them (`closed_for` and `daily_window` in
- * backend/app/venues/service.py): as daily sessions from the start's time of day to the end's, on
- * the Singapore wall clock, each end included; never when the end's time of day is not after the
- * start's. A venue with no hours recorded is open whenever. The server refuses a request whose
- * own times are outside, so the request step says nothing about its setup and teardown then.
+ * venue's opening hours as the server reads them (`closed_for` in backend/app/venues/service.py),
+ * on the Singapore wall clock: the start from opening to before closing, the end from after
+ * opening to closing. Since f12.1.4 (12.1 AC23) that is the first day's start and the last day's
+ * end of a period over several days; the nights between are not checked. A venue with no hours
+ * recorded is open whenever. The server refuses a request whose own times are outside, so the
+ * request step says nothing about its setup and teardown then.
  */
 export function isWithinOpeningHours(
   startsAt: string,
@@ -172,9 +173,11 @@ export function isWithinOpeningHours(
   closesAt: string | null,
 ): boolean {
   if (opensAt === null || closesAt === null) return true
+  const opens = minuteOfDay(opensAt)
+  const closes = minuteOfDay(closesAt)
   const start = singaporeMinuteOfDay(startsAt)
   const end = singaporeMinuteOfDay(endsAt)
-  return end > start && start >= minuteOfDay(opensAt) && end <= minuteOfDay(closesAt)
+  return opens <= start && start < closes && opens < end && end <= closes
 }
 
 /**

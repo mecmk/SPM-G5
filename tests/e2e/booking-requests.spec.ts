@@ -95,6 +95,12 @@
  * Breakout room request (Seminar Room 2.1, at its 30 and 15) and, opened only, switch it to
  * Exhibition Foyer for AC21 without sending.
  *
+ * f12.1.4: a requirement over several days is within the venue's opening hours when it starts
+ * within them on its first day and ends within them on its last, so the step says what of its
+ * setup and teardown runs outside them, as it does for one day (AC23). That the server accepts
+ * such a request, and refuses one starting or ending outside, is
+ * `backend/tests/bookings/test_request_opening_hours.py`'s.
+ *
  * Seed data this leans on (backend/db/seed/020_sample_data.sql): Chloe Coordinator is assigned
  * Nimbus Developer Conference (Planning: Theatre, three facilities, two accessibility needs, 350
  * people, 25 Nov 2026 09:00-18:00), Regional Sales Summit (Planning: Theatre only, 220 people,
@@ -770,6 +776,38 @@ test('12.1 AC17: a venue with no opening hours recorded says nothing about setup
   await turnaroundField(turnaround, 'Teardown', 'Days').fill('1')
   await expect(turnaround).toContainText('Tue, 2 Feb 2027, 09:00 – Thu, 4 Feb 2027, 12:00')
   await expect(turnaround.getByText(OUTSIDE_HOURS)).toHaveCount(0)
+})
+
+test('12.1 AC23: a requirement over several days, ending earlier in the day than it starts, is within the hours', async ({
+  page,
+}) => {
+  // f12.1.4: Supplier Induction Morning's Main venue is answered as running from Wednesday 13:00
+  // to Friday 11:00, inside Seminar Room 2.1's 08:00 to 20:00 on its first and last days. Read as
+  // daily sessions it ran 13:00 to 11:00, outside the hours, so the step said nothing about its
+  // setup. Its step is only opened; nothing is sent.
+  await page.route(`**/events/${INDUCTION.id}`, async (route) => {
+    if (route.request().resourceType() !== 'fetch') return route.fallback()
+    const response = await route.fetch()
+    const event = await response.json()
+    return route.fulfill({
+      response,
+      json: {
+        ...event,
+        venue_requirements: event.venue_requirements.map((each: { id: string }) =>
+          each.id === INDUCTION_MAIN_VENUE
+            ? { ...each, starts_at: '2027-02-03T05:00:00Z', ends_at: '2027-02-05T03:00:00Z' }
+            : each,
+        ),
+      },
+    })
+  })
+  await signIn(page, ACCOUNTS.coordinator)
+  const turnaround = await openInductionStep(page)
+
+  // Six hours of setup start at 07:00, before the room opens on the first day.
+  await turnaroundField(turnaround, 'Setup', 'Hours').fill('6')
+  await expect(turnaround).toContainText('Wed, 3 Feb 2027, 07:00 – Fri, 5 Feb 2027, 11:00')
+  await expect(turnaround.getByText(OUTSIDE_HOURS)).toHaveText(`${SETUP_OUTSIDE} ${STAFF_DECIDE}`)
 })
 
 test("12.1 AC17/AC19: Venue Staff see on the request that its setup runs outside the opening hours, against the venue's defaults", async ({

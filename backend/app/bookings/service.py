@@ -431,7 +431,7 @@ class VenueBlocked(ValueError):
 
 
 class VenueClosed(ValueError):
-    """12.1 AC14: the request's daily window falls outside the venue's opening hours - since
+    """12.1 AC14: the request starts or ends outside the venue's opening hours (AC23) - since
     f12.1.2 (12.1 AC16), the window of its own times, its requirement's or the event's, not of
     its booked period: setup and teardown may run outside the hours."""
 
