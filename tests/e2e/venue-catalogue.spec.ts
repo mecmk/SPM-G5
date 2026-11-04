@@ -364,7 +364,7 @@ test('8.1 AC11: the filters stay set while a venue is opened and its calendar mo
 
 for (const viewer of [
   { who: 'Venue Staff', email: ACCOUNTS.venueStaff },
-  { who: 'Technical Support', email: ACCOUNTS.techSupport },
+  { who: 'Safety Officers', email: ACCOUNTS.safetyOfficer },
 ]) {
   test(`8.1 AC5: ${viewer.who} filter the catalogue but are offered no request`, async ({
     page,

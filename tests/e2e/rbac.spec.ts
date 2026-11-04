@@ -26,7 +26,7 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
   {
     role: 'organiser',
     email: ACCOUNTS.organiser,
-    visible: ['My events', 'Change requests', 'Registrations'],
+    visible: ['My events', 'Change requests', 'Registrations', 'Room layouts'],
     hidden: ['Manage venues', 'Events inbox', 'Upcoming events', 'Venue catalogue'],
   },
   {
@@ -69,12 +69,12 @@ const SIDEBAR_EXPECTATIONS: SidebarExpectation[] = [
     ],
   },
   // Story 17.3: the Equipment holds schedule, which c9 (1.2 AC5) had removed until a story
-  // delivered it.
+  // delivered it. f8.6.1: they read no venues or room layouts.
   {
     role: 'technical support',
     email: ACCOUNTS.techSupport,
-    visible: ['Venue catalogue', 'Equipment requests', 'Equipment catalogue', 'Equipment holds'],
-    hidden: ['All events', 'Manage venues', 'Booking Requests'],
+    visible: ['Equipment requests', 'Equipment catalogue', 'Equipment holds'],
+    hidden: ['All events', 'Manage venues', 'Booking Requests', 'Venue catalogue', 'Room layouts'],
   },
   // Story 21.1 AC1: the Safety Officer works from the safety queue, and reads venues in the
   // catalogue (venues:read).
@@ -149,6 +149,17 @@ test('1.2 AC4: a direct URL outside the role shows Not permitted', async ({ page
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Venue catalogue' })).toHaveCount(0)
 })
+
+for (const address of ['/venues', '/venues/layouts']) {
+  test(`1.2 AC4: Technical Support are not permitted at ${address}`, async ({ page }) => {
+    await signIn(page, ACCOUNTS.techSupport)
+    await expectSignedIn(page)
+
+    await page.goto(address)
+
+    await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
+  })
+}
 
 // c9 (1.2 AC5): the address of each section removed, with the role that was offered it. Stories
 // 19.4 and 17.3 brought back the organiser's Change requests and Technical Support's Equipment

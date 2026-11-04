@@ -710,27 +710,21 @@ def test_a_result_judged_without_a_requirement_names_no_requirement(
 
 
 @pytest.mark.story("11.1", ac=6)
-@pytest.mark.parametrize(
-    "user", [Users.VENUE_STAFF, Users.TECH_SUPPORT], ids=["venue-staff", "tech-support"]
-)
-def test_other_roles_get_no_suitability_in_event_context(login_as, db: Session, user):
+def test_other_roles_get_no_suitability_in_event_context(login_as, db: Session):
     """Even named as the event's coordinator, a role without bookings:request sees no indicator:
     the permission is checked, not only the assignment."""
     tag = _tag()
-    event = _assigned_event(db, coordinator=user, expected_attendance=500)
+    event = _assigned_event(db, coordinator=Users.VENUE_STAFF, expected_attendance=500)
     make_venue(db, name=tag, capacity=10)
 
-    hits = _hits(login_as(user), search=tag, event=str(event.id))
+    hits = _hits(login_as(Users.VENUE_STAFF), search=tag, event=str(event.id))
 
     assert hits[tag].get("suitability", "no such field") is None
 
 
 @pytest.mark.story("11.1", ac=6)
-@pytest.mark.parametrize(
-    "user", [Users.VENUE_STAFF, Users.TECH_SUPPORT], ids=["venue-staff", "tech-support"]
-)
 def test_a_role_that_cannot_request_a_venue_is_not_told_whether_an_event_exists(
-    login_as, db: Session, user
+    login_as, db: Session
 ):
     """The event matters only to a coordinator, who is judged against it. For anyone else it is
     ignored, so an id that does not exist is no more an error than one that does, and the search
@@ -738,7 +732,7 @@ def test_a_role_that_cannot_request_a_venue_is_not_told_whether_an_event_exists(
     tag = _tag()
     make_venue(db, name=tag, capacity=10)
 
-    hits = _hits(login_as(user), search=tag, event=str(uuid.uuid4()))
+    hits = _hits(login_as(Users.VENUE_STAFF), search=tag, event=str(uuid.uuid4()))
 
     assert hits[tag].get("suitability", "no such field") is None
 

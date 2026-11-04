@@ -184,13 +184,8 @@ test.describe('the block-off controls on the Edit venue page', () => {
       await expect(closureRow(page).getByRole('button', { name: control })).toHaveCount(0)
     }
 
-    // Every other internal role sees the period and its reason, and no control.
-    for (const email of [
-      ACCOUNTS.coordinator,
-      ACCOUNTS.lead,
-      ACCOUNTS.techSupport,
-      ACCOUNTS.safetyOfficer,
-    ]) {
+    // Every other role that reads venues sees the period and its reason, and no control.
+    for (const email of [ACCOUNTS.coordinator, ACCOUNTS.lead, ACCOUNTS.safetyOfficer]) {
       const other = await browser
         .newContext({ timezoneId: 'Asia/Singapore' })
         .then((context) => context.newPage())
@@ -299,7 +294,7 @@ test.describe('the block-off controls on the Edit venue page', () => {
       expect(await contrastOf(day)).toBeGreaterThanOrEqual(4.5)
     }
 
-    for (const email of [ACCOUNTS.coordinator, ACCOUNTS.techSupport]) {
+    for (const email of [ACCOUNTS.coordinator, ACCOUNTS.safetyOfficer]) {
       const other = await browser
         .newContext({ timezoneId: 'Asia/Singapore' })
         .then((context) => context.newPage())

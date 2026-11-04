@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   VENUES_MANAGE: 'venues:manage',
   VENUE_UNAVAILABILITY_MANAGE: 'venue_unavailability:manage',
   VENUE_CALENDAR_READ: 'venue_calendar:read',
+  ROOM_LAYOUTS_READ: 'room_layouts:read',
   EVENTS_CREATE: 'events:create',
   EVENTS_READ_OWN: 'events:read_own',
   EVENTS_READ_ALL: 'events:read_all',
