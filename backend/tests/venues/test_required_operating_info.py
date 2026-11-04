@@ -3,7 +3,8 @@
 AC11 A venue's opening and closing times are required: a venue cannot be created without both, and
      an edit cannot clear them. A venue saved earlier without them keeps them unrecorded until it
      is edited. The server refuses a venue without them.
-AC12 Setup and teardown are required whole minutes of 0 or more; a new venue starts with both at 0.
+AC12 Setup and teardown are required whole minutes from 0 to 14 days; a new venue starts with both
+     at 0.
 AC13 (the form names each problem under its field) is proven by tests/e2e/venues.spec.ts.
 
 Sign-in and permission refusals are the same endpoints as AC4's, proven in test_venue_records.py.
@@ -15,6 +16,9 @@ import pytest
 
 from tests.support.factories import venue_payload
 from tests.support.seed import Venues
+
+# AC12: the longest setup or teardown, as for a booking's own (12.1 AC5).
+FOURTEEN_DAYS = 14 * 24 * 60
 
 
 # --- AC11: opening hours required ----------------------------------------------------------
@@ -103,3 +107,25 @@ def test_setup_and_teardown_cannot_be_cleared(venue_staff_client, field):
 @pytest.mark.parametrize("bad", [-1, 1.5, "ten"])
 def test_setup_and_teardown_take_whole_minutes_only(venue_staff_client, field, bad):
     assert venue_staff_client.post("/venues", json=venue_payload(**{field: bad})).status_code == 422
+
+
+@pytest.mark.story("8.3", ac=12)
+@pytest.mark.parametrize("field", ["setup_minutes_default", "teardown_minutes_default"])
+def test_setup_and_teardown_are_at_most_fourteen_days(venue_staff_client, field):
+    created = venue_staff_client.post("/venues", json=venue_payload(**{field: FOURTEEN_DAYS}))
+    edited = venue_staff_client.patch(f"/venues/{Venues.BOARDROOM}", json={field: FOURTEEN_DAYS})
+
+    assert created.status_code == 201, created.text
+    assert created.json()[field] == FOURTEEN_DAYS
+    assert edited.status_code == 200, edited.text
+
+
+@pytest.mark.story("8.3", ac=12)
+@pytest.mark.parametrize("field", ["setup_minutes_default", "teardown_minutes_default"])
+@pytest.mark.parametrize("too_long", [FOURTEEN_DAYS + 1, 2**31])
+def test_setup_and_teardown_over_fourteen_days_are_refused(venue_staff_client, field, too_long):
+    created = venue_staff_client.post("/venues", json=venue_payload(**{field: too_long}))
+    edited = venue_staff_client.patch(f"/venues/{Venues.BOARDROOM}", json={field: too_long})
+
+    assert created.status_code == 422
+    assert edited.status_code == 422

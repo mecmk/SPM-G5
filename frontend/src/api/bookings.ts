@@ -82,8 +82,8 @@ export interface Booking {
 export const SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
 
 /** f12.1.2 (story 12.1 AC5): the longest setup or teardown, 14 days in minutes - the longest an
- * event may run. Keep in step by hand with TURNAROUND_MAX_MINUTES in
- * backend/app/bookings/schemas.py. */
+ * event may run. A venue's own defaults have the same limit (story 8.3 AC12, fix f8.3.4). Keep in
+ * step by hand with TURNAROUND_MAX_MINUTES in backend/app/bookings/schemas.py. */
 export const TURNAROUND_MAX_MINUTES = 14 * 24 * 60
 
 /** Mirrors `BookingRequestIn`: one event, one venue. Everything else is copied server-side.

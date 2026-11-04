@@ -19,6 +19,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.bookings.schemas import TURNAROUND_MAX_MINUTES
 from app.venues.models import UnavailabilityReason, Venue, VenueUnavailabilityPeriod
 from app.venues.suitability import Suitability
 
@@ -150,7 +151,8 @@ class _OperatingHoursMixin(BaseModel):
 
 class VenueCreate(_OperatingHoursMixin):
     """AC1/AC11 (fix f8.3.4): name, location, capacity and the opening hours are the minimum;
-    setup and teardown default to 0 (AC12), and everything else is optional."""
+    setup and teardown default to 0 and are at most a booking's own limit, 14 days (AC12), and
+    everything else is optional."""
 
     name: str = Field(min_length=1, max_length=200)
     location: str = Field(min_length=1, max_length=500)
@@ -160,8 +162,10 @@ class VenueCreate(_OperatingHoursMixin):
     operating_hours_start: time
     operating_hours_end: time
     operating_notes: str | None = None
-    setup_minutes_default: PositiveWholeNumber = Field(default=0, ge=0)
-    teardown_minutes_default: PositiveWholeNumber = Field(default=0, ge=0)
+    setup_minutes_default: PositiveWholeNumber = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
+    teardown_minutes_default: PositiveWholeNumber = Field(
+        default=0, ge=0, le=TURNAROUND_MAX_MINUTES
+    )
     facilities: list[VenueFacilityIn] = Field(default_factory=list)
     layouts: list[VenueLayoutIn] = Field(default_factory=list)
     accessibility_features: list[VenueAccessibilityFeatureIn] = Field(default_factory=list)
@@ -194,8 +198,12 @@ class VenueUpdate(_OperatingHoursMixin):
     operating_hours_start: time | None = None
     operating_hours_end: time | None = None
     operating_notes: str | None = None
-    setup_minutes_default: PositiveWholeNumber | None = Field(default=None, ge=0)
-    teardown_minutes_default: PositiveWholeNumber | None = Field(default=None, ge=0)
+    setup_minutes_default: PositiveWholeNumber | None = Field(
+        default=None, ge=0, le=TURNAROUND_MAX_MINUTES
+    )
+    teardown_minutes_default: PositiveWholeNumber | None = Field(
+        default=None, ge=0, le=TURNAROUND_MAX_MINUTES
+    )
     status: str | None = Field(default=None, pattern="^(ACTIVE|WITHDRAWN)$")
     facilities: list[VenueFacilityIn] | None = None
     layouts: list[VenueLayoutIn] | None = None

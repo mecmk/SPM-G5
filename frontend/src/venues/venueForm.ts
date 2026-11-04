@@ -1,3 +1,4 @@
+import { TURNAROUND_MAX_MINUTES } from '../api/bookings'
 import type { FacilityReferenceItem, Venue, VenueInput, VenueStatus } from '../api/venues'
 import type { ErrorCode } from '../errors/registry'
 
@@ -121,6 +122,9 @@ export type OperatingField = 'opensAt' | 'closesAt' | 'setupMinutes' | 'teardown
 
 export type OperatingProblems = Record<OperatingField, ErrorCode | null>
 
+/** Story 8.3 AC12: the most digits a minutes box takes - enough for 14 days' 20160. */
+export const MINUTES_MAX_DIGITS = String(TURNAROUND_MAX_MINUTES).length
+
 /** Story 8.3 AC12: what a minutes box keeps of what was typed - its digits, nothing else. */
 export function digitsOnly(value: string): string {
   return value.replace(/\D/g, '')
@@ -140,9 +144,19 @@ export function operatingProblemsOf(form: VenueFormState): OperatingProblems {
         : isOutOfOrder
           ? 'VENUE_HOURS_OUT_OF_ORDER'
           : null,
-    setupMinutes: WHOLE_NUMBER.test(form.setupMinutes) ? null : 'VENUE_SETUP_REQUIRED',
-    teardownMinutes: WHOLE_NUMBER.test(form.teardownMinutes) ? null : 'VENUE_TEARDOWN_REQUIRED',
+    setupMinutes: minutesProblem(form.setupMinutes, 'VENUE_SETUP_REQUIRED', 'VENUE_SETUP_TOO_LONG'),
+    teardownMinutes: minutesProblem(
+      form.teardownMinutes,
+      'VENUE_TEARDOWN_REQUIRED',
+      'VENUE_TEARDOWN_TOO_LONG',
+    ),
   }
+}
+
+/** Story 8.3 AC12: a minutes box must hold whole minutes, at most a booking's own limit. */
+function minutesProblem(value: string, required: ErrorCode, tooLong: ErrorCode): ErrorCode | null {
+  if (!WHOLE_NUMBER.test(value)) return required
+  return Number(value) > TURNAROUND_MAX_MINUTES ? tooLong : null
 }
 
 export const OPERATING_FIELDS: OperatingField[] = [

@@ -9,7 +9,7 @@
  *
  * Story 8.3 AC11-AC13 (fix f8.3.4): a venue's operating information is required.
  * AC11 Opens and Closes are required: a venue without them is not sent, new or saved earlier.
- * AC12 Setup and teardown are required, start at 0 and take digits only.
+ * AC12 Setup and teardown are required, start at 0, take digits only and are at most 14 days.
  * AC13 each problem is named under its field; Closes cannot be picked before Opens.
  * The server's refusals are backend cases: backend/tests/venues/test_required_operating_info.py.
  *
@@ -350,6 +350,28 @@ test('8.3 AC12: setup and teardown take digits only', async ({ page }) => {
     await minutes.pressSequentially('a1-.e5+ ')
     await expect(minutes).toHaveValue('15')
   }
+})
+
+test('8.3 AC12: setup and teardown stop at five digits, and more than 14 days is named under the field', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  const setup = page.getByLabel('Setup (minutes)')
+  const teardown = page.getByLabel('Teardown (minutes)')
+
+  await setup.clear()
+  await setup.pressSequentially('1234567')
+  await expect(setup).toHaveValue('12345')
+
+  await teardown.fill('20161')
+  await teardown.blur()
+  await expect(teardown).toHaveAttribute('aria-invalid', 'true')
+  await expect(teardown).toHaveAccessibleDescription(
+    'Teardown can be at most 20160 minutes (14 days).',
+  )
+  await teardown.fill('20160')
+  await expect(teardown).not.toHaveAttribute('aria-invalid', 'true')
 })
 
 test('8.3 AC12: a setup left empty is named under Setup as soon as it is left', async ({

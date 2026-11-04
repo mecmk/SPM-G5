@@ -43,6 +43,8 @@ export type ErrorCode =
   | 'VENUE_HOURS_OUT_OF_ORDER'
   | 'VENUE_SETUP_REQUIRED'
   | 'VENUE_TEARDOWN_REQUIRED'
+  | 'VENUE_SETUP_TOO_LONG'
+  | 'VENUE_TEARDOWN_TOO_LONG'
   | 'VENUE_QUANTITY_INVALID'
   | 'VENUE_FACILITY_QUANTITY_REQUIRED'
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
@@ -310,6 +312,15 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   VENUE_TEARDOWN_REQUIRED: {
     title: 'Teardown time needed',
     message: 'Enter the teardown time in minutes, or 0 for none.',
+  },
+  /** Keep in step with TURNAROUND_MAX_MINUTES in src/api/bookings.ts. */
+  VENUE_SETUP_TOO_LONG: {
+    title: 'Setup too long',
+    message: 'Setup can be at most 20160 minutes (14 days).',
+  },
+  VENUE_TEARDOWN_TOO_LONG: {
+    title: 'Teardown too long',
+    message: 'Teardown can be at most 20160 minutes (14 days).',
   },
   VENUE_QUANTITY_INVALID: {
     title: 'Check facility quantities',

@@ -3,6 +3,7 @@ import { RequiredMark } from '../components/RequiredMark'
 import { ERROR_REGISTRY } from '../errors/registry'
 import {
   digitsOnly,
+  MINUTES_MAX_DIGITS,
   type OperatingField,
   type OperatingProblems,
   type VenueFormState,
@@ -19,7 +20,7 @@ interface OperatingInformationFieldsProps {
 /**
  * Story 8.3 AC11-AC13 (fix f8.3.4): the venue form's Operating information card. Opens, Closes,
  * Setup and Teardown are required and each names its own problem beneath it; the closing time
- * cannot be picked before the opening time, and the minutes boxes keep digits only.
+ * cannot be picked before the opening time, and the minutes boxes keep digits only, five at most.
  */
 export function OperatingInformationFields({
   form,
@@ -84,6 +85,7 @@ export function OperatingInformationFields({
           <input
             inputMode="numeric"
             pattern="[0-9]*"
+            maxLength={MINUTES_MAX_DIGITS}
             required
             value={form.setupMinutes}
             onChange={(e) => onChange('setupMinutes', digitsOnly(e.target.value))}
@@ -96,6 +98,7 @@ export function OperatingInformationFields({
           <input
             inputMode="numeric"
             pattern="[0-9]*"
+            maxLength={MINUTES_MAX_DIGITS}
             required
             value={form.teardownMinutes}
             onChange={(e) => onChange('teardownMinutes', digitsOnly(e.target.value))}
