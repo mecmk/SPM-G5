@@ -39,6 +39,7 @@ import {
   describeVenues,
   type RegistrationBadge,
 } from './registrationLabels'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** Story 18.4: the refusals that are about the event - not open any more (18.1 AC4/AC10), or not
  *  yet open, closed, full or already registered (AC2/AC6) - which the page shows where it says
@@ -218,6 +219,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
   const { setFullName } = useAuth()
   const { data: profile, error: profileError, setData: setProfile } = useLoaded(fetchProfile)
   const [profileRefreshError, setProfileRefreshError] = useState<string | null>(null)
+  const profileProblem = profileError ?? profileRefreshError
   const isProfileLoading = profile === null && profileError === null
   const [isConfirmingDetails, setIsConfirmingDetails] = useState(false)
   const [detailsError, setDetailsError] = useState<string | null>(null)
@@ -392,22 +394,10 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
         ← {backState?.fromLabel ?? UPCOMING_EVENTS_TITLE}
       </Link>
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      {loaded?.reason && (
-        <p role="alert" className="error">
-          {loaded.reason}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
+      {loaded?.reason && <ErrorToast message={loaded.reason} />}
       {isLoading && <LoadingState label="Loading the event…" />}
-      {(profileError ?? profileRefreshError) && (
-        <p role="alert" className="error">
-          {profileError ?? profileRefreshError}
-        </p>
-      )}
+      {profileProblem && <ErrorToast message={profileProblem} />}
 
       {/* AC10/AC11: once there is no page, only why is shown. A failed load keeps the event. */}
       {event !== null && (
@@ -475,6 +465,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
           isFirstTime={profile === null || !profile.has_confirmed_details}
           isBusy={isRegistering}
           error={detailsError}
+          onErrorDismiss={() => setDetailsError(null)}
           onConfirm={handleConfirmDetails}
           onCancel={handleCancelDetails}
         />
@@ -487,6 +478,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
           registration={registration}
           isBusy={isSavingGuests}
           error={guestsError}
+          onErrorDismiss={() => setGuestsError(null)}
           onSave={handleSaveGuests}
           onCancel={handleCancelGuests}
         />
@@ -586,11 +578,7 @@ function RegistrationPanel({
           {line}
         </p>
       ))}
-      {refusal !== null && (
-        <p role="alert" className="error">
-          {refusal}
-        </p>
-      )}
+      {refusal !== null && <ErrorToast message={refusal} />}
       {listing !== null && listing.state !== 'REGISTERED' && (
         <button
           type="button"

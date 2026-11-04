@@ -8,6 +8,7 @@ import { REGISTRATIONS_REPORT_PARAMS } from '../routes'
 import { formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { RegistrationListSection } from './RegistrationListSection'
+import { ErrorToast } from '../components/ErrorToast'
 
 /**
  * Story 18.3 - the registrations report. AC5: the organiser or assigned coordinator picks one of
@@ -30,11 +31,7 @@ export function RegistrationReportPage() {
         title="Registrations"
         subtitle="Who has registered for the events you organise or coordinate."
       />
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading your events…" />}
       {events !== null && events.length === 0 && (
         <EmptyState>You have no events taking registrations.</EmptyState>

@@ -134,6 +134,58 @@ test('8.3 AC3: capacity must be a positive whole number before anything is sent'
   expect(createCalls).toBe(0)
 })
 
+/** Whether any error toast on screen overlaps the element. Only a toast has a close button. */
+async function isUnderAToast(page: Page, element: Locator) {
+  const box = await element.boundingBox()
+  if (!box) throw new Error('The element is not on screen.')
+  const toasts = page
+    .getByRole('alert')
+    .filter({ has: page.getByRole('button', { name: 'Dismiss' }) })
+  for (const toast of await toasts.all()) {
+    const cover = await toast.boundingBox()
+    if (
+      cover &&
+      cover.x < box.x + box.width &&
+      box.x < cover.x + cover.width &&
+      cover.y < box.y + box.height &&
+      box.y < cover.y + cover.height
+    )
+      return true
+  }
+  return false
+}
+
+for (const width of [1280, 375]) {
+  test(`8.3 AC1: a refused Create venue leaves its focused button clear of the toasts at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await signIn(page, ACCOUNTS.venueStaff)
+    await page.goto('/venues/new')
+    const create = page.getByRole('button', { name: 'Create venue' })
+
+    await create.click()
+    await expect(page.getByRole('alert').filter({ hasText: 'Enter a name' })).toBeVisible()
+    await expect(create).toBeFocused()
+    expect(await isUnderAToast(page, create)).toBe(false)
+
+    // Leaving the button and coming back to it keeps it clear too.
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect(create).toBeFocused()
+    expect(await isUnderAToast(page, create)).toBe(false)
+  })
+}
+
+test('8.3 AC3: floor area takes one decimal point as it is typed', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  const floorArea = page.getByLabel('Floor area (m²)')
+
+  await floorArea.pressSequentially('1.2.3')
+  await expect(floorArea).toHaveValue('1.23')
+})
+
 test('8.3 AC11/AC12: only a counted facility asks how many, given before anything is sent', async ({
   page,
 }) => {

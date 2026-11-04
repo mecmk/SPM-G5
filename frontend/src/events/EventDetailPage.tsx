@@ -116,6 +116,7 @@ import { OrganiserBookingsSection } from './OrganiserBookingsSection'
 import { PointOfContactEditor } from './PointOfContactEditor'
 import { ReassignDialog } from './ReassignDialog'
 import { SafetyReviewSection } from './SafetyReviewSection'
+import { ErrorToast } from '../components/ErrorToast'
 
 const NOT_RECORDED = 'Not recorded'
 const NOT_YET_SCHEDULED = 'Not yet scheduled'
@@ -397,9 +398,7 @@ export function EventDetailPage() {
   if (error) {
     return (
       <div className="page">
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <ErrorToast message={error} />
       </div>
     )
   }
@@ -1029,9 +1028,10 @@ export function EventDetailPage() {
             )}
           </div>
           {canSeeRegistrations && event.registration_required && registrationsError && (
-            <p role="alert" className="error">
-              {registrationsError}
-            </p>
+            <ErrorToast
+              message={registrationsError}
+              onDismiss={() => setRegistrationsError(null)}
+            />
           )}
           {showsRegistrations && (
             <div className="cluster">
@@ -1133,11 +1133,7 @@ export function EventDetailPage() {
           </section>
         </div>
 
-        {canReadBooking && bookingError && (
-          <p role="alert" className="error">
-            {bookingError}
-          </p>
-        )}
+        {canReadBooking && bookingError && <ErrorToast message={bookingError} />}
 
         {canReadBooking && bookings && bookings.length > 0 && (
           <section className="card stack" aria-labelledby="venue-booking-heading">
@@ -1440,9 +1436,10 @@ export function EventDetailPage() {
                   />
                 </label>
                 {clarificationRequestError && (
-                  <p role="alert" className="error">
-                    {clarificationRequestError}
-                  </p>
+                  <ErrorToast
+                    message={clarificationRequestError}
+                    onDismiss={() => setClarificationRequestError(null)}
+                  />
                 )}
                 <div className="page-actions">
                   <button
@@ -1476,9 +1473,7 @@ export function EventDetailPage() {
                   />
                 </label>
                 {responseError && (
-                  <p role="alert" className="error">
-                    {responseError}
-                  </p>
+                  <ErrorToast message={responseError} onDismiss={() => setResponseError(null)} />
                 )}
                 <div className="page-actions">
                   <button
@@ -1512,6 +1507,7 @@ export function EventDetailPage() {
           tone="primary"
           isBusy={isApproving}
           error={approveError}
+          onErrorDismiss={() => setApproveError(null)}
           onConfirm={confirmApprove}
           onCancel={cancelApprove}
         >
@@ -1524,6 +1520,7 @@ export function EventDetailPage() {
           confirmLabel="Reject"
           isBusy={isRejecting}
           error={rejectError}
+          onErrorDismiss={() => setRejectError(null)}
           onConfirm={confirmReject}
           onCancel={cancelReject}
         >
@@ -1546,6 +1543,7 @@ export function EventDetailPage() {
           cancelLabel="Keep event"
           isBusy={isCancelling}
           error={cancelError}
+          onErrorDismiss={() => setCancelError(null)}
           errorId="cancel-event-error"
           onConfirm={confirmCancel}
           onCancel={keepEvent}
@@ -1572,6 +1570,7 @@ export function EventDetailPage() {
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
           error={withdrawError}
+          onErrorDismiss={() => setWithdrawError(null)}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >
@@ -1588,6 +1587,7 @@ export function EventDetailPage() {
           cancelLabel="Keep booking"
           isBusy={isCancellingBooking}
           error={cancelBookingError}
+          onErrorDismiss={() => setCancelBookingError(null)}
           errorId="cancel-booking-error"
           onConfirm={confirmCancelBooking}
           onCancel={keepBooking}

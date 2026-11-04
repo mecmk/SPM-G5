@@ -28,6 +28,7 @@ import { withdrawnWhenAndBy } from '../shared/equipmentStatus'
 import { isOpenedFrom, queueBackPath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
 import { EquipmentDecisionDialog } from './EquipmentDecisionDialog'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** The event page's back link returns to this request's page (story 7.1's back state). */
 function backToRequest(itemId: string): EventCardBackState {
@@ -116,11 +117,7 @@ export function EquipmentRequestDetailPage() {
         ← {back.label}
       </Link>
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading the equipment request…" />}
 
       {entry !== null && (

@@ -9,6 +9,8 @@ interface ChangeGuestsDialogProps {
   isBusy: boolean
   /** Why the guests were not saved, shown in the dialog so nothing typed is lost. */
   error: string | null
+  /** Called when the error\'s toast is closed, so the same refusal shows again next time. */
+  onErrorDismiss?: () => void
   onSave: (guests: GuestInput[]) => void
   onCancel: () => void
 }
@@ -25,6 +27,7 @@ export function ChangeGuestsDialog({
   registration,
   isBusy,
   error,
+  onErrorDismiss,
   onSave,
   onCancel,
 }: ChangeGuestsDialogProps) {
@@ -41,6 +44,7 @@ export function ChangeGuestsDialog({
       tone="primary"
       isBusy={isBusy}
       error={error}
+      onErrorDismiss={onErrorDismiss}
       onConfirm={handleSave}
       onCancel={onCancel}
       className="attendee-details-dialog"

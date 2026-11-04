@@ -15,6 +15,7 @@ import {
   RELEASE_BOOKINGS_LEGEND,
   bookingChoiceLabel,
 } from '../shared/safetyReview'
+import { ErrorToast } from '../components/ErrorToast'
 
 const OUTCOMES: { value: SafetyReviewOutcome; label: string }[] = [
   { value: 'APPROVED', label: 'Approve' },
@@ -166,9 +167,10 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
           ))}
         </fieldset>
         {showsOutcomeError && (
-          <p role="alert" className="error">
-            {ERROR_REGISTRY.SAFETY_OUTCOME_REQUIRED.message}
-          </p>
+          <ErrorToast
+            message={ERROR_REGISTRY.SAFETY_OUTCOME_REQUIRED.message}
+            onDismiss={() => setHasTriedToSubmit(false)}
+          />
         )}
 
         {isRequestingChanges && (
@@ -257,9 +259,11 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
               </fieldset>
             ))}
             {showsFindingError && (
-              <p id={FINDING_ERROR_ID} role="alert" className="error">
-                {ERROR_REGISTRY.SAFETY_FINDING_CHANGE_REQUIRED.message}
-              </p>
+              <ErrorToast
+                message={ERROR_REGISTRY.SAFETY_FINDING_CHANGE_REQUIRED.message}
+                id={FINDING_ERROR_ID}
+                onDismiss={() => setHasTriedToSubmit(false)}
+              />
             )}
             <button
               type="button"
@@ -272,11 +276,7 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
           </div>
         )}
 
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
+        {error && <ErrorToast message={error} onDismiss={() => setError(null)} />}
         <div>
           <button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Recording…' : 'Record decision'}

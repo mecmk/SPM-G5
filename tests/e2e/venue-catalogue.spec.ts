@@ -157,7 +157,8 @@ test('8.1 AC6: a capacity of 0 or below is no limit, typed or in the address', a
 
   await filters.getByLabel('Capacity to').fill('20')
   await expectListed(page, ['Boardroom 3.4'], ['Grand Hall'])
-  await filters.getByLabel('Capacity to').fill('-5')
+  // A sign cannot be typed, so 0 is the lowest a person can enter; -5 is still tried in the address.
+  await filters.getByLabel('Capacity to').fill('0')
   await expectListed(page, IN_SERVICE, [])
   await expect(page).not.toHaveURL(/capacity(_max)?=/)
   await expect(filters.getByRole('alert')).toHaveCount(0)

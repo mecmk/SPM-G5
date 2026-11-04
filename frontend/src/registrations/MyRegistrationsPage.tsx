@@ -14,6 +14,7 @@ import {
   STANDING_BADGES,
   describeActiveRegistration,
 } from './registrationLabels'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** Story 18.2 AC9 (fix f18.2.1): an event's page opened from here links back here. */
 const BACK_TO_MY_REGISTRATIONS: EventCardBackState = {
@@ -65,11 +66,7 @@ export function MyRegistrationsPage() {
         subtitle="The events you have registered for, and where you stand at each."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading your registrations…" />}
 
       {registrations !== null && registrations.length === 0 && (

@@ -299,7 +299,7 @@ const SUITABILITY_PATH = (venueId: string) => `/venues/${venueId}/suitability`
 const BOOKINGS_PATH = '/bookings'
 // As errors/registry.ts words BOOKING_JUSTIFICATION_REQUIRED (the request is never sent).
 const JUSTIFICATION_REQUIRED =
-  'Give a justification for requesting a venue that does not suit the event.'
+  'Give a justification for this unsuitable venue.'
 
 /** Story 12.5: a venue requirement takes one request at a time, so E5's real send has an event
  * of its own, shaped like Briefing. Were it Briefing's, the AC7 cases' real sends would be

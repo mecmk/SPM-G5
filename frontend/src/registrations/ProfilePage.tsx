@@ -8,6 +8,7 @@ import { useLoaded } from '../shared/useLoaded'
 import { AttendeeDetailsFields } from './AttendeeDetailsFields'
 import { detailsFrom } from './attendeeDetails'
 import { useAttendeeDetailsForm } from './useAttendeeDetailsForm'
+import { ErrorToast } from '../components/ErrorToast'
 
 interface ProfileFormProps {
   profile: Profile
@@ -56,11 +57,7 @@ function ProfileForm({ profile, onSaved }: ProfileFormProps) {
       <p className="small muted">Your email is set by ConnectSphere and cannot be changed here.</p>
       <form className="stack" aria-label="Your details" noValidate onSubmit={handleSave}>
         <AttendeeDetailsFields form={form} />
-        {saveError && (
-          <p role="alert" className="error">
-            {saveError}
-          </p>
-        )}
+        {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
         <div className="page-actions">
           <button type="submit" disabled={isSaving}>
             {isSaving ? 'Saving…' : 'Save details'}
@@ -86,11 +83,7 @@ export function ProfilePage() {
         title="My profile"
         subtitle="Your details, filled in for you whenever you register for an event."
       />
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading your profile…" />}
       {profile !== null && <ProfileForm profile={profile} onSaved={setProfile} />}
     </div>

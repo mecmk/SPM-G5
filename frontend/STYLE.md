@@ -90,27 +90,30 @@ author's call. Never flatten a `taste` into a "must".
 
 ## Control flow and failure
 
-- `blocking` — **Render every API error as `<p role="alert" className="error">` with the text from
+- `blocking` — **Render every API error as `<ErrorToast message={error} />` with the text from
   `formatApiError`.**
-  `role="alert"` is not decoration: e2e specs locate the message with
-  `getByRole('alert')`, so a visually identical `<p className="error">` passes review, renders
-  fine, and fails the suite.
+  `ErrorToast` (`src/components/ErrorToast.tsx`) shows it as a toast in the bottom-right corner,
+  and it stays there until its close button is pressed, because the error may still hold. It
+  renders `role="alert"`, and that is not decoration: e2e specs locate the message with `getByRole('alert')`, so a hand-made toast or a
+  `<p className="error">` passes review, renders fine, and fails the suite. It is rendered where
+  the error belongs, not portalled, so a spec can still find it inside its dialog or section. An
+  error the page holds in its own state passes `onDismiss` to clear it (`onErrorDismiss` on a
+  `ConfirmDialog`): a closed toast stays closed while its message is unchanged, so without it the
+  same failure a second time shows nothing. A load error from `useLoaded` needs none, as a reload
+  clears it.
 
   ```tsx
   // Good
-  {error && (
-    <p role="alert" className="error">
-      {error}
-    </p>
-  )}
+  {error && <ErrorToast message={error} />}
+  {sendError && <ErrorToast message={sendError} onDismiss={() => setSendError(null)} />}
 
-  // Bad — invisible to getByRole('alert')
+  // Bad — invisible to getByRole('alert'), and stays on the page
   {error && <p className="error">{error}</p>}
   ```
 
-  _`blocking` · exemplars `VenueDetailPage`, `LoginPage`, `VenueFormPage`; depended on by
-  every e2e spec that asserts an error with `getByRole('alert')`, `tests/e2e/auth.spec.ts`
-  among them_
+  _`blocking` · exemplars `VenueDetailPage`, `LoginPage`, `BookingRequestFormPage`; depended on
+  by every e2e spec that asserts an error with `getByRole('alert')`, `tests/e2e/auth.spec.ts`
+  among them; once violated, see Standing divergences_
 
 - `expected` — **Never leave a `console.log` in committed code.** If something needs surfacing, it
   needs surfacing to the user through the error rule above.
@@ -231,7 +234,7 @@ author's call. Never flatten a `taste` into a "must".
   A single spinner-or-content branch makes "no venues yet" look like a failure.
 
   ```tsx
-  {error && <p role="alert" className="error">{error}</p>}
+  {error && <ErrorToast message={error} />}
   {result === null && !error && <LoadingState label="Loading venues…" />}
   {result !== null && result.venues.length === 0 && (
     <EmptyState>No venues are currently in service.</EmptyState>
@@ -351,6 +354,7 @@ in an unrelated PR.**
 | Boolean `is`/`can`/`has` prefix                     | none left: `loading`, `submitting` and `saving` were renamed                                                                                                                                                                                                                                                                         | resolved                                                                                                                                                                                                                                                                      |
 | Components use named exports                        | `App` in `src/App.tsx`                                                                                                                                                                                                                                                                                                               | licensed exception — conventional default export for the Vite entry point                                                                                                                                                                                                     |
 | API error text comes from `formatApiError`          | `showSaveRefusal` in `src/events/EventRequestFormPage.tsx`, for a refusal whose `loc` names a venue requirement field (story 2.7 AC11); `describeRefusal` in `src/events/ChangeRequestsSection.tsx`, for the same kind of refusal of a proposed change (story 19.1 AC4)                                                              | licensed exception — it shows the backend's own `msg` for that field, which `formatApiError` would prefix with the field path (`venue_requirements.1.ends_at: …`); every other error still goes through `formatApiError`                                                      |
+| API errors are an `ErrorToast`                      | `SignInLockedAlert` in `src/auth/`, and the preview refusal in `VenueUnavailabilitySection` (`src/venues/`)                                                                                                                                                                                                                          | licensed exception — each stays a `<p role="alert" className="error">` on the page: the sign-in lock counts down to when the user may try again, and the preview refusal holds its own "Check again" button, so neither can be closed                                         |
 | Guard every fetching effect with a `cancelled` flag | `ServerNotifications` in `src/notifications/ServerNotificationProvider.tsx` guards its late answers with an `isMounted` ref, not a flag per effect                                                                                                                                                                                   | licensed exception (story 20.2) — `refresh()` is also called from the bell when the panel opens, outside any effect, so a flag local to one effect cannot reach it; the ref is cleared in one cleanup and the rule's purpose is met: no state is set after the frame has gone |
 
 ## Maintaining this file

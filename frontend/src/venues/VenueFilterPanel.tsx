@@ -5,6 +5,8 @@ import { capacityLimit, searchText, type VenueSearch } from '../routes'
 import { inputToInstant, instantToInput } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
 import { countFilters } from './useVenueSearch'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits } from '../shared/inputGuards'
 
 /** How long typing must pause before a typed filter goes into the address (story 8.1 AC4). */
 const TYPING_PAUSE_MS = 400
@@ -285,11 +287,7 @@ export function VenueFilterPanel({
           <span className="visually-hidden"> filters</span>
         </button>
       </div>
-      {error && (
-        <p role="alert" className="error filter-panel-alert">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       <div id={bodyId} className="filter-panel-body">
         <div className="filter-section">
           <label>
@@ -310,6 +308,7 @@ export function VenueFilterPanel({
             <label>
               <span className="visually-hidden">Capacity from</span>
               <input
+                onBeforeInput={refuseNonDigits}
                 type="number"
                 min={1}
                 step={1}
@@ -327,6 +326,7 @@ export function VenueFilterPanel({
             <label>
               <span className="visually-hidden">Capacity to</span>
               <input
+                onBeforeInput={refuseNonDigits}
                 type="number"
                 min={1}
                 step={1}
@@ -352,6 +352,7 @@ export function VenueFilterPanel({
               To
               <input
                 type="datetime-local"
+                min={period.value.from || undefined}
                 value={period.value.to}
                 onChange={(e) => period.setValue({ ...period.value, to: e.target.value })}
               />
@@ -360,9 +361,7 @@ export function VenueFilterPanel({
         </FilterSection>
         {referenceError && (
           <div className="filter-section">
-            <p role="alert" className="error">
-              {referenceError}
-            </p>
+            <ErrorToast message={referenceError} />
           </div>
         )}
         {reference && (

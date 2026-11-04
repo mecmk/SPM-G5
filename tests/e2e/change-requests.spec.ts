@@ -376,7 +376,7 @@ test('19.1 AC4: a repeated equipment type or a requirement under 1 person is not
   await section.getByLabel(`Requirement ${added} number of people`).fill('0')
   await section.getByRole('button', { name: 'Send change request' }).click()
   await expect(
-    section.getByText('Give every venue requirement a number of people, as a whole number from 1.'),
+    section.getByText('Give every venue requirement a whole number of people, from 1.'),
   ).toBeVisible()
   expect(raiseCalls).toBe(0)
 })

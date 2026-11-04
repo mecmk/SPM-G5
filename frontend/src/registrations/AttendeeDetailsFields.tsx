@@ -3,6 +3,7 @@ import { DIETARY_REQUIREMENTS_MAX_LENGTH, FULL_NAME_MAX_LENGTH } from '../api/re
 import { RequiredMark } from '../components/RequiredMark'
 import { PHONE_MAX_LENGTH } from '../shared/phone'
 import type { AttendeeDetailsForm } from './useAttendeeDetailsForm'
+import { refuseNonPhone } from '../shared/inputGuards'
 
 interface AttendeeDetailsFieldsProps {
   /** The form the fields show and change: its details, their problems and where focus goes. */
@@ -56,6 +57,7 @@ export function AttendeeDetailsFields({ form }: AttendeeDetailsFieldsProps) {
       <label>
         <span id={phoneLabelId}>Phone number</span> <RequiredMark />
         <input
+          onBeforeInput={refuseNonPhone}
           ref={phoneInput}
           aria-labelledby={phoneLabelId}
           type="tel"

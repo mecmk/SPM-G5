@@ -31,6 +31,7 @@ import { useLoaded } from '../shared/useLoaded'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
 import { ChangeRequestDecision } from './ChangeRequestDecision'
 import { changeTitle, STATUS_LABELS, VIEW_EVENT, YOUR_REASON } from './changeRequestValues'
+import { ErrorToast } from '../components/ErrorToast'
 
 type TabKey = 'ALL' | ChangeRequestStatus
 
@@ -101,16 +102,8 @@ export function MyChangeRequestsPage() {
         subtitle="The changes you have asked for on your events, and where each one stands."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      {referencesError && (
-        <p role="alert" className="error">
-          {referencesError}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
+      {referencesError && <ErrorToast message={referencesError} />}
 
       <div className="stack">
         <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />

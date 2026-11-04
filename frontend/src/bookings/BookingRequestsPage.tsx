@@ -68,6 +68,7 @@ import { useLoaded } from '../shared/useLoaded'
 import { holdExpiryRefusal } from './holdExpiry'
 import { venueStaffOutsideHoursNotice } from './turnaround'
 import { TurnaroundAgainstDefaults } from './TurnaroundAgainstDefaults'
+import { ErrorToast } from '../components/ErrorToast'
 
 /** Story 13.1.2 AC4: requests per numbered page. */
 const QUEUE_PAGE_SIZE = 10
@@ -356,11 +357,7 @@ export function BookingRequestsPage() {
     <div className="page page-wide">
       <PageHeader title={PAGE_TITLE} subtitle={tabHint} />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading booking requests…" />}
 
       {queue !== null && (
@@ -566,6 +563,7 @@ export function BookingRequestsPage() {
           tone="primary"
           isBusy={isApproving}
           error={approveError}
+          onErrorDismiss={() => setApproveError(null)}
           onConfirm={confirmApprove}
           onCancel={cancelApprove}
         >
@@ -606,6 +604,7 @@ export function BookingRequestsPage() {
           confirmLabel="Reject"
           isBusy={isRejecting}
           error={rejectError}
+          onErrorDismiss={() => setRejectError(null)}
           onConfirm={confirmReject}
           onCancel={cancelReject}
         >

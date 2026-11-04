@@ -9,6 +9,7 @@ import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_CATALOGUE_TITLE, equipmentTypePath } from '../routes'
 import { isCardOpenClick } from '../shared/cardClick'
 import { useLoaded } from '../shared/useLoaded'
+import { ErrorToast } from '../components/ErrorToast'
 import { describeOutRange, describeUnitsOut, hasStarted } from './outOfServiceLabels'
 
 async function loadCatalogue() {
@@ -68,11 +69,7 @@ export function EquipmentCataloguePage() {
         subtitle="Each equipment type's stock, and how many units are out of service now."
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading the catalogue…" />}
 
       {types !== null && types.length === 0 && (

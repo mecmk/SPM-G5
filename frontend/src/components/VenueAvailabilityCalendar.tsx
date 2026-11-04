@@ -10,6 +10,7 @@ import {
   UNAVAILABLE_LABEL,
   type DayClosure,
 } from './venueCalendarDays'
+import { ErrorToast } from './ErrorToast'
 
 // Story 9.1 AC2: a pending request that holds the venue has a style of its own.
 const CALENDAR_LEGEND: CalendarLegendItem[] = [
@@ -90,11 +91,7 @@ export function VenueAvailabilityCalendar({
 
   return (
     <>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {/* Always rendered - only the text inside changes - so this can never itself cause the
           calendar below it to shift (f9.1.1). role="status" announces the change to assistive
           tech the way the LoadingState it replaced did. */}

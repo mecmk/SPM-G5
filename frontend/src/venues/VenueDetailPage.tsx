@@ -14,6 +14,7 @@ import { describeCoveredRequirement, isBooked, requirementName } from '../shared
 import { AVAILABILITY_LABEL } from './blockOffLabels'
 import { useRequestingEvent } from './useRequestingEvent'
 import { VenuePictureViewer } from './VenuePictureViewer'
+import { ErrorToast } from '../components/ErrorToast'
 
 const STATUS_LABELS: Record<Venue['status'], string> = {
   ACTIVE: 'In service',
@@ -75,9 +76,7 @@ export function VenueDetailPage() {
   if (error) {
     return (
       <div className="page">
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <ErrorToast message={error} />
       </div>
     )
   }
@@ -95,11 +94,7 @@ export function VenueDetailPage() {
       <Link to={`${VENUE_CATALOGUE_PATH}${location.search}`} className="back-link">
         ← Venue catalogue
       </Link>
-      {eventError && (
-        <p role="alert" className="error">
-          {eventError}
-        </p>
-      )}
+      {eventError && <ErrorToast message={eventError} />}
       {requestingEvent && (
         <div className="page-header actions-only">
           <div className="page-actions">

@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { SafetyFindingsList } from '../components/SafetyFindingsList'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatDateTime } from '../shared/format'
+import { ErrorToast } from '../components/ErrorToast'
 
 interface SafetyReviewSectionProps {
   eventId: string
@@ -98,11 +99,7 @@ export function SafetyReviewSection({
   return (
     <section className="card stack" aria-labelledby="safety-review-heading">
       <h2 id="safety-review-heading">Safety review</h2>
-      {loadError && (
-        <p role="alert" className="error">
-          {loadError}
-        </p>
-      )}
+      {loadError && <ErrorToast message={loadError} />}
       {safety !== null && (
         <>
           {review === null ? (
@@ -154,9 +151,7 @@ export function SafetyReviewSection({
             )}
 
           {actionError && unchangedWarning === null && (
-            <p role="alert" className="error">
-              {actionError}
-            </p>
+            <ErrorToast message={actionError} onDismiss={() => setActionError(null)} />
           )}
         </>
       )}
@@ -168,6 +163,7 @@ export function SafetyReviewSection({
           tone="primary"
           isBusy={isBusy}
           error={actionError}
+          onErrorDismiss={() => setActionError(null)}
           onConfirm={handleSubmitAnyway}
           onCancel={handleCancelWarning}
         >

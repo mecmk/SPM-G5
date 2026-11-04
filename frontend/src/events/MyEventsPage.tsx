@@ -12,6 +12,7 @@ import { EVENT_NEW_PATH, EVENTS_MINE_PATH, eventEditPath, eventPath } from '../r
 import { eventStatusTab, EVENT_STATUS_TABS, type EventStatusTabKey } from '../shared/eventStatus'
 import { formatDateTime, formatSchedule } from '../shared/format'
 import { useLoaded } from '../shared/useLoaded'
+import { ErrorToast } from '../components/ErrorToast'
 
 const PROPOSED_DATE_LABEL = 'Proposed date: '
 const BACK_TO_MY_EVENTS: EventCardBackState = { from: EVENTS_MINE_PATH, fromLabel: 'My events' }
@@ -119,11 +120,7 @@ export function MyEventsPage() {
         }
       />
 
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+      {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading your event requests…" />}
 
       {list !== null && list.items.length === 0 && (
@@ -160,9 +157,7 @@ export function MyEventsPage() {
           )}
 
           {loadMoreError && (
-            <p role="alert" className="error">
-              {loadMoreError}
-            </p>
+            <ErrorToast message={loadMoreError} onDismiss={() => setLoadMoreError(null)} />
           )}
           {list.items.length < list.total && (
             <div className="load-more">

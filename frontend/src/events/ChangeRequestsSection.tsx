@@ -29,6 +29,7 @@ import {
   inputToInstant,
   instantToInput,
   shortReference,
+  nowAsInput,
 } from '../shared/format'
 import { ChangeRequestDecisionDialog } from './ChangeRequestDecisionDialog'
 import { ChangeRequestChanges } from './ChangeRequestChanges'
@@ -44,7 +45,13 @@ import {
   STATUS_LABELS,
   YOUR_REASON,
 } from './changeRequestValues'
-import { LAST_VENUE_REQUIREMENT_HINT } from './eventRequestForm'
+import {
+  getLatestEndInput,
+  getLatestStartInput,
+  LAST_VENUE_REQUIREMENT_HINT,
+} from './eventRequestForm'
+import { ErrorToast } from '../components/ErrorToast'
+import { refuseNonDigits } from '../shared/inputGuards'
 
 /** AC12 (team decision on the review of #125): why an approved event offers no change request any
  *  more - the backend's `CLOSED_BEFORE_SETUP_MESSAGE`, word for word. */
@@ -340,11 +347,31 @@ export function ChangeRequestsSection({
     setEquipment((rows) => rows.filter((row) => row.key !== key))
   }
 
-  /** AC4: the checks made here before sending; the server re-checks all of them and more. */
-  function findProblem(): FormProblem | null {
+  /**
+   * AC4: the checks made here before sending, one problem for each input that has one; the server
+   * re-checks all of them and more.
+   */
+  function findProblems(): FormProblem[] {
+    const valueProblem = findValueProblem()
+    const problems: FormProblem[] = []
     if (field === '') {
-      return { target: 'field', message: ERROR_REGISTRY.CHANGE_REQUEST_FIELD_REQUIRED.message }
+      problems.push({
+        target: 'field',
+        message: ERROR_REGISTRY.CHANGE_REQUEST_FIELD_REQUIRED.message,
+      })
     }
+    if (valueProblem !== null) problems.push(valueProblem)
+    if (reason.trim() === '') {
+      problems.push({
+        target: 'reason',
+        message: ERROR_REGISTRY.CHANGE_REQUEST_REASON_REQUIRED.message,
+      })
+    }
+    return problems
+  }
+
+  /** The first problem with the proposed value, or null; fixing it often fixes the next. */
+  function findValueProblem(): FormProblem | null {
     if (field === 'schedule') {
       if (startsAt === '' || endsAt === '') {
         return { target: 'value', message: ERROR_REGISTRY.EVENT_DATE_INCOMPLETE.message }
@@ -377,9 +404,6 @@ export function ChangeRequestsSection({
         return { target: 'value', message: ERROR_REGISTRY.EVENT_QUANTITY_INVALID.message }
       }
     }
-    if (reason.trim() === '') {
-      return { target: 'reason', message: ERROR_REGISTRY.CHANGE_REQUEST_REASON_REQUIRED.message }
-    }
     return null
   }
 
@@ -404,8 +428,8 @@ export function ChangeRequestsSection({
   async function handleSend(submitted: FormEvent<HTMLFormElement>) {
     submitted.preventDefault()
     setIsChecked(true)
-    const found = findProblem()
-    if (found !== null) {
+    const [found] = findProblems()
+    if (found !== undefined) {
       if (found.target === 'reason') reasonInput.current?.focus()
       else if (found.target === 'field') fieldSelect.current?.focus()
       else valueInput.current?.focus()
@@ -482,12 +506,13 @@ export function ChangeRequestsSection({
   }
 
   // Worked out from what is typed now, so it clears as soon as it is fixed once Send was pressed.
-  const problem = isChecked ? findProblem() : null
-  const problemId = `${ids}-problem`
+  const problems = isChecked ? findProblems() : []
+  const problemId = (target: FormProblem['target']) => `${ids}-problem-${target}`
+  const hasProblem = (target: FormProblem['target']) =>
+    problems.some((problem) => problem.target === target)
   const describedBy = (target: FormProblem['target']) =>
-    problem?.target === target ? problemId : undefined
-  const isInvalid = (target: FormProblem['target']) =>
-    problem?.target === target ? true : undefined
+    hasProblem(target) ? problemId(target) : undefined
+  const isInvalid = (target: FormProblem['target']) => (hasProblem(target) ? true : undefined)
   // Story 2.7 AC18 (fix f2.7.4): the only row left cannot be removed, and a hint says why.
   const isOnlyRequirement = requirements.length === 1
   const lastRequirementHintId = `${ids}-last-requirement`
@@ -510,16 +535,8 @@ export function ChangeRequestsSection({
           {canDecide && ' Approve or reject each pending one.'}
         </p>
       </div>
-      {listError && (
-        <p role="alert" className="error">
-          {listError}
-        </p>
-      )}
-      {referencesError && (
-        <p role="alert" className="error">
-          {referencesError}
-        </p>
-      )}
+      {listError && <ErrorToast message={listError} onDismiss={() => setListError(null)} />}
+      {referencesError && <ErrorToast message={referencesError} />}
       {requests !== null && requests.length === 0 && (
         <p className="muted">No change requests for this event.</p>
       )}
@@ -618,11 +635,7 @@ export function ChangeRequestsSection({
         </ul>
       )}
 
-      {requestWindowError && (
-        <p role="alert" className="error">
-          {requestWindowError}
-        </p>
-      )}
+      {requestWindowError && <ErrorToast message={requestWindowError} />}
       {requestWindow?.is_open === false && <p className="form-hint">{CLOSED_NOTE}</p>}
       {requestWindow?.is_open && requestWindow.closes_at && (
         <p className="form-hint">
@@ -674,6 +687,8 @@ export function ChangeRequestsSection({
                 <input
                   ref={valueInput}
                   type="datetime-local"
+                  min={nowAsInput()}
+                  max={getLatestStartInput()}
                   value={startsAt}
                   aria-invalid={isInvalid('value')}
                   aria-describedby={describedBy('value')}
@@ -685,7 +700,8 @@ export function ChangeRequestsSection({
                 <input
                   type="datetime-local"
                   value={endsAt}
-                  min={startsAt || undefined}
+                  min={startsAt || nowAsInput()}
+                  max={startsAt ? getLatestEndInput(startsAt) : undefined}
                   aria-invalid={isInvalid('value')}
                   aria-describedby={describedBy('value')}
                   onChange={(e) => setEndsAt(e.target.value)}
@@ -699,6 +715,7 @@ export function ChangeRequestsSection({
               <label>
                 New expected attendance
                 <input
+                  onBeforeInput={refuseNonDigits}
                   ref={valueInput}
                   type="number"
                   inputMode="numeric"
@@ -734,6 +751,7 @@ export function ChangeRequestsSection({
                     <label>
                       Requirement {index + 1} number of people
                       <input
+                        onBeforeInput={refuseNonDigits}
                         type="number"
                         inputMode="numeric"
                         min={1}
@@ -806,6 +824,7 @@ export function ChangeRequestsSection({
                   <label>
                     Item {index + 1} quantity
                     <input
+                      onBeforeInput={refuseNonDigits}
                       type="number"
                       inputMode="numeric"
                       min={1}
@@ -845,16 +864,12 @@ export function ChangeRequestsSection({
               onChange={(e) => setReason(e.target.value)}
             />
           </label>
-          {problem !== null && (
-            <span id={problemId} className="field-error">
+          {problems.map((problem) => (
+            <span key={problem.target} id={problemId(problem.target)} className="field-error">
               {problem.message}
             </span>
-          )}
-          {sendError && (
-            <p role="alert" className="error">
-              {sendError}
-            </p>
-          )}
+          ))}
+          {sendError && <ErrorToast message={sendError} onDismiss={() => setSendError(null)} />}
           <div className="page-actions">
             <button type="submit" disabled={isSending}>
               {isSending ? 'Sending…' : 'Send change request'}
@@ -884,6 +899,7 @@ export function ChangeRequestsSection({
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
           error={withdrawError}
+          onErrorDismiss={() => setWithdrawError(null)}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >
