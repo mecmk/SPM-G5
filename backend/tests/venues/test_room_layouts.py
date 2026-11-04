@@ -31,10 +31,10 @@ AC8  A layout that any venue, venue requirement or booking request uses cannot b
      Booking requests count whatever their status, since they keep their record. The message
      says which of these use the layout, and it can still be renamed.
 AC9  Only Venue Staff can add, change or delete layouts. Event Coordinators, the Event
-     Coordinator Lead, Technical Support Staff and Safety Officers can open the Room layouts page
-     and see the list, without Add, Edit or Delete. Event Organisers see layouts only as choices
-     in their venue requirements (2.7). The server refuses a change from anyone but Venue Staff,
-     including one sent outside the app.
+     Coordinator Lead, Safety Officers and Event Organisers can open the Room layouts page and
+     see the list, without Add, Edit or Delete. Technical Support Staff and Attendees cannot open
+     it (f8.6.1). The server refuses a change from anyone but Venue Staff, including one sent
+     outside the app.
 AC10 If two Venue Staff save the same name at the same moment, whether adding or renaming, only
      one is saved; the other is told the name is already in use.
 AC11 If a layout is deleted while a venue's form is open with that layout ticked, saving the
@@ -647,10 +647,10 @@ def test_theatre_names_every_place_that_uses_it_and_can_still_be_renamed(venue_s
 @pytest.mark.story("8.6", ac=9)
 @pytest.mark.parametrize(
     "user",
-    [Users.COORDINATOR, Users.LEAD, Users.TECH_SUPPORT, Users.SAFETY_OFFICER],
+    [Users.COORDINATOR, Users.LEAD, Users.SAFETY_OFFICER, Users.ORGANISER],
     ids=lambda user: user.role,
 )
-def test_other_staff_can_read_the_list(login_as, user):
+def test_other_roles_can_read_the_list(login_as, user):
     response = login_as(user).get("/venues/layouts")
 
     assert response.status_code == 200, response.text
@@ -658,8 +658,8 @@ def test_other_staff_can_read_the_list(login_as, user):
 
 
 @pytest.mark.story("8.6", ac=9)
-@pytest.mark.parametrize("user", [Users.ORGANISER, Users.ATTENDEE], ids=lambda user: user.role)
-def test_organisers_and_attendees_cannot_read_the_list(login_as, user):
+@pytest.mark.parametrize("user", [Users.TECH_SUPPORT, Users.ATTENDEE], ids=lambda user: user.role)
+def test_technical_support_and_attendees_cannot_read_the_list(login_as, user):
     assert login_as(user).get("/venues/layouts").status_code == 403
 
 

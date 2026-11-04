@@ -136,14 +136,14 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: PERMISSIONS.BOOKINGS_DECIDE,
         story: '13.1',
       },
-      // Story 8.6 AC1/AC9: every role that reads venues sees the room layouts; Venue Staff also
-      // add, rename and delete them there.
+      // Story 8.6 AC1/AC9: every role that reads venues, and Event Organisers (f8.6.1), see the
+      // room layouts; Venue Staff also add, rename and delete them there.
       {
         to: ROOM_LAYOUTS_PATH,
         label: 'Room layouts',
         description: 'The room layouts venues can offer and events can ask for.',
         icon: 'grid',
-        permission: PERMISSIONS.VENUES_READ,
+        permission: PERMISSIONS.ROOM_LAYOUTS_READ,
         story: '8.6',
       },
       // c9 (1.2 AC5): no Venue Schedule section. The availability calendar is on each venue's
