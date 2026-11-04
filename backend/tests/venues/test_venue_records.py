@@ -34,7 +34,7 @@ def test_venue_can_be_created_with_minimum_fields(venue_staff_client, db: Sessio
     assert body["status"] == "ACTIVE"
     assert body["created_by_id"] == str(Users.VENUE_STAFF.id)
     # optional characteristics are "not recorded", not invented
-    assert body["operating_hours_start"] is None
+    assert body["description"] is None
     assert (
         body["facilities"] == [] and body["layouts"] == [] and body["accessibility_features"] == []
     )
@@ -100,7 +100,7 @@ def test_unknown_characteristic_code_is_refused(venue_staff_client):
 
 @pytest.mark.story("8.3", ac=1)
 def test_operating_hours_must_be_a_valid_pair(venue_staff_client):
-    only_start = venue_payload(operating_hours_start="09:00")
+    only_start = venue_payload(operating_hours_start="09:00", operating_hours_end=None)
     backwards = venue_payload(operating_hours_start="18:00", operating_hours_end="09:00")
     assert venue_staff_client.post("/venues", json=only_start).status_code == 422
     assert venue_staff_client.post("/venues", json=backwards).status_code == 422
@@ -145,10 +145,10 @@ def test_characteristic_lists_are_replaced_when_supplied(venue_staff_client):
 def test_update_can_clear_optional_characteristics(venue_staff_client):
     response = venue_staff_client.patch(
         f"/venues/{Venues.BOARDROOM}",
-        json={"operating_hours_start": None, "operating_hours_end": None, "facilities": []},
+        json={"operating_notes": None, "facilities": []},
     )
     assert response.status_code == 200
-    assert response.json()["operating_hours_start"] is None
+    assert response.json()["operating_notes"] is None
     assert response.json()["facilities"] == []
 
 

@@ -38,9 +38,11 @@ export type ErrorCode =
   | 'VENUE_LOCATION_REQUIRED'
   | 'VENUE_CAPACITY_INVALID'
   | 'VENUE_FLOOR_AREA_INVALID'
-  | 'VENUE_HOURS_INCOMPLETE'
+  | 'VENUE_OPENS_REQUIRED'
+  | 'VENUE_CLOSES_REQUIRED'
   | 'VENUE_HOURS_OUT_OF_ORDER'
-  | 'VENUE_TURNAROUND_INVALID'
+  | 'VENUE_SETUP_REQUIRED'
+  | 'VENUE_TEARDOWN_REQUIRED'
   | 'VENUE_QUANTITY_INVALID'
   | 'VENUE_FACILITY_QUANTITY_REQUIRED'
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
@@ -288,17 +290,26 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check the floor area',
     message: 'Floor area must be above 0, with up to 2 decimals.',
   },
-  VENUE_HOURS_INCOMPLETE: {
-    title: 'Check the operating hours',
-    message: 'Enter both opening and closing times, or neither.',
+  /** Story 8.3 AC11-AC13 (fix f8.3.4): each shown under its own field. */
+  VENUE_OPENS_REQUIRED: {
+    title: 'Opening time needed',
+    message: 'Enter the time the venue opens.',
+  },
+  VENUE_CLOSES_REQUIRED: {
+    title: 'Closing time needed',
+    message: 'Enter the time the venue closes.',
   },
   VENUE_HOURS_OUT_OF_ORDER: {
     title: 'Check the operating hours',
     message: 'The closing time must be after the opening time.',
   },
-  VENUE_TURNAROUND_INVALID: {
-    title: 'Check setup and teardown',
-    message: 'Setup and teardown must be whole minutes, 0 or more.',
+  VENUE_SETUP_REQUIRED: {
+    title: 'Setup time needed',
+    message: 'Enter the setup time in minutes, or 0 for none.',
+  },
+  VENUE_TEARDOWN_REQUIRED: {
+    title: 'Teardown time needed',
+    message: 'Enter the teardown time in minutes, or 0 for none.',
   },
   VENUE_QUANTITY_INVALID: {
     title: 'Check facility quantities',

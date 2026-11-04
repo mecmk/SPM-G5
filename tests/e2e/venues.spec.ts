@@ -7,6 +7,12 @@
  * Beyond those ACs this spec also covers delete (Venue Staff have full CRUD), search and a
  * capacity filter, and that every save appears in the notification centre.
  *
+ * Story 8.3 AC11-AC13 (fix f8.3.4): a venue's operating information is required.
+ * AC11 Opens and Closes are required: a venue without them is not sent, new or saved earlier.
+ * AC12 Setup and teardown are required, start at 0 and take digits only.
+ * AC13 each problem is named under its field; Closes cannot be picked before Opens.
+ * The server's refusals are backend cases: backend/tests/venues/test_required_operating_info.py.
+ *
  * Story 8.3 AC5-AC8 and AC10 (bugs f8.3.2 and f8.3.3): a venue's pictures.
  * AC5 Venue Staff add pictures by choosing files or dragging them onto the form, preview them,
  *     arrange them (carrying one across the others, or with its arrows) and remove any of them;
@@ -36,7 +42,7 @@
  * backend/tests/venues/test_venue_records.py.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { ACCOUNTS, signIn, uniqueName, venueCard } from './support'
+import { ACCOUNTS, fillVenueHours, signIn, uniqueName, VENUES, venueCard } from './support'
 
 const CATALOGUE_PATH = /\/venues$/
 const EDIT_PATH = /\/venues\/[0-9a-f-]{36}\/edit$/
@@ -63,6 +69,7 @@ async function startNewVenue(page: Page, name: string) {
   await page.getByLabel('Venue name').fill(name)
   await page.getByLabel('Location').fill('Tower E, Level 2')
   await page.getByLabel('Maximum capacity').fill('45')
+  await fillVenueHours(page)
 }
 
 /** Choose pictures the way the file picker does. */
@@ -84,6 +91,7 @@ async function createVenue(page: Page, name: string, capacity = '45') {
   await page.getByLabel('Venue name').fill(name)
   await page.getByLabel('Location').fill('Tower E, Level 2')
   await page.getByLabel('Maximum capacity').fill(capacity)
+  await fillVenueHours(page)
   await page.getByRole('button', { name: 'Create venue' }).click()
   await expect(page).toHaveURL(CATALOGUE_PATH)
 }
@@ -97,6 +105,7 @@ test('8.3 AC1/AC2: venue staff create a venue, then edit it', async ({ page }) =
   await page.getByLabel('Venue name').fill(name)
   await page.getByLabel('Location').fill('Tower E, Level 2')
   await page.getByLabel('Maximum capacity').fill('45')
+  await fillVenueHours(page)
   await page.getByRole('checkbox', { name: 'Wi-Fi', exact: true }).check()
   await page.getByRole('checkbox', { name: 'Theatre', exact: true }).check()
   await page.getByRole('button', { name: 'Create venue' }).click()
@@ -125,6 +134,7 @@ test('8.3 AC3: capacity must be a positive whole number before anything is sent'
   })
   await page.getByLabel('Venue name').fill('Capacity check room')
   await page.getByLabel('Location').fill('Nowhere')
+  await fillVenueHours(page)
 
   for (const value of ['0', '-3', '12.5']) {
     await page.getByLabel('Maximum capacity').fill(value)
@@ -223,6 +233,7 @@ test('8.3 AC1: a duplicate venue name is refused with the reason', async ({ page
   await page.getByLabel('Venue name').fill('Grand Hall')
   await page.getByLabel('Location').fill('Anywhere')
   await page.getByLabel('Maximum capacity').fill('10')
+  await fillVenueHours(page)
   await page.getByRole('button', { name: 'Create venue' }).click()
 
   await expect(page.getByRole('main').getByRole('alert')).toContainText('already exists')
@@ -266,6 +277,131 @@ test('8.3: a link to the new-venue form survives signing in', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'New venue' })).toBeVisible()
 })
 
+// --- 8.3 AC11-AC13: required operating information (f8.3.4) -------------------------------------
+/** Count the venue saves (POST and PATCH /venues...) the page sends from here on. */
+function countVenueSaves(page: Page) {
+  const saves = { count: 0 }
+  page.on('request', (request) => {
+    const isSave = ['POST', 'PATCH'].includes(request.method())
+    if (isSave && /\/venues(\/[0-9a-f-]{36})?$/.test(request.url())) saves.count += 1
+  })
+  return saves
+}
+
+test('8.3 AC11: a new venue without opening hours is not sent, and Opens and Closes say why', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  const saves = countVenueSaves(page)
+  await page.getByLabel('Venue name').fill(uniqueName('E2E No hours'))
+  await page.getByLabel('Location').fill('Tower E, Level 2')
+  await page.getByLabel('Maximum capacity').fill('45')
+
+  await page.getByRole('button', { name: 'Create venue' }).click()
+
+  await expect(page.getByLabel('Opens')).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByLabel('Opens')).toHaveAccessibleDescription(
+    'Enter the time the venue opens.',
+  )
+  await expect(page.getByLabel('Closes')).toHaveAccessibleDescription(
+    'Enter the time the venue closes.',
+  )
+  await expect(page).toHaveURL(/\/venues\/new$/)
+  expect(saves.count).toBe(0)
+})
+
+test('8.3 AC11: a venue saved without opening hours asks for them before it saves', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues')
+  await venueCard(page, VENUES.gardenAtrium).getByRole('link', { name: 'Edit', exact: true }).click()
+  await expect(page.getByRole('heading', { name: `Edit ${VENUES.gardenAtrium}` })).toBeVisible()
+  const saves = countVenueSaves(page)
+
+  await page.getByRole('button', { name: 'Save changes' }).click()
+
+  await expect(page.getByLabel('Opens')).toHaveAccessibleDescription(
+    'Enter the time the venue opens.',
+  )
+  await expect(page).toHaveURL(EDIT_PATH)
+  expect(saves.count).toBe(0)
+})
+
+test('8.3 AC11-AC13: the four operating fields are marked required', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  for (const label of ['Opens', 'Closes', 'Setup (minutes)', 'Teardown (minutes)']) {
+    await expect(page.getByLabel(label)).toHaveAttribute('required')
+  }
+  await expect(page.getByLabel('Setup (minutes)')).toHaveValue('0')
+  await expect(page.getByLabel('Teardown (minutes)')).toHaveValue('0')
+})
+
+test('8.3 AC12: setup and teardown take digits only', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  for (const label of ['Setup (minutes)', 'Teardown (minutes)']) {
+    const minutes = page.getByLabel(label)
+    await minutes.clear()
+    await minutes.pressSequentially('a1-.e5+ ')
+    await expect(minutes).toHaveValue('15')
+  }
+})
+
+test('8.3 AC12: a setup left empty is named under Setup as soon as it is left', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  const setup = page.getByLabel('Setup (minutes)')
+
+  await setup.clear()
+  await setup.blur()
+
+  await expect(setup).toHaveAttribute('aria-invalid', 'true')
+  await expect(setup).toHaveAccessibleDescription('Enter the setup time in minutes, or 0 for none.')
+})
+
+test('8.3 AC13: a closing time before the opening time is named under Closes straight away', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  await page.getByLabel('Opens').fill('18:00')
+  await expect(page.getByLabel('Closes')).toHaveAttribute('min', '18:00')
+  await page.getByLabel('Closes').fill('09:00')
+
+  await expect(page.getByLabel('Closes')).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByLabel('Closes')).toHaveAccessibleDescription(
+    'The closing time must be after the opening time.',
+  )
+  await page.getByLabel('Closes').fill('21:00')
+  await expect(page.getByLabel('Closes')).not.toHaveAttribute('aria-invalid', 'true')
+})
+
+test('8.3 AC11-AC13: a venue with its hours, setup and teardown is created', async ({ page }) => {
+  const name = uniqueName('E2E Hours')
+  await signIn(page, ACCOUNTS.venueStaff)
+  await startNewVenue(page, name)
+  await fillVenueHours(page, '07:30', '22:00')
+  await page.getByLabel('Setup (minutes)').fill('30')
+  await page.getByLabel('Teardown (minutes)').fill('15')
+
+  await page.getByRole('button', { name: 'Create venue' }).click()
+
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await venueCard(page, name).getByRole('link', { name: 'Edit', exact: true }).click()
+  await expect(page.getByLabel('Opens')).toHaveValue('07:30')
+  await expect(page.getByLabel('Closes')).toHaveValue('22:00')
+  await expect(page.getByLabel('Setup (minutes)')).toHaveValue('30')
+  await expect(page.getByLabel('Teardown (minutes)')).toHaveValue('15')
+})
+
 test('8.1 AC12: Venue Staff add and edit venues from the catalogue', async ({ page }) => {
   const name = `E2E Catalogue ${Date.now()}`
   await signIn(page, ACCOUNTS.venueStaff)
@@ -286,6 +422,7 @@ test('8.1 AC12: Venue Staff add and edit venues from the catalogue', async ({ pa
   await page.getByLabel('Venue name').fill(name)
   await page.getByLabel('Location').fill('Tower E, Level 3')
   await page.getByLabel('Maximum capacity').fill('30')
+  await fillVenueHours(page)
   await page.getByRole('button', { name: 'Create venue' }).click()
 
   await expect(page).toHaveURL(CATALOGUE_PATH)

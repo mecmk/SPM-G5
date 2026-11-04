@@ -116,10 +116,68 @@ function isValidFloorArea(value: string): boolean {
   return area === '' || (AREA_WITH_TWO_DECIMALS.test(area) && Number(area) > 0)
 }
 
+/** Story 8.3 AC11-AC13 (fix f8.3.4): the operating fields, each with its problem shown under it. */
+export type OperatingField = 'opensAt' | 'closesAt' | 'setupMinutes' | 'teardownMinutes'
+
+export type OperatingProblems = Record<OperatingField, ErrorCode | null>
+
+/** Story 8.3 AC12: what a minutes box keeps of what was typed - its digits, nothing else. */
+export function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '')
+}
+
 /**
- * Story 8.3 AC1/AC3: every problem with the form as an error-registry code, in the form's order,
- * or none. The backend checks the same rules again; this only saves a round trip. AC11 (fix
- * f2.7.5): a counted facility needs how many the venue has.
+ * Story 8.3 AC11-AC13 (fix f8.3.4): what is wrong with each operating field, or null. Both times
+ * are required and closing must come after opening; setup and teardown are required whole minutes.
+ */
+export function operatingProblemsOf(form: VenueFormState): OperatingProblems {
+  const isOutOfOrder = form.opensAt !== '' && form.closesAt !== '' && form.closesAt <= form.opensAt
+  return {
+    opensAt: form.opensAt === '' ? 'VENUE_OPENS_REQUIRED' : null,
+    closesAt:
+      form.closesAt === ''
+        ? 'VENUE_CLOSES_REQUIRED'
+        : isOutOfOrder
+          ? 'VENUE_HOURS_OUT_OF_ORDER'
+          : null,
+    setupMinutes: WHOLE_NUMBER.test(form.setupMinutes) ? null : 'VENUE_SETUP_REQUIRED',
+    teardownMinutes: WHOLE_NUMBER.test(form.teardownMinutes) ? null : 'VENUE_TEARDOWN_REQUIRED',
+  }
+}
+
+export const OPERATING_FIELDS: OperatingField[] = [
+  'opensAt',
+  'closesAt',
+  'setupMinutes',
+  'teardownMinutes',
+]
+
+/**
+ * Story 8.3 AC13 (fix f8.3.4): the operating problems to show now - each field's once it has been
+ * left or the form saved, and a closing time before the opening time as soon as both are set.
+ */
+export function shownOperatingProblems(
+  form: VenueFormState,
+  left: ReadonlySet<OperatingField>,
+): OperatingProblems {
+  const problems = operatingProblemsOf(form)
+  const shown = (field: OperatingField) => {
+    const code = problems[field]
+    return left.has(field) || code === 'VENUE_HOURS_OUT_OF_ORDER' ? code : null
+  }
+  return {
+    opensAt: shown('opensAt'),
+    closesAt: shown('closesAt'),
+    setupMinutes: shown('setupMinutes'),
+    teardownMinutes: shown('teardownMinutes'),
+  }
+}
+
+/**
+ * Story 8.3 AC1/AC3: every problem with the rest of the form as an error-registry code, in the
+ * form's order, or none; the operating fields are `operatingProblemsOf`'s. The backend checks the
+ * same rules again; this only saves a round trip. AC11 (fix f2.7.5): a counted facility needs how
+ * many the venue has.
  */
 export function validateVenueForm(
   form: VenueFormState,
@@ -130,12 +188,6 @@ export function validateVenueForm(
   if (!form.location.trim()) problems.push('VENUE_LOCATION_REQUIRED')
   if (!isPositiveWholeNumber(form.capacity)) problems.push('VENUE_CAPACITY_INVALID')
   if (!isValidFloorArea(form.floorAreaSqm)) problems.push('VENUE_FLOOR_AREA_INVALID')
-  if (!form.opensAt !== !form.closesAt) problems.push('VENUE_HOURS_INCOMPLETE')
-  else if (form.opensAt && form.closesAt <= form.opensAt) problems.push('VENUE_HOURS_OUT_OF_ORDER')
-  const turnaround = [form.setupMinutes, form.teardownMinutes]
-  if (!turnaround.every((minutes) => WHOLE_NUMBER.test(minutes.trim()))) {
-    problems.push('VENUE_TURNAROUND_INVALID')
-  }
   const quantities = Object.values(form.facilities).map((facility) => facility.quantity)
   if (!quantities.every(isBlankOrPositiveWholeNumber)) problems.push('VENUE_QUANTITY_INVALID')
   const isCountedLeftBlank = facilities.some(

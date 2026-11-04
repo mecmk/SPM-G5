@@ -21,7 +21,7 @@
  * backend/tests/venues/test_room_layouts.py.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, corsHeaders, signIn, uniqueName, venueCard } from './support'
+import { ACCOUNTS, corsHeaders, fillVenueHours, signIn, uniqueName, venueCard } from './support'
 
 const ROOM_LAYOUTS = 'Room layouts'
 const CATALOGUE_PATH = /\/venues$/
@@ -182,6 +182,7 @@ test('8.6 AC3: a renamed layout shows its new name on the venue that offers it',
   await page.getByLabel('Venue name').fill(venue)
   await page.getByLabel('Location').fill('Tower E, Level 2')
   await page.getByLabel('Maximum capacity').fill('45')
+  await fillVenueHours(page)
   await page.getByRole('checkbox', { name: layout, exact: true }).check()
   await page.getByRole('button', { name: 'Create venue' }).click()
   await expect(page).toHaveURL(CATALOGUE_PATH)

@@ -27,15 +27,20 @@ import {
   EMPTY_LAYOUT,
   EMPTY_VENUE_FORM,
   formFromVenue,
+  OPERATING_FIELDS,
+  operatingProblemsOf,
+  shownOperatingProblems,
   toggleEntry,
   validateVenueForm,
   venueInputFrom,
   type AccessibilityDraft,
   type FacilityDraft,
   type LayoutDraft,
+  type OperatingField,
   type RefusedPicture,
   type VenueFormState,
 } from './venueForm'
+import { OperatingInformationFields } from './OperatingInformationFields'
 import { VenueUnavailabilityManager } from './VenueUnavailabilityManager'
 import { VenuePicturesField, type PictureTile } from './VenuePicturesField'
 import { CANCEL } from '../shared/format'
@@ -134,6 +139,9 @@ export function VenueFormPage() {
   // Every problem the form's own check found on the last save, each said in its own toast.
   const [formProblems, setFormProblems] = useState<ErrorCode[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  // Story 8.3 AC13 (fix f8.3.4): the operating fields left since the page opened; each shows its
+  // problem from then on.
+  const [leftFields, setLeftFields] = useState<ReadonlySet<OperatingField>>(new Set())
   // Story 8.3 AC5: the pictures in the order they will be saved in, saved ones and those chosen
   // here mixed; the saved ones taken off; and the files the last choice could not take (AC7).
   // Nothing is sent until the form is saved.
@@ -341,10 +349,15 @@ export function VenueFormPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form) return
+    // Story 8.3 AC13 (fix f8.3.4): a save names every operating problem under its field.
+    setLeftFields(new Set(OPERATING_FIELDS))
     const problems = validateVenueForm(form, reference?.facilities ?? [])
     setFormProblems(problems)
     setSaveError(null)
-    if (problems.length > 0) return
+    const hasOperatingProblem = Object.values(operatingProblemsOf(form)).some(
+      (code) => code !== null,
+    )
+    if (problems.length > 0 || hasOperatingProblem) return
     setIsSaving(true)
     let saved: Venue
     try {
@@ -379,7 +392,7 @@ export function VenueFormPage() {
         backTo={VENUE_CATALOGUE_PATH}
         backLabel="Venue catalogue"
         title={title}
-        subtitle="Name, location and capacity are required. Anything left empty shows as not recorded."
+        subtitle="Name, location, capacity, opening hours, setup and teardown are required. Anything left empty shows as not recorded."
       />
 
       {loadError && <ErrorToast message={loadError} />}
@@ -474,59 +487,12 @@ export function VenueFormPage() {
             onMove={movePicture}
           />
 
-          <fieldset className="card">
-            <legend>Operating information</legend>
-            <div className="form-grid form-grid-4">
-              <label>
-                Opens
-                <input
-                  type="time"
-                  value={form.opensAt}
-                  onChange={(e) => updateField('opensAt', e.target.value)}
-                />
-              </label>
-              <label>
-                Closes
-                <input
-                  type="time"
-                  min={form.opensAt || undefined}
-                  value={form.closesAt}
-                  onChange={(e) => updateField('closesAt', e.target.value)}
-                />
-              </label>
-              <label>
-                Setup (minutes)
-                <input
-                  onBeforeInput={refuseNonDigits}
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={form.setupMinutes}
-                  onChange={(e) => updateField('setupMinutes', e.target.value)}
-                />
-              </label>
-              <label>
-                Teardown (minutes)
-                <input
-                  onBeforeInput={refuseNonDigits}
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={form.teardownMinutes}
-                  onChange={(e) => updateField('teardownMinutes', e.target.value)}
-                />
-              </label>
-              <label className="span-all">
-                Operating notes
-                <textarea
-                  rows={2}
-                  placeholder="For example, closed on public holidays"
-                  value={form.operatingNotes}
-                  onChange={(e) => updateField('operatingNotes', e.target.value)}
-                />
-              </label>
-            </div>
-          </fieldset>
+          <OperatingInformationFields
+            form={form}
+            problems={shownOperatingProblems(form, leftFields)}
+            onChange={updateField}
+            onLeave={(field) => setLeftFields((current) => new Set(current).add(field))}
+          />
 
           <fieldset className="card">
             <legend>Facilities</legend>
