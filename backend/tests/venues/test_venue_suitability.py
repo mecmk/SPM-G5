@@ -588,15 +588,15 @@ def test_failures_come_out_in_reference_order_whatever_order_they_were_recorded(
     coordinator_client, db: Session
 ):
     """Facilities and accessibility needs come out in the reference lists' own order (Projector
-    before Breakout rooms; Wheelchair access before Hearing loop) - not as recorded, and not by
-    code, either of which would put each pair the other way round."""
+    before Whiteboard / flipchart; Wheelchair access before Hearing loop) - not as recorded, and
+    not by code, either of which would put each pair the other way round."""
     tag = _tag()
     event = _assigned_event(db, expected_attendance=20)
     requirement_id = make_venue_requirement(
         db,
         event.id,
         capacity=20,
-        facilities=(("BREAKOUT_ROOMS", None, None), ("PROJECTOR", None, None)),
+        facilities=(("WHITEBOARD", None, None), ("PROJECTOR", None, None)),
     )
     _need_accessibility(db, event.id, "HEARING_LOOP", "WHEELCHAIR_ACCESS")
     make_venue(db, name=tag, capacity=50, facilities=("WIFI",), accessibility=("LIFT_ACCESS",))
@@ -607,7 +607,7 @@ def test_failures_come_out_in_reference_order_whatever_order_they_were_recorded(
 
     assert [(failure["criterion"], failure["code"]) for failure in suitability["failures"]] == [
         ("FACILITY", "PROJECTOR"),
-        ("FACILITY", "BREAKOUT_ROOMS"),
+        ("FACILITY", "WHITEBOARD"),
         ("ACCESSIBILITY", "WHEELCHAIR_ACCESS"),
         ("ACCESSIBILITY", "HEARING_LOOP"),
     ]

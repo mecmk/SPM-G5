@@ -53,6 +53,7 @@ from app.venues.schemas import (
     RoomLayoutCreate,
     RoomLayoutUpdate,
     VenueCreate,
+    VenueFacilityIn,
     VenueSearchHit,
     VenueSearchQuery,
     VenueSearchResult,
@@ -96,6 +97,16 @@ class UnknownReferenceCode(ValueError):
 
 class InvalidOperatingHours(ValueError):
     pass
+
+
+# Fix f2.7.5 (story 8.3 AC11, AC12): only a counted facility takes a quantity, and a venue offering
+# one says how many it has.
+FACILITY_QUANTITY_REQUIRED_MESSAGE = "Enter how many {facility} the venue has."
+FACILITY_NOT_COUNTED_MESSAGE = "{facility} is either there or not, so it takes no quantity."
+
+
+class InvalidFacilityQuantity(ValueError):
+    """AC11/AC12: a counted facility without a quantity, or one that is not counted with one."""
 
 
 class InvalidDateRange(ValueError):
@@ -1952,6 +1963,7 @@ def _validate_reference_codes(db: Session, data: VenueCreate | VenueUpdate) -> N
     missing = _unknown_codes(db, Facility, [item.code for item in facilities])
     if missing:
         raise UnknownReferenceCode("facility", missing)
+    _check_facility_quantities(db, facilities)
     layouts = getattr(data, "layouts", None) or []
     missing = _unknown_codes(db, RoomLayout, [item.code for item in layouts])
     deleted = _deleted_room_layouts(db, missing)
@@ -1964,6 +1976,24 @@ def _validate_reference_codes(db: Session, data: VenueCreate | VenueUpdate) -> N
     missing = _unknown_codes(db, AccessibilityFeature, [item.code for item in features])
     if missing:
         raise UnknownReferenceCode("accessibility feature", missing)
+
+
+def _check_facility_quantities(db: Session, facilities: list[VenueFacilityIn]) -> None:
+    """Story 8.3 AC11/AC12 (fix f2.7.5): a counted facility has a quantity, any other has none."""
+    codes = [item.code for item in facilities]
+    if not codes:
+        return
+    known = {f.code: f for f in db.scalars(select(Facility).where(Facility.code.in_(codes)))}
+    for item in facilities:
+        facility = known[item.code]
+        if facility.is_countable and item.quantity is None:
+            raise InvalidFacilityQuantity(
+                FACILITY_QUANTITY_REQUIRED_MESSAGE.format(facility=facility.name)
+            )
+        if not facility.is_countable and item.quantity is not None:
+            raise InvalidFacilityQuantity(
+                FACILITY_NOT_COUNTED_MESSAGE.format(facility=facility.name)
+            )
 
 
 def _replace_characteristics(

@@ -23,6 +23,10 @@
  * The server's own refusals, the files, the order's rules, AC9's permissions and the rest of
  * AC10's simultaneous changes are backend cases: backend/tests/venues/test_venue_pictures.py.
  *
+ * Story 8.3 AC11-AC12 (fix f2.7.5): a counted facility asks how many the venue has, and a blank
+ * one is stopped before anything is sent (AC11); any other facility has no quantity (AC12). The
+ * server's refusals are backend/tests/venues/test_venue_countable_facilities.py.
+ *
  * Story 8.1 AC12 (f8.1.1): Venue Staff manage venues from the venue catalogue,
  * the page coordinators browse - New venue, Edit and Delete on each venue, and Show withdrawn
  * venues, for venues:manage holders only. The separate Manage venues page is gone and its old
@@ -128,6 +132,37 @@ test('8.3 AC3: capacity must be a positive whole number before anything is sent'
     await expect(page.getByRole('alert')).toContainText('positive whole number')
   }
   expect(createCalls).toBe(0)
+})
+
+test('8.3 AC11/AC12: only a counted facility asks how many, given before anything is sent', async ({
+  page,
+}) => {
+  const name = uniqueName('Counted room')
+  await signIn(page, ACCOUNTS.venueStaff)
+  let createCalls = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/venues')) createCalls += 1
+  })
+  await startNewVenue(page, name)
+
+  // AC12: Wi-Fi is either there or not - notes, but no quantity.
+  await page.getByRole('checkbox', { name: 'Wi-Fi', exact: true }).check()
+  await expect(page.getByLabel('Wi-Fi notes', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Wi-Fi quantity', { exact: true })).toHaveCount(0)
+
+  // AC11: a whiteboard is counted, so a blank quantity is stopped in the browser.
+  await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
+  await page.getByRole('button', { name: 'Create venue' }).click()
+  await expect(page.getByRole('alert')).toContainText(
+    'Enter how many of each counted facility the venue has.',
+  )
+  expect(createCalls).toBe(0)
+
+  await page.getByLabel('Whiteboard / flipchart quantity', { exact: true }).fill('3')
+  await page.getByRole('button', { name: 'Create venue' }).click()
+  await expect(page).toHaveURL(CATALOGUE_PATH)
+  await venueCard(page, name).getByRole('link', { name: 'Edit' }).click()
+  await expect(page.getByLabel('Whiteboard / flipchart quantity', { exact: true })).toHaveValue('3')
 })
 
 test('8.3 AC1: a duplicate venue name is refused with the reason', async ({ page }) => {

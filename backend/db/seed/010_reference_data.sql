@@ -21,17 +21,19 @@ INSERT INTO roles (code, name, is_internal, description) VALUES
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name, is_internal = EXCLUDED.is_internal, description = EXCLUDED.description;
 
-INSERT INTO facilities (code, name, description, sort_order) VALUES
-    ('PROJECTOR',          'Projector & screen',      'Ceiling-mounted projector with screen or LED wall.', 10),
-    ('SOUND_SYSTEM',       'Sound system',            'In-room PA with mixer.', 20),
-    ('VIDEO_CONFERENCING', 'Video conferencing',      'Camera, room microphones and conferencing software for hybrid events.', 30),
-    ('WIFI',               'Wi-Fi',                   'Guest wireless internet.', 40),
-    ('STAGE',              'Stage',                   'Raised platform for presenters.', 50),
-    ('WHITEBOARD',         'Whiteboard / flipchart',  NULL, 60),
-    ('CATERING_AREA',      'Catering area',           'Space and power for food service.', 70),
-    ('BREAKOUT_ROOMS',     'Breakout rooms',          'Adjoining smaller rooms.', 90)
+-- Fix f2.7.5: only a counted facility (is_countable) takes a quantity. Breakout rooms are no longer
+-- a facility - a breakout room is a venue requirement of its own - and migration 036 removed them.
+INSERT INTO facilities (code, name, description, sort_order, is_countable) VALUES
+    ('PROJECTOR',          'Projector & screen',      'Ceiling-mounted projector with screen or LED wall.', 10, TRUE),
+    ('SOUND_SYSTEM',       'Sound system',            'In-room PA with mixer.', 20, FALSE),
+    ('VIDEO_CONFERENCING', 'Video conferencing',      'Camera, room microphones and conferencing software for hybrid events.', 30, FALSE),
+    ('WIFI',               'Wi-Fi',                   'Guest wireless internet.', 40, FALSE),
+    ('STAGE',              'Stage',                   'Raised platform for presenters.', 50, FALSE),
+    ('WHITEBOARD',         'Whiteboard / flipchart',  NULL, 60, TRUE),
+    ('CATERING_AREA',      'Catering area',           'Space and power for food service.', 70, FALSE)
 ON CONFLICT (code) DO UPDATE SET
-    name = EXCLUDED.name, description = EXCLUDED.description, sort_order = EXCLUDED.sort_order;
+    name = EXCLUDED.name, description = EXCLUDED.description, sort_order = EXCLUDED.sort_order,
+    is_countable = EXCLUDED.is_countable;
 
 -- f2.1.2: RECORDING had no corresponding row in equipment_types, so an organiser could request
 -- it under venue requirements with nothing behind it to actually reserve or track. INSERTs above
