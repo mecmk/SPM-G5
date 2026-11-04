@@ -305,14 +305,13 @@ test.describe('records units out of service', () => {
     await expect(row.getByRole('cell').nth(3)).toContainText('Scheduled')
     await expect(row.getByRole('cell').nth(3)).toContainText(' – ')
 
-    await page.getByRole('searchbox', { name: 'Search equipment' }).fill(VIDEO_CAMERA)
-    await expect(catalogue(page).getByRole('row')).toHaveCount(2)
     await page.getByLabel('Period status').selectOption('IN_FORCE')
-    await expect(page.getByText('No equipment matches.')).toBeVisible()
+    await expect(row).toHaveCount(0)
     await page.getByLabel('Period status').selectOption('SCHEDULED')
     await expect(row).toBeVisible()
 
-    await row.getByRole('link', { name: VIDEO_CAMERA }).click()
+    await row.getByRole('cell').nth(4).click()
+    await expect(page.getByRole('heading', { level: 1, name: VIDEO_CAMERA })).toBeVisible()
     await record(page, note).getByRole('button', { name: 'End' }).click()
     await page
       .getByRole('dialog', { name: 'Remove this record?' })

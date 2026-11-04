@@ -4604,9 +4604,26 @@ button.requirement-choice.requirement-covered:hover,
   color: var(--primary-text);
 }
 
+.catalogue-row {
+  cursor: pointer;
+}
+
+.catalogue-row:hover {
+  background: var(--surface-hover);
+}
+
 .catalogue-open {
   width: 2rem;
+}
+
+.catalogue-open a {
+  display: flex;
   color: var(--text-muted);
+  text-decoration: none;
+}
+
+.catalogue-row:hover .catalogue-open a {
+  color: var(--accent);
 }
 
 /* On a phone the four columns share the table's width, so the periods wrap inside their cell

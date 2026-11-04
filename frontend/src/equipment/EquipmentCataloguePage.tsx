@@ -1,5 +1,5 @@
-import { useState, type ChangeEvent } from 'react'
-import { Link } from 'react-router'
+import { useState, type ChangeEvent, type MouseEvent } from 'react'
+import { Link, useNavigate } from 'react-router'
 import {
   listEquipmentCatalogue,
   type EquipmentCatalogueEntry,
@@ -11,6 +11,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_CATALOGUE_TITLE, equipmentTypePath } from '../routes'
+import { isCardOpenClick } from '../shared/cardClick'
 import { useLoaded } from '../shared/useLoaded'
 import { describeOutRange, describeUnitsOut, hasStarted } from './outOfServiceLabels'
 
@@ -72,8 +73,8 @@ function PeriodRow({ record, loadedAt }: { record: OutOfServiceRecord; loadedAt:
 }
 
 /**
- * Story 16.2 AC2 - the equipment catalogue, for Technical Support: totals across the types, a
- * search and two filters, then every active type, by name, with its stock, the units out of
+ * Story 16.2 AC2 - the equipment catalogue, for Technical Support: totals across the types, two
+ * filters, then every active type, by name, with its stock, the units out of
  * service now and every period they are out - in force or scheduled, from when to when - each
  * opening the type's page. AC6: App.tsx guards the route with equipment:manage, and the backend
  * refuses everyone else. On a phone the headers and names wrap (App.css), so the columns fit and
@@ -81,14 +82,14 @@ function PeriodRow({ record, loadedAt }: { record: OutOfServiceRecord; loadedAt:
  */
 export function EquipmentCataloguePage() {
   const { data: loaded, error, isLoading } = useLoaded(loadCatalogue)
-  const [search, setSearch] = useState('')
+  const navigate = useNavigate()
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL')
   const [availability, setAvailability] = useState<AvailabilityFilter>('ALL')
   const types = loaded?.types ?? null
   const loadedAt = loaded?.loadedAt ?? 0
 
-  function handleSearch(change: ChangeEvent<HTMLInputElement>) {
-    setSearch(change.target.value)
+  function handleRowClick(click: MouseEvent<HTMLTableRowElement>, typeId: string) {
+    if (isCardOpenClick(click)) void navigate(equipmentTypePath(typeId))
   }
 
   function handlePeriodFilter(change: ChangeEvent<HTMLSelectElement>) {
@@ -99,9 +100,7 @@ export function EquipmentCataloguePage() {
     setAvailability(change.target.value as AvailabilityFilter)
   }
 
-  const needle = search.trim().toLowerCase()
   const shown = (types ?? [])
-    .filter((kind) => kind.name.toLowerCase().includes(needle))
     .filter((kind) => matchesAvailability(kind, availability))
     .map((kind) => ({
       kind,
@@ -149,15 +148,6 @@ export function EquipmentCataloguePage() {
           </section>
 
           <div className="filter-bar">
-            <label className="filter-grow">
-              Search equipment
-              <input
-                type="search"
-                placeholder="Search equipment…"
-                value={search}
-                onChange={handleSearch}
-              />
-            </label>
             <label>
               Period status
               <select value={periodFilter} onChange={handlePeriodFilter}>
@@ -197,7 +187,11 @@ export function EquipmentCataloguePage() {
                 </thead>
                 <tbody>
                   {shown.map(({ kind, records }) => (
-                    <tr key={kind.id}>
+                    <tr
+                      key={kind.id}
+                      className="catalogue-row"
+                      onClick={(click) => handleRowClick(click, kind.id)}
+                    >
                       <td>
                         <Link to={equipmentTypePath(kind.id)}>{kind.name}</Link>
                       </td>
@@ -215,7 +209,9 @@ export function EquipmentCataloguePage() {
                         )}
                       </td>
                       <td className="catalogue-open">
-                        <Icon name="chevron-right" size={16} />
+                        <Link to={equipmentTypePath(kind.id)} tabIndex={-1} aria-hidden="true">
+                          <Icon name="chevron-right" size={16} />
+                        </Link>
                       </td>
                     </tr>
                   ))}
