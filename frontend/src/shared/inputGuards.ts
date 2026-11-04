@@ -8,7 +8,7 @@ import type { InputEvent } from 'react'
 
 const NOT_DIGIT = /\D/
 const NOT_DECIMAL = /[^\d.]/
-const NOT_PHONE = /[^\d\s+()-]/
+const NOT_PHONE = /[^\d +-]/
 
 function refuse(pattern: RegExp) {
   return (event: InputEvent<HTMLInputElement>) => {
@@ -22,5 +22,5 @@ export const refuseNonDigits = refuse(NOT_DIGIT)
 /** A decimal number: digits and a point. */
 export const refuseNonDecimal = refuse(NOT_DECIMAL)
 
-/** A phone number: digits, spaces, a leading +, dashes and brackets. */
+/** A phone number: digits, spaces, dashes and a +, as `shared/phone.ts` accepts. */
 export const refuseNonPhone = refuse(NOT_PHONE)

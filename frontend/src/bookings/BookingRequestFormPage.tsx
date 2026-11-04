@@ -14,7 +14,7 @@ import { useAuth } from '../auth/authContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
 import { SuitabilityNote } from '../components/SuitabilityNote'
-import { ERROR_REGISTRY } from '../errors/registry'
+import { ERROR_REGISTRY, type ErrorCode } from '../errors/registry'
 import { LoadingState } from '../layout/LoadingState'
 import {
   eventPath,
@@ -261,6 +261,8 @@ export function BookingRequestFormPage() {
   const replaced =
     covering !== null && covering.id === replacesId && !isBooked(covering) ? covering : null
   const [sendError, setSendError] = useState<string | null>(null)
+  // The problem whose toast was closed: it still holds, so Send request says it again.
+  const [closedTurnaroundError, setClosedTurnaroundError] = useState<ErrorCode | null>(null)
   const [canReturnToResults, setCanReturnToResults] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [justification, setJustification] = useState('')
@@ -430,8 +432,12 @@ export function BookingRequestFormPage() {
     submitEvent.preventDefault()
     setSendError(null)
     setCanReturnToResults(false)
-    // f12.1.2 (story 12.1 AC5): the setup's or teardown's problem is already said under its fields.
-    if (turnaroundError !== null) return
+    // f12.1.2 (story 12.1 AC5): a setup or teardown problem sends nothing, and is said again here
+    // if its toast was closed.
+    if (turnaroundError !== null) {
+      setClosedTurnaroundError(null)
+      return
+    }
     if (!requiresJustification) {
       await send(null)
       return
@@ -534,8 +540,11 @@ export function BookingRequestFormPage() {
               defaultMinutes={venue.teardown_minutes_default}
             />
           </div>
-          {turnaroundError !== null && (
-            <ErrorToast message={ERROR_REGISTRY[turnaroundError].message} />
+          {turnaroundError !== null && turnaroundError !== closedTurnaroundError && (
+            <ErrorToast
+              message={ERROR_REGISTRY[turnaroundError].message}
+              onDismiss={() => setClosedTurnaroundError(turnaroundError)}
+            />
           )}
           {period !== null && (
             <ul className="check-list">

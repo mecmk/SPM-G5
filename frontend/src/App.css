@@ -696,7 +696,10 @@
   border-top: 1px solid var(--hairline);
 }
 
-.filter-section > label,
+.filter-section > label {
+  margin: 0;
+}
+
 /* A section's title, set like the form labels it sits among. */
 .filter-section-title {
   display: flex;

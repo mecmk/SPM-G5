@@ -951,3 +951,27 @@ test('12.2 AC4: an event with no booking requests shows an empty state linking t
     '/venues',
   )
 })
+
+test('12.1 AC5: a turnaround problem closed with its button is said again by Send request', async ({
+  page,
+}) => {
+  await page.clock.install()
+  await signIn(page, ACCOUNTS.coordinator)
+  let sends = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/bookings') sends += 1
+  })
+  const turnaround = await openInductionStep(page)
+  const problem = turnaround.getByRole('alert')
+
+  await turnaroundField(turnaround, 'Teardown', 'Days').fill('15')
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+  await page.clock.fastForward('00:30')
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+
+  await problem.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(problem).toHaveCount(0)
+  await page.getByRole('button', { name: 'Send request' }).click()
+  await expect(problem).toHaveText(TURNAROUND_TOO_LONG_MESSAGE)
+  expect(sends).toBe(0)
+})

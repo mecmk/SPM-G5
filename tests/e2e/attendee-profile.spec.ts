@@ -624,3 +624,22 @@ test('18.4 AC3: the profile read again after a registration corrects what the pa
     'Halal (as stored)',
   )
 })
+
+test('18.4 AC7: only what the phone rule accepts can be typed or pasted into the phone number', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await signIn(page, ACCOUNTS.attendee)
+  await page.goto(PROFILE_PATH)
+  const phone = page.getByLabel('Phone number')
+
+  await phone.fill('')
+  await phone.pressSequentially('+65 (9123)-4567a')
+  await expect(phone).toHaveValue('+65 9123-4567')
+
+  await phone.fill('')
+  await page.evaluate(() => navigator.clipboard.writeText('call 91234567'))
+  await phone.press('Control+V')
+  await expect(phone).toHaveValue('')
+})

@@ -503,7 +503,7 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check the quantity',
     message: 'A facility quantity must be 100,000 or less.',
   },
-  /** Story 2.7 AC6, worded as the backend words it where it has its own sentence. */
+  /** Story 2.7 AC6. */
   VENUE_REQUIREMENT_CAPACITY_INVALID: {
     title: 'Check the number of people',
     message: 'People must be a whole number above 0.',

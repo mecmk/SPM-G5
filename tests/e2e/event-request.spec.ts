@@ -1603,3 +1603,35 @@ test('2.1 AC22: a facility quantity above 100,000 is told the largest accepted, 
   await expect(page).toHaveURL(EDIT_PATH)
   await expect(page.getByLabel('Breakout rooms quantity')).toHaveValue('100000')
 })
+
+test('2.1 AC3: two problems on one save are each said in a toast that stays until it is closed', async ({
+  page,
+}) => {
+  await page.clock.install()
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  await fillEssentials(page, uniqueName('Two problems'))
+  await page.getByLabel('Expected attendance').fill('0')
+  await page.getByLabel('Contact email').fill('nope')
+  await page.getByRole('button', { name: 'Save draft' }).click()
+
+  // Only a toast has a close button: a field's own message says the same words without one.
+  const toast = (message: string) =>
+    page
+      .getByRole('alert')
+      .filter({ hasText: message })
+      .filter({ has: page.getByRole('button', { name: 'Dismiss' }) })
+  const attendance = toast('Expected attendance must be a positive whole number.')
+  const email = toast('Enter an email address like name@example.com.')
+  await expect(attendance).toBeVisible()
+  await expect(email).toBeVisible()
+
+  // Nothing closes them but their own button, however long they are left.
+  await page.clock.fastForward('00:30')
+  await expect(attendance).toBeVisible()
+  await expect(email).toBeVisible()
+
+  await attendance.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(attendance).toHaveCount(0)
+  await expect(email).toBeVisible()
+})
