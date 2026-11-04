@@ -407,7 +407,8 @@ class OrganiserBooking(BaseModel):
     out. AC7 (CL-184): the hold's expiry and completion, so an open hold does not read as
     confirmed - but not who changed the expiry, or why. Fix f7.1.3 (AC10): why a booking the
     safety review released, the coordinator cancelled or a venue closure cancelled was released -
-    the closure's reason, but not its description - and not who released it."""
+    the closure's reason, but not its description - and not who released it. Fix f21.2.1: when it
+    was requested."""
 
     id: uuid.UUID
     venue_name: str
@@ -429,6 +430,9 @@ class OrganiserBooking(BaseModel):
     release_reason: str | None
     # None unless a venue closure cancelled it (story 9.5 AC2); its description is staff's only.
     closure_reason: str | None
+    # Fix f21.2.1 (story 21.2 AC23/AC24): when it was requested, so the page can tell a booking a
+    # safety review saw from one requested after it.
+    created_at: datetime
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> OrganiserBooking:
@@ -450,6 +454,7 @@ class OrganiserBooking(BaseModel):
             release_cause=booking.release_cause,
             release_reason=booking.release_reason,
             closure_reason=booking.closure_reason,
+            created_at=booking.created_at,
         )
 
 
@@ -508,6 +513,9 @@ class BookingOutcome(BaseModel):
     # Story 9.5 AC2: the reason (a code) and description of the venue closure that ended it.
     closure_reason: str | None
     closure_description: str | None
+    # Fix f21.2.1 (story 21.2 AC23/AC24): when it was requested, so the page can tell a booking a
+    # safety review saw from one requested after it.
+    created_at: datetime
 
     @classmethod
     def from_booking(cls, booking: VenueBooking) -> BookingOutcome:
@@ -549,4 +557,5 @@ class BookingOutcome(BaseModel):
             release_reason=booking.release_reason,
             closure_reason=booking.closure_reason,
             closure_description=booking.closure_description,
+            created_at=booking.created_at,
         )

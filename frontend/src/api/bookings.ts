@@ -426,6 +426,9 @@ export interface OrganiserBooking {
   /** Fix f7.1.3 (AC10): the reason of the venue closure that cancelled it; null for any other
    * booking. The closure's description is not sent. */
   closure_reason: UnavailabilityReason | null
+  /** Fix f21.2.1 (story 21.2 AC23/AC24): when it was requested, so the page can tell a booking a
+   * safety review saw from one requested after it. */
+  created_at: string
 }
 
 /** Fix f7.1.2 (story 7.1 AC1): the organiser's own event's approved and pending bookings, most
@@ -487,6 +490,9 @@ export interface BookingOutcome {
   /** Story 12.6 AC3: when an original was released - its replacement's approval, which is when it
    * closed; null for any other booking, one story 19.2 released included. */
   released_at: string | null
+  /** Fix f21.2.1 (story 21.2 AC23/AC24): when it was requested, so the page can tell a booking a
+   * safety review saw from one requested after it. */
+  created_at: string
 }
 
 /** Story 13.2.1 AC4: every venue booking ever raised for this event, most recent first - lets a
