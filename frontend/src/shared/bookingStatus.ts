@@ -1,4 +1,4 @@
-import type { Booking, BookingStatus, BookingStatusCounts } from '../api/bookings'
+import type { Booking, BookingOutcome, BookingStatus, BookingStatusCounts } from '../api/bookings'
 import { UNAVAILABILITY_REASON_NAMES } from '../api/venues'
 import { formatTime, NONE } from './format'
 
@@ -110,6 +110,17 @@ export function turnaroundLine(
 ): string {
   const event = `${formatTime(booking.starts_at)}–${formatTime(booking.ends_at)}`
   return `Setup: ${formatMinutesDuration(booking.setup_minutes)} · Event: ${event} · Teardown: ${formatMinutesDuration(booking.teardown_minutes)}`
+}
+
+/** Fix f13.2.1.1 (13.2.1 AC7): the booked venue's capacity on the event page's booking cards -
+ * "Capacity: 400 people" - with the booked layout's own when the venue gives it one:
+ * "Capacity: 400 people · Theatre layout: 350 people". */
+export function capacityLine(
+  booking: Pick<BookingOutcome, 'venue_capacity' | 'layout_name' | 'layout_capacity'>,
+): string {
+  const venue = `Capacity: ${booking.venue_capacity} people`
+  if (booking.layout_name === null || booking.layout_capacity === null) return venue
+  return `${venue} · ${booking.layout_name} layout: ${booking.layout_capacity} people`
 }
 
 /** Story 12.7 AC3: an approved booking whose hold lapsed before its event was confirmed. */

@@ -75,6 +75,12 @@
  * before. The two-day test raises its own request through the UI, on a fresh two-day event, and
  * closes each dialog without approving it. The one-day test reads the seeded Community Choir
  * Showcase request, which no spec decides, and closes each dialog too.
+ *
+ * f13.2.1.1 (13.2.1 AC7): each card on the event page's Venue booking section shows the booked
+ * venue's capacity, and the booked layout's own capacity when the venue gives it one. The seeded
+ * bookings name no layout with a figure of its own, so the layout case stubs the call the card
+ * list reads. What the API returns is proven in
+ * backend/tests/bookings/test_booking_card_capacity.py.
  */
 import { expect, test, type Page, type Route } from '@playwright/test'
 import {
@@ -746,6 +752,10 @@ test('13.2.2 AC1: withdrawn and cancelled bookings show when they were closed, n
     replaced_by_venue_name: null,
     pending_replacement_venue_name: null,
     released_at: null,
+    // Fix f13.2.1.1: the venue's capacity, and no layout of its own.
+    venue_capacity: 120,
+    layout_name: null,
+    layout_capacity: null,
   }
   const outcomes = [
     {
@@ -1209,4 +1219,41 @@ test('13.1 AC2/13.2 AC1: a one-day booking reads as before in the Venue Staff vi
   await expect(pageDialog.getByText(CHOIR_SENTENCE, { exact: true })).toBeVisible()
   await pageDialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(pageDialog).toHaveCount(0)
+})
+
+test("13.2.1 AC7: the Venue booking card shows each venue's capacity", async ({ page }) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  // The seeded Grand Hall (400 people) and Seminar Room 2.1 (80 people) bookings; neither
+  // venue gives the booked layout a figure of its own, so each card shows the venue's alone.
+  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await expect(bookingSection.getByText('Capacity: 400 people', { exact: true })).toBeVisible()
+  await expect(bookingSection.getByText('Capacity: 80 people', { exact: true })).toBeVisible()
+})
+
+test("13.2.1 AC7: a booked layout with its own capacity is shown beside the venue's", async ({
+  page,
+}) => {
+  // No seeded booking names a layout the venue gives a figure of its own, so the seeded Grand
+  // Hall booking's THEATRE layout is given one, in the list the card list reads.
+  await page.route(
+    (url) => url.pathname === `/bookings/for-event/${EVENTS.approved}`,
+    async (route) => {
+      if (route.request().resourceType() !== 'fetch') return route.fallback()
+      const response = await route.fetch()
+      const outcomes: { venue_name: string }[] = await response.json()
+      const grandHall = outcomes.findIndex((outcome) => outcome.venue_name === 'Grand Hall')
+      outcomes[grandHall] = { ...outcomes[grandHall], layout_name: 'Theatre', layout_capacity: 350 }
+      return route.fulfill({ response, json: outcomes })
+    },
+  )
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.approved}`)
+
+  const bookingSection = page.getByRole('region', { name: 'Venue booking' })
+  await expect(
+    bookingSection.getByText('Capacity: 400 people · Theatre layout: 350 people', { exact: true }),
+  ).toBeVisible()
+  await expect(bookingSection.getByText('Capacity: 80 people', { exact: true })).toBeVisible()
 })

@@ -51,6 +51,7 @@ import {
   CANCELLED_BY_CLOSURE_MESSAGE,
   CANCELLED_BY_COORDINATOR_MESSAGE,
   EXPIRED_BOOKING_STATUS,
+  capacityLine,
   closedAt,
   closingReason,
   closureReasonLine,
@@ -1180,6 +1181,8 @@ export function EventDetailPage() {
                           {forRequirement === null ? 'Additional venue' : `For ${forRequirement}`}
                         </p>
                         <p className="muted">{booking.venue_location}</p>
+                        {/* Fix f13.2.1.1 (13.2.1 AC7): the venue's capacity, and the booked layout's. */}
+                        <p className="small muted">{capacityLine(booking)}</p>
                         {/* Fix f21.3.1 (story 12.1 AC3): a booking over more than one day names both
                           dates, as the organiser's section does (7.1 AC4). */}
                         <div className="booking-outcome-schedule small muted">
