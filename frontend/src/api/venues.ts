@@ -7,9 +7,15 @@ export interface ReferenceItem {
   description: string | null
 }
 
+/** Mirrors `FacilityReferenceItem`. Story 8.3 AC11/AC12 (fix f2.7.5): only a counted facility
+ * takes a quantity. */
+export interface FacilityReferenceItem extends ReferenceItem {
+  is_countable: boolean
+}
+
 /** Mirrors `VenueReferenceData`: the pick-lists for the venue form. */
 export interface VenueReferenceData {
-  facilities: ReferenceItem[]
+  facilities: FacilityReferenceItem[]
   layouts: ReferenceItem[]
   accessibility_features: ReferenceItem[]
 }

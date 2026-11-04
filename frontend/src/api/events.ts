@@ -100,10 +100,16 @@ export interface EventReferenceItem {
   description: string | null
 }
 
+/** Mirrors `FacilityReferenceItemOut`. Story 2.7 AC21/AC22 (fix f2.7.5): only a counted facility
+ * takes a quantity. */
+export interface EventFacilityReferenceItem extends EventReferenceItem {
+  is_countable: boolean
+}
+
 /** Mirrors `EventReferenceData`: the pick-lists for the request form (story 2.1 AC4-AC6). */
 export interface EventReferenceData {
   layouts: EventReferenceItem[]
-  facilities: EventReferenceItem[]
+  facilities: EventFacilityReferenceItem[]
   accessibility_features: EventReferenceItem[]
   equipment_types: EventReferenceItem[]
 }

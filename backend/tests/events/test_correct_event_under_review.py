@@ -257,7 +257,8 @@ def test_requirements_registration_and_visibility_can_be_corrected(coordinator_c
             {
                 **_requirement_in(main_venue),
                 "layout_code": "THEATRE",
-                "facilities": [{"code": "PROJECTOR"}],
+                # Fix f2.7.5 (2.7 AC21): a counted facility states how many.
+                "facilities": [{"code": "PROJECTOR", "quantity": 2}],
             }
         ],
         accessibility_none_required=False,

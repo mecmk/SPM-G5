@@ -333,7 +333,7 @@ export function VenueFormPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form) return
-    const problem = validateVenueForm(form)
+    const problem = validateVenueForm(form, reference?.facilities ?? [])
     if (problem) {
       setSaveError(ERROR_REGISTRY[problem].message)
       return
@@ -523,7 +523,9 @@ export function VenueFormPage() {
 
           <fieldset className="card">
             <legend>Facilities</legend>
-            <p className="form-hint">Tick what the venue offers. Quantity is optional.</p>
+            <p className="form-hint">
+              Tick what the venue offers, and say how many of each one that is counted.
+            </p>
             <ul className="check-list">
               {reference.facilities.map((item) => {
                 const selected = form.facilities[item.code]
@@ -539,16 +541,21 @@ export function VenueFormPage() {
                     </label>
                     {selected && (
                       <div className="inline-fields">
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          className="inline-number"
-                          placeholder="Qty"
-                          aria-label={`${item.name} quantity`}
-                          value={selected.quantity}
-                          onChange={(e) => updateFacility(item.code, { quantity: e.target.value })}
-                        />
+                        {/* 8.3 AC11/AC12 (fix f2.7.5): only a counted facility asks how many. */}
+                        {item.is_countable && (
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            className="inline-number"
+                            placeholder="Qty"
+                            aria-label={`${item.name} quantity`}
+                            value={selected.quantity}
+                            onChange={(e) =>
+                              updateFacility(item.code, { quantity: e.target.value })
+                            }
+                          />
+                        )}
                         <input
                           placeholder="Notes"
                           aria-label={`${item.name} notes`}

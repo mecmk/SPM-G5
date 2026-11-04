@@ -226,12 +226,12 @@ test('2.1 AC3: attendance, facility and equipment quantities must be positive wh
   }
 
   await page.getByLabel('Expected attendance').fill('60')
-  await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
-  await page.getByLabel('Breakout rooms quantity').fill('0')
+  await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
+  await page.getByLabel('Whiteboard / flipchart quantity').fill('0')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page.getByRole('alert')).toContainText('positive whole number')
 
-  await page.getByLabel('Breakout rooms quantity').fill('3')
+  await page.getByLabel('Whiteboard / flipchart quantity').fill('3')
   await addEquipment(page, 1, 'Presentation laptop', '0')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page.getByRole('alert')).toContainText('positive whole number')
@@ -248,8 +248,8 @@ test('2.1 AC4: venue requirements are recorded with the request, facilities with
 
   await page.getByLabel('Room layout').selectOption({ label: 'Theatre' })
   await page.getByRole('checkbox', { name: 'Projector & screen', exact: true }).check()
-  await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
-  await page.getByLabel('Breakout rooms quantity').fill('3')
+  await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
+  await page.getByLabel('Whiteboard / flipchart quantity').fill('3')
   await page.getByLabel('Other requirements').fill('Close to the lifts')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
@@ -259,8 +259,10 @@ test('2.1 AC4: venue requirements are recorded with the request, facilities with
   await expect(
     page.getByRole('checkbox', { name: 'Projector & screen', exact: true }),
   ).toBeChecked()
-  await expect(page.getByRole('checkbox', { name: 'Breakout rooms', exact: true })).toBeChecked()
-  await expect(page.getByLabel('Breakout rooms quantity')).toHaveValue('3')
+  await expect(
+    page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }),
+  ).toBeChecked()
+  await expect(page.getByLabel('Whiteboard / flipchart quantity')).toHaveValue('3')
   await expect(page.getByLabel('Other requirements')).toHaveValue('Close to the lifts')
   await expect(page.getByLabel('Preferred location')).toHaveCount(0)
 })
@@ -515,8 +517,8 @@ test('2.1 AC3: the field that needs fixing is marked and focused', async ({ page
   await attendance.fill('60')
   await expect(attendance).not.toHaveAttribute('aria-invalid', 'true')
 
-  await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
-  const rooms = page.getByLabel('Breakout rooms quantity')
+  await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
+  const rooms = page.getByLabel('Whiteboard / flipchart quantity')
   await rooms.fill('0')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(rooms).toBeFocused()
@@ -801,12 +803,12 @@ test('2.1 AC3: a bad number is said next to the field as soon as it is typed', a
   )
 
   // A facility quantity
-  await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
-  await page.getByLabel('Breakout rooms quantity').fill('-2')
+  await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
+  await page.getByLabel('Whiteboard / flipchart quantity').fill('-2')
   await expect(
     page.getByText('A facility quantity must be a positive whole number, or left empty.'),
   ).toBeVisible()
-  await page.getByLabel('Breakout rooms quantity').fill('3')
+  await page.getByLabel('Whiteboard / flipchart quantity').fill('3')
   await expect(
     page.getByText('A facility quantity must be a positive whole number, or left empty.'),
   ).toHaveCount(0)
@@ -1579,8 +1581,8 @@ test('2.1 AC22: a facility quantity above 100,000 is told the largest accepted, 
     if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
   })
   await fillEssentials(page, uniqueName('Huge rooms'))
-  await page.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
-  const rooms = page.getByLabel('Breakout rooms quantity')
+  await page.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
+  const rooms = page.getByLabel('Whiteboard / flipchart quantity')
 
   await rooms.fill('100001')
   await expect(page.getByText('A facility quantity must be 100,000 or less.')).toBeVisible()
@@ -1597,5 +1599,5 @@ test('2.1 AC22: a facility quantity above 100,000 is told the largest accepted, 
   await expect(rooms).not.toHaveAttribute('aria-invalid', 'true')
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page).toHaveURL(EDIT_PATH)
-  await expect(page.getByLabel('Breakout rooms quantity')).toHaveValue('100000')
+  await expect(page.getByLabel('Whiteboard / flipchart quantity')).toHaveValue('100000')
 })

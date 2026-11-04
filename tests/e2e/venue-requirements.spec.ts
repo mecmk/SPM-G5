@@ -29,6 +29,11 @@
  *     the event's own GET with it set, as 12.1 AC15's case for Nimbus does, and saves nothing.
  * AC18 the change request form (19.1) keeps the event's last requirement, and starts an event
  *     with none with one to fill in.
+ * f2.7.5 - only countable facilities take a quantity:
+ * AC21 a counted facility (Projector & screen, Whiteboard / flipchart) asks how many; a blank one
+ *     is listed as still needed, and stops a submission before anything is sent.
+ * AC22 any other facility (Wi-Fi) has notes but no "How many". The server's refusals of both are
+ *     backend cases: backend/tests/events/test_countable_facilities.py.
  * Rule detail, refusals (401/403/404/409/422), the migration (AC7), the server's refusal of a
  * repeated name (AC9) or a moved event (AC10), the race with a submission (AC12) and what a booking
  * request carries (AC13) are backend cases:
@@ -159,8 +164,8 @@ test('2.7 AC1: the organiser adds two venue requirements, each with its own deta
   await plenary.getByLabel('Other requirements').fill('Near the lifts')
   const breakout = await addRequirement(page, 2, 'Breakout', '20')
   await breakout.getByLabel('Room layout').selectOption({ label: 'Classroom' })
-  await breakout.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
-  await breakout.getByLabel('Breakout rooms quantity').fill('3')
+  await breakout.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
+  await breakout.getByLabel('Whiteboard / flipchart quantity').fill('3')
   await saveDraft(page)
 
   await page.reload()
@@ -174,7 +179,7 @@ test('2.7 AC1: the organiser adds two venue requirements, each with its own deta
   await expect(requirement(page, 2).getByLabel('Requirement name')).toHaveValue('Breakout')
   await expect(requirement(page, 2).getByLabel('Number of people')).toHaveValue('20')
   await expect(requirement(page, 2).getByLabel('Room layout')).toHaveValue('CLASSROOM')
-  await expect(requirement(page, 2).getByLabel('Breakout rooms quantity')).toHaveValue('3')
+  await expect(requirement(page, 2).getByLabel('Whiteboard / flipchart quantity')).toHaveValue('3')
 })
 
 test("2.7 AC2: a new requirement starts with the event's times, which can be changed", async ({
@@ -277,6 +282,56 @@ test('2.7 AC8: an incomplete requirement is pointed out before submitting', asyn
   await addRequirement(page, 2, 'Breakout')
   await saveDraft(page)
   await expect(needed).toContainText('venue requirement 2: number of people')
+})
+
+test('2.7 AC21/AC22: only a counted facility asks how many, and a blank one stops the submission', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page, uniqueName('Counted facilities'))
+  const hall = await addRequirement(page, 1, 'Plenary hall', '60')
+  const needed = page.getByText(/To submit, still needed:/)
+
+  // AC22: Wi-Fi is either needed or not - notes, but no "How many".
+  await hall.getByRole('checkbox', { name: 'Wi-Fi', exact: true }).check()
+  await expect(hall.getByLabel('Wi-Fi notes, venue requirement 1', { exact: true })).toBeVisible()
+  await expect(hall.getByLabel('Wi-Fi quantity, venue requirement 1', { exact: true })).toHaveCount(
+    0,
+  )
+
+  // AC21: a projector is counted, and how many is needed before the request can go.
+  await hall.getByRole('checkbox', { name: 'Projector & screen', exact: true }).check()
+  const projectors = hall.getByLabel('Projector & screen quantity, venue requirement 1', {
+    exact: true,
+  })
+  await expect(projectors).toBeVisible()
+  await expect(needed).toContainText('venue requirement 1: how many Projector & screen')
+
+  // Submitting with it blank is stopped in the browser: nothing is sent, not even the draft.
+  let sent = 0
+  page.on('request', (request) => {
+    if (request.method() !== 'GET' && request.url().includes('/events')) sent += 1
+  })
+  await page.getByRole('button', { name: 'Submit request' }).click()
+  await expect(page.getByRole('alert')).toContainText(
+    'Enter how many of each counted facility is needed before submitting.',
+  )
+  await expect(projectors).toBeFocused()
+  await expect(projectors).toHaveAttribute('aria-invalid', 'true')
+  expect(sent).toBe(0)
+
+  await projectors.fill('2')
+  await expect(needed).not.toContainText('how many Projector & screen')
+  await saveDraft(page)
+  await page.reload()
+  await expect(
+    requirement(page, 1).getByLabel('Projector & screen quantity, venue requirement 1', {
+      exact: true,
+    }),
+  ).toHaveValue('2')
+  await expect(
+    requirement(page, 1).getByRole('checkbox', { name: 'Wi-Fi', exact: true }),
+  ).toBeChecked()
 })
 
 test('2.7 AC11: the requirement field to fix is marked and focused', async ({ page }) => {
@@ -442,10 +497,10 @@ test("2.7 AC3: each requirement's Remove button and facility quantities say whic
   await startNewRequest(page, uniqueName('Labelled controls'))
   await addRequirement(page, 1, 'Plenary hall', '60')
   const breakout = await addRequirement(page, 2, 'Breakout', '20')
-  await breakout.getByRole('checkbox', { name: 'Breakout rooms', exact: true }).check()
+  await breakout.getByRole('checkbox', { name: 'Whiteboard / flipchart', exact: true }).check()
 
   await expect(
-    page.getByLabel('Breakout rooms quantity, venue requirement 2', { exact: true }),
+    page.getByLabel('Whiteboard / flipchart quantity, venue requirement 2', { exact: true }),
   ).toBeVisible()
   await expect(
     page.getByRole('button', { name: 'Remove venue requirement 1', exact: true }),

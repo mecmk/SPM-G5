@@ -42,6 +42,7 @@ export type ErrorCode =
   | 'VENUE_HOURS_OUT_OF_ORDER'
   | 'VENUE_TURNAROUND_INVALID'
   | 'VENUE_QUANTITY_INVALID'
+  | 'VENUE_FACILITY_QUANTITY_REQUIRED'
   | 'VENUE_LAYOUT_CAPACITY_INVALID'
   | 'VENUE_PICTURE_TYPE_INVALID'
   | 'VENUE_PICTURE_TOO_LARGE'
@@ -76,6 +77,7 @@ export type ErrorCode =
   | 'EVENT_ATTENDANCE_INVALID'
   | 'EVENT_ATTENDANCE_TOO_LARGE'
   | 'EVENT_FACILITY_QUANTITY_INVALID'
+  | 'EVENT_FACILITY_QUANTITY_REQUIRED'
   | 'EVENT_FACILITY_QUANTITY_TOO_LARGE'
   | 'VENUE_REQUIREMENT_CAPACITY_INVALID'
   | 'VENUE_REQUIREMENT_OVER_ATTENDANCE'
@@ -305,6 +307,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
     title: 'Check facility quantities',
     message: 'A facility quantity must be a positive whole number, or left empty.',
   },
+  /** Story 8.3 AC11 (fix f2.7.5): the backend refuses the same, naming the facility. */
+  VENUE_FACILITY_QUANTITY_REQUIRED: {
+    title: 'Check facility quantities',
+    message: 'Enter how many of each counted facility the venue has.',
+  },
   VENUE_LAYOUT_CAPACITY_INVALID: {
     title: 'Check layout capacities',
     message: 'A layout capacity must be a positive whole number, or left empty.',
@@ -506,6 +513,11 @@ export const ERROR_REGISTRY: Record<ErrorCode, ErrorEntry> = {
   EVENT_FACILITY_QUANTITY_INVALID: {
     title: 'Check the quantity',
     message: 'A facility quantity must be a positive whole number, or left empty.',
+  },
+  /** Story 2.7 AC21 (fix f2.7.5): checked when submitting; a draft may leave it blank. */
+  EVENT_FACILITY_QUANTITY_REQUIRED: {
+    title: 'Check the quantity',
+    message: 'Enter how many of each counted facility is needed before submitting.',
   },
   /** Story 2.1 AC22 (fix f2.1.5): worded as the backend words it. */
   EVENT_FACILITY_QUANTITY_TOO_LARGE: {

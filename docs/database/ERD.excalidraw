@@ -1123,7 +1123,7 @@
       "x": 540,
       "y": 34,
       "width": 400,
-      "height": 78
+      "height": 94
     },
     {
       "angle": 0,
@@ -1152,9 +1152,9 @@
       "x": 548,
       "y": 42,
       "width": 384,
-      "height": 62,
-      "text": "PK  code                           text\n    name                           text\n    description?                   text\n    sort_order                     int",
-      "originalText": "PK  code                           text\n    name                           text\n    description?                   text\n    sort_order                     int",
+      "height": 78,
+      "text": "PK  code                           text\n    name                           text\n    description?                   text\n    sort_order                     int\n    is_countable                   bool",
+      "originalText": "PK  code                           text\n    name                           text\n    description?                   text\n    sort_order                     int\n    is_countable                   bool",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -1193,7 +1193,7 @@
       "id": "hdr-cd6bbd2a95e8",
       "type": "rectangle",
       "x": 540,
-      "y": 172,
+      "y": 188,
       "width": 400,
       "height": 34
     },
@@ -1222,7 +1222,7 @@
       "id": "text-47ff09bfcdf7",
       "type": "text",
       "x": 548,
-      "y": 178,
+      "y": 194,
       "width": 384,
       "height": 22,
       "text": "room_layouts",
@@ -1277,7 +1277,7 @@
       "id": "body-4741b22cb3b9",
       "type": "rectangle",
       "x": 540,
-      "y": 206,
+      "y": 222,
       "width": 400,
       "height": 78
     },
@@ -1306,7 +1306,7 @@
       "id": "text-7c92a1d21909",
       "type": "text",
       "x": 548,
-      "y": 214,
+      "y": 230,
       "width": 384,
       "height": 62,
       "text": "PK  code                           text\n    name                           text\n    description                    text\n    sort_order                     int",
@@ -1349,7 +1349,7 @@
       "id": "hdr-bbe776754447",
       "type": "rectangle",
       "x": 540,
-      "y": 344,
+      "y": 360,
       "width": 400,
       "height": 34
     },
@@ -1378,7 +1378,7 @@
       "id": "text-7cd5299207c3",
       "type": "text",
       "x": 548,
-      "y": 350,
+      "y": 366,
       "width": 384,
       "height": 22,
       "text": "deleted_room_layouts",
@@ -1421,7 +1421,7 @@
       "id": "body-500ce2a3d032",
       "type": "rectangle",
       "x": 540,
-      "y": 378,
+      "y": 394,
       "width": 400,
       "height": 47
     },
@@ -1450,7 +1450,7 @@
       "id": "text-891284d4a6ae",
       "type": "text",
       "x": 548,
-      "y": 386,
+      "y": 402,
       "width": 384,
       "height": 31,
       "text": "PK  code                           text\n    name                           text",
@@ -1493,7 +1493,7 @@
       "id": "hdr-1b2de2fc2a48",
       "type": "rectangle",
       "x": 540,
-      "y": 485,
+      "y": 501,
       "width": 400,
       "height": 34
     },
@@ -1522,7 +1522,7 @@
       "id": "text-a5acb957746d",
       "type": "text",
       "x": 548,
-      "y": 491,
+      "y": 507,
       "width": 384,
       "height": 22,
       "text": "accessibility_features",
@@ -1573,7 +1573,7 @@
       "id": "body-a5b2079bf8be",
       "type": "rectangle",
       "x": 540,
-      "y": 519,
+      "y": 535,
       "width": 400,
       "height": 78
     },
@@ -1602,7 +1602,7 @@
       "id": "text-ba6ce7f4851b",
       "type": "text",
       "x": 548,
-      "y": 527,
+      "y": 543,
       "width": 384,
       "height": 62,
       "text": "PK  code                           text\n    name                           text\n    description?                   text\n    sort_order                     int",
@@ -1645,7 +1645,7 @@
       "id": "hdr-eeb13ea7892d",
       "type": "rectangle",
       "x": 540,
-      "y": 657,
+      "y": 673,
       "width": 400,
       "height": 34
     },
@@ -1674,7 +1674,7 @@
       "id": "text-3d15d9dc2a7a",
       "type": "text",
       "x": 548,
-      "y": 663,
+      "y": 679,
       "width": 384,
       "height": 22,
       "text": "equipment_types",
@@ -1729,7 +1729,7 @@
       "id": "body-9fa597763356",
       "type": "rectangle",
       "x": 540,
-      "y": 691,
+      "y": 707,
       "width": 400,
       "height": 156
     },
@@ -1758,7 +1758,7 @@
       "id": "text-58b3a9980880",
       "type": "text",
       "x": 548,
-      "y": 699,
+      "y": 715,
       "width": 384,
       "height": 140,
       "text": "PK  id                             uuid\n    code                           text\n    name                           text\n    description?                   text\n    total_quantity                 int\n    storage_location?              text\n    is_active                      bool\n    created_at                     timestamptz\n    updated_at                     timestamptz",
@@ -6779,7 +6779,7 @@
       "x": 3240,
       "y": 60,
       "width": 2300,
-      "height": 657,
+      "height": 673,
       "points": [
         [
           0,
@@ -6787,7 +6787,7 @@
         ],
         [
           -2300,
-          657
+          673
         ]
       ],
       "lastCommittedPoint": null,
@@ -6830,7 +6830,7 @@
       "id": "text-b5398ce608e2",
       "type": "text",
       "x": 2030.0,
-      "y": 380.5,
+      "y": 388.5,
       "width": 120,
       "height": 16,
       "text": "equipment_type_id",
@@ -7163,7 +7163,7 @@
       "x": 3240,
       "y": 372,
       "width": 2300,
-      "height": 345,
+      "height": 361,
       "points": [
         [
           0,
@@ -7171,7 +7171,7 @@
         ],
         [
           -2300,
-          345
+          361
         ]
       ],
       "lastCommittedPoint": null,
@@ -7214,7 +7214,7 @@
       "id": "text-976c9bec20e3",
       "type": "text",
       "x": 2030.0,
-      "y": 536.5,
+      "y": 544.5,
       "width": 120,
       "height": 16,
       "text": "equipment_type_id",
@@ -7355,7 +7355,7 @@
       "x": 2160,
       "y": 513,
       "width": 1220,
-      "height": 32,
+      "height": 48,
       "points": [
         [
           0,
@@ -7363,7 +7363,7 @@
         ],
         [
           -1220,
-          32
+          48
         ]
       ],
       "lastCommittedPoint": null,
@@ -7406,7 +7406,7 @@
       "id": "text-24ef9e9c97bc",
       "type": "text",
       "x": 1490.0,
-      "y": 521.0,
+      "y": 529.0,
       "width": 120,
       "height": 16,
       "text": "feature_code",
@@ -8795,7 +8795,7 @@
       "x": 2160,
       "y": 669,
       "width": 1220,
-      "height": 48,
+      "height": 64,
       "points": [
         [
           0,
@@ -8803,7 +8803,7 @@
         ],
         [
           -1220,
-          48
+          64
         ]
       ],
       "lastCommittedPoint": null,
@@ -8846,7 +8846,7 @@
       "id": "text-45a3d5496872",
       "type": "text",
       "x": 1490.0,
-      "y": 685.0,
+      "y": 693.0,
       "width": 120,
       "height": 16,
       "text": "equipment_type_id",
@@ -11195,7 +11195,7 @@
       "x": 1080,
       "y": 732,
       "width": 140,
-      "height": 187,
+      "height": 171,
       "points": [
         [
           0,
@@ -11203,7 +11203,7 @@
         ],
         [
           -140,
-          -187
+          -171
         ]
       ],
       "lastCommittedPoint": null,
@@ -11246,7 +11246,7 @@
       "id": "text-5fa3c31864b2",
       "type": "text",
       "x": 950.0,
-      "y": 630.5,
+      "y": 638.5,
       "width": 120,
       "height": 16,
       "text": "feature_code",
@@ -11963,7 +11963,7 @@
       "x": 2700,
       "y": 1042,
       "width": 1760,
-      "height": 810,
+      "height": 794,
       "points": [
         [
           0,
@@ -11971,7 +11971,7 @@
         ],
         [
           -1760,
-          -810
+          -794
         ]
       ],
       "lastCommittedPoint": null,
@@ -12014,7 +12014,7 @@
       "id": "text-9800344774d5",
       "type": "text",
       "x": 1760.0,
-      "y": 629.0,
+      "y": 637.0,
       "width": 120,
       "height": 16,
       "text": "required_layout_code",
@@ -12635,7 +12635,7 @@
       "x": 1080,
       "y": 576,
       "width": 140,
-      "height": 344,
+      "height": 328,
       "points": [
         [
           0,
@@ -12643,7 +12643,7 @@
         ],
         [
           -140,
-          -344
+          -328
         ]
       ],
       "lastCommittedPoint": null,
@@ -12686,7 +12686,7 @@
       "id": "text-cb41aa6646db",
       "type": "text",
       "x": 950.0,
-      "y": 396.0,
+      "y": 404.0,
       "width": 120,
       "height": 16,
       "text": "layout_code",
@@ -13115,7 +13115,7 @@
       "x": 2160,
       "y": 60,
       "width": 1220,
-      "height": 172,
+      "height": 188,
       "points": [
         [
           0,
@@ -13123,7 +13123,7 @@
         ],
         [
           -1220,
-          172
+          188
         ]
       ],
       "lastCommittedPoint": null,
@@ -13166,7 +13166,7 @@
       "id": "text-7419051cffd1",
       "type": "text",
       "x": 1490.0,
-      "y": 138.0,
+      "y": 146.0,
       "width": 120,
       "height": 16,
       "text": "layout_code",

@@ -1,6 +1,6 @@
 # ConnectSphere Data Dictionary
 
-_Generated from the live PostgreSQL catalog on 2026-11-02 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
+_Generated from the live PostgreSQL catalog on 2026-11-04 by `npm run db:docs`. **Do not edit by hand** - change the `COMMENT ON` statements in `backend/db/migrations/*.sql` and regenerate._
 
 Companion diagram: [ERD.excalidraw](ERD.excalidraw) (open at <https://excalidraw.com>
 or with the VS Code Excalidraw extension). Design notes and workflow: [README.md](README.md).
@@ -176,6 +176,7 @@ Facilities a venue can offer and an event can require (projector, sound system, 
 | `name` | `text` | no | - | - | Display name. |
 | `description` | `text` | yes | - | - | Optional longer description. |
 | `sort_order` | `integer` | no | `100` | - | Display ordering in pick-lists (ascending). |
+| `is_countable` | `boolean` | no | `false` | - | TRUE = counted (e.g. 2 projectors): a venue offering it, and a submitted venue requirement asking for it, state how many. FALSE = there or not: no quantity is recorded against it (fix f2.7.5). |
 
 ### room_layouts
 
@@ -1014,7 +1015,6 @@ Loaded by `backend/db/seed/010_reference_data.sql`. Edit that file to add values
 | STAGE | Stage | Raised platform for presenters. |
 | WHITEBOARD | Whiteboard / flipchart | - |
 | CATERING_AREA | Catering area | Space and power for food service. |
-| BREAKOUT_ROOMS | Breakout rooms | Adjoining smaller rooms. |
 
 ### room_layouts values
 

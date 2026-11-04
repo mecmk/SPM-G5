@@ -241,7 +241,7 @@ def test_submission_leaves_every_recorded_detail_unchanged(organiser_client):
                 "capacity": 40,
                 "starts_at": starts_at.isoformat(),
                 "ends_at": ends_at.isoformat(),
-                "facilities": [{"code": "BREAKOUT_ROOMS", "quantity": 3}],
+                "facilities": [{"code": "WHITEBOARD", "quantity": 3}],
             }
         ],
         accessibility_needs=[{"code": "LIFT_ACCESS"}],

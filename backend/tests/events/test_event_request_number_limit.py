@@ -54,12 +54,12 @@ TOO_LARGE = [
 
 
 def _rooms(quantity: int) -> dict:
-    """One venue requirement asking for ``quantity`` breakout rooms, otherwise complete: 20 people
+    """One venue requirement asking for ``quantity`` whiteboards, otherwise complete: 20 people
     fits every event here, and a submitted request needs the number (story 7.2 AC4)."""
     return {
         "name": "Main venue",
         "capacity": 20,
-        "facilities": [{"code": "BREAKOUT_ROOMS", "quantity": quantity}],
+        "facilities": [{"code": "WHITEBOARD", "quantity": quantity}],
     }
 
 

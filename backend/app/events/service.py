@@ -60,6 +60,7 @@ from app.events.schemas import (
     EventReviewCorrection,
     EventRoutineUpdate,
     EventUpdate,
+    FacilityReferenceItemOut,
     PointOfContactUpdate,
     ReferenceItemOut,
     ReviewQueueSort,
@@ -108,6 +109,10 @@ ATTENDANCE_BELOW_REQUIREMENT_MESSAGE = (
     "{minimum} people. A venue requirements change that lowers it must be approved first."
 )
 DUPLICATE_REQUIREMENT_NAME_MESSAGE = 'Two venue requirements cannot both be called "{name}".'
+# Fix f2.7.5 (story 2.7 AC22): only a counted facility takes a quantity.
+FACILITY_NOT_COUNTED_MESSAGE = (
+    "{requirement}: {facility} is either needed or not, so it takes no quantity."
+)
 # AC9's database backstop knows only that the index refused a name, not which requirement held it.
 DUPLICATE_REQUIREMENT_NAME_BACKSTOP_MESSAGE = (
     "Two venue requirements on this request cannot share a name."
@@ -118,6 +123,7 @@ NO_VENUE_REQUIREMENT_MESSAGE = "A request needs at least one venue requirement."
 _UNNAMED_REQUIREMENT_LABEL = "Venue requirement {position}"
 _REQUIREMENT_MISSING_NAME_LABEL = "venue requirement {position}: name"
 _REQUIREMENT_MISSING_CAPACITY_LABEL = "venue requirement {position}: number of people"
+_REQUIREMENT_MISSING_FACILITY_QUANTITY_LABEL = "venue requirement {position}: how many {facility}"
 ROUTINE_EDIT_CLOSED_MESSAGE = (
     "This event is {status}, so its routine information can no longer be edited."
 )
@@ -589,7 +595,12 @@ def list_reference_data(db: Session) -> EventReferenceData:
             ReferenceItemOut.model_validate(layout)
             for layout in venue_service.list_room_layouts(db)
         ],
-        facilities=items(select(Facility).order_by(Facility.sort_order, Facility.code)),
+        facilities=[
+            FacilityReferenceItemOut.model_validate(facility)
+            for facility in db.scalars(
+                select(Facility).order_by(Facility.sort_order, Facility.code)
+            ).all()
+        ],
         accessibility_features=items(
             select(AccessibilityFeature).order_by(
                 AccessibilityFeature.sort_order, AccessibilityFeature.code
@@ -844,12 +855,27 @@ def _check_venue_requirement_references(
     db: Session, items: list[VenueRequirementIn], *, owned_ids: set[uuid.UUID]
 ) -> None:
     """2.7 AC1/AC3: every layout and facility exists, and an item may carry only the ``id`` of a
-    requirement this request already has."""
+    requirement this request already has. AC22 (fix f2.7.5): a facility that is not counted takes
+    no quantity, on a draft or not."""
     layouts = [item.layout_code for item in items if item.layout_code is not None]
     _known(db, RoomLayout, layouts, label="room layout")
-    _known(db, Facility, [f.code for item in items for f in item.facilities], label="facility")
+    facilities = _known(
+        db, Facility, [f.code for item in items for f in item.facilities], label="facility"
+    )
     if any(item.id is not None and item.id not in owned_ids for item in items):
         raise UnknownVenueRequirement()
+    for index, item in enumerate(items):
+        for wanted in item.facilities:
+            facility = facilities[wanted.code]
+            if wanted.quantity is not None and not facility.is_countable:
+                raise InvalidVenueRequirement(
+                    FACILITY_NOT_COUNTED_MESSAGE.format(
+                        requirement=_describe_requirement(item.name, index),
+                        facility=facility.name,
+                    ),
+                    index=index,
+                    field="facilities",
+                )
 
 
 def _check_registration(
@@ -1511,7 +1537,7 @@ def update_event(db: Session, event_id: uuid.UUID, data: EventUpdate, *, actor: 
     return event
 
 
-def _missing_for_submission(event: Event) -> list[str]:
+def _missing_for_submission(db: Session, event: Event) -> list[str]:
     """AC10/AC13/AC17: every event detail and the point of contact must be filled in, at least one
     venue requirement given, accessibility needs answered - something chosen or written, or marked
     "none required" - and, only when Registration required is Yes, a registration closing date.
@@ -1527,11 +1553,28 @@ def _missing_for_submission(event: Event) -> list[str]:
     # its place in the list.
     if not event.venue_requirements:
         missing.append(_VENUE_ANSWER_LABEL)
+    # Without autoflush: a correction's edit is judged here before it is written (7.2 AC4).
+    with db.no_autoflush:
+        counted = db.scalars(
+            select(Facility)
+            .where(Facility.is_countable.is_(True))
+            .order_by(Facility.sort_order, Facility.code)
+        ).all()
     for index, requirement in enumerate(event.venue_requirements):
         if requirement.name is None:
             missing.append(_REQUIREMENT_MISSING_NAME_LABEL.format(position=index + 1))
         if requirement.capacity is None:
             missing.append(_REQUIREMENT_MISSING_CAPACITY_LABEL.format(position=index + 1))
+        # 2.7 AC21 (fix f2.7.5): how many of each counted facility, in the form's order. Looked up
+        # by code, since a facility a correction has just added is not yet loaded with its row.
+        blank = {f.facility_code for f in requirement.facilities if f.quantity is None}
+        for facility in counted:
+            if facility.code in blank:
+                missing.append(
+                    _REQUIREMENT_MISSING_FACILITY_QUANTITY_LABEL.format(
+                        position=index + 1, facility=facility.name
+                    )
+                )
     has_accessibility_answer = (
         event.accessibility_none_required
         or bool(event.accessibility_needs)
@@ -1674,7 +1717,7 @@ def submit_event(db: Session, event_id: uuid.UUID, *, actor: User) -> Event:
     event = _get_own_event(db, event_id, actor, for_update=True)
     if event.status != EventStatus.DRAFT:
         raise EventAlreadySubmitted()
-    missing = _missing_for_submission(event)
+    missing = _missing_for_submission(db, event)
     if missing:
         raise MissingSubmissionDetails(missing)
     _check_schedule(
@@ -2777,7 +2820,7 @@ def _apply_correction(
     }
     if not changes:
         return changes
-    missing = _missing_for_submission(event)
+    missing = _missing_for_submission(db, event)
     if missing:
         raise SubmittedDetailsMissing(missing)
     try:
@@ -3103,6 +3146,9 @@ def check_proposed_venue_requirements(
                 index=index,
                 field="capacity",
             )
+    # 2.7 AC22 (fix f2.7.5) is judged here too. AC21 is not: the change form does not edit
+    # facilities, so a counted one submitted before the fix without a quantity must not stop a
+    # change to anything else.
     _check_venue_requirement_references(
         db, items, owned_ids={requirement.id for requirement in event.venue_requirements}
     )
