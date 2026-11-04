@@ -80,9 +80,11 @@ test('4.3 AC1/AC2/AC4/AC6: the organiser answers a clarification request, twice'
   await expect(thread.nth(1)).toContainText('Olivia Organiser')
   await expect(thread.nth(2)).toContainText(second)
 
-  // 4.3 AC2: the thread itself is read-only - nothing in it to edit or remove an entry with.
-  await expect(clarificationsSection(page).getByRole('button')).toHaveCount(0)
-  await expect(clarificationsSection(page).getByRole('textbox')).toHaveCount(0)
+  // 4.3 AC2: the thread itself is read-only - nothing in it to edit or remove an entry with. The
+  // card also holds the box for the next message (c20), so the check is on the messages' list.
+  const messages = clarificationsSection(page).getByRole('list')
+  await expect(messages.getByRole('button')).toHaveCount(0)
+  await expect(messages.getByRole('textbox')).toHaveCount(0)
 
   // 4.3 AC2: the coordinator sees the responses, in order, and has no response form.
   await page.getByRole('button', { name: 'Sign out' }).click()
