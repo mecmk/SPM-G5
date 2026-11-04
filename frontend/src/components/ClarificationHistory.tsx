@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { formatDate, formatDateTime } from '../shared/format'
 import { StatusBadge } from './StatusBadge'
 import { ErrorToast } from './ErrorToast'
@@ -23,6 +24,9 @@ export interface ClarificationHistoryProps {
   /** The signed-in viewer's id, so their own messages render as the "self" bubble; null when
    *  there is no viewer to compare against. */
   currentUserId: string | null
+  /** The box to write the next message, for whoever may send one; it sits under the newest
+   *  message, so a sent one appears just above where it was written. */
+  children?: ReactNode
 }
 
 const KIND_LABELS: Record<ClarificationEntryKind, string> = {
@@ -46,8 +50,9 @@ function initialsFor(name: string): string {
  * `decidedAt === null` means no decision has been made yet, distinct from an approval that
  * carries no reason. AC2 - the clarification conversation below it, oldest first, each with its
  * author and timestamp, laid out as a two-party chat thread with the viewer's own messages on
- * the right. AC3: entries are historical and cannot be edited or removed - this component
- * renders no button or input, so there is nothing here to change one with. A decision and the
+ * the right. AC3: entries are historical and cannot be edited or removed - the thread renders no
+ * button or input, so there is nothing here to change one with; the only input is the box for the
+ * next message, passed in as `children`. A decision and the
  * clarification thread behind it are one story, so one card carries both.
  *
  * Story 6.2 AC16: a cancelled event's decision was its approval (only an event going ahead can be
@@ -61,6 +66,7 @@ export function ClarificationHistory({
   entries,
   error,
   currentUserId,
+  children,
 }: ClarificationHistoryProps) {
   return (
     <section className="card stack" aria-labelledby="event-clarifications-heading">
@@ -116,6 +122,7 @@ export function ClarificationHistory({
           })}
         </ul>
       )}
+      {children}
     </section>
   )
 }

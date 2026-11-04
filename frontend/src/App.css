@@ -1213,6 +1213,12 @@ label.checkbox input {
   color: var(--brand-contrast);
 }
 
+/* c20: the box for the next message closes the thread, under the newest message */
+.clarification-reply {
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+}
+
 .clarification-bubble-meta {
   margin: 0 0 0.25rem;
   font-size: 0.75rem;
