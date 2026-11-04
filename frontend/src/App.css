@@ -4577,6 +4577,38 @@ button.requirement-choice.requirement-covered:hover,
   list-style: none;
 }
 
+.catalogue-periods li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.catalogue-periods .period-units {
+  padding: 0.125rem 0.625rem;
+  border-radius: 999px;
+  background: var(--primary-ghost);
+  color: var(--primary-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.catalogue-periods .item-timing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.catalogue-tile .icon {
+  color: var(--primary-text);
+}
+
+.catalogue-open {
+  width: 2rem;
+  color: var(--text-muted);
+}
+
 /* On a phone the four columns share the table's width, so the periods wrap inside their cell
    rather than widening the table. */
 @media (max-width: 640px) {
