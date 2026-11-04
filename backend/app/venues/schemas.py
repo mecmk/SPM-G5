@@ -19,6 +19,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.bookings.schemas import TURNAROUND_MAX_MINUTES
 from app.venues.models import UnavailabilityReason, Venue, VenueUnavailabilityPeriod
 from app.venues.suitability import Suitability
 
@@ -149,18 +150,22 @@ class _OperatingHoursMixin(BaseModel):
 
 
 class VenueCreate(_OperatingHoursMixin):
-    """AC1: name, location and capacity are the minimum; everything else is optional."""
+    """AC1/AC13 (fix f8.3.4): name, location, capacity and the opening hours are the minimum;
+    setup and teardown default to 0 and are at most a booking's own limit, 14 days (AC14), and
+    everything else is optional."""
 
     name: str = Field(min_length=1, max_length=200)
     location: str = Field(min_length=1, max_length=500)
     capacity: PositiveWholeNumber = POSITIVE
     description: str | None = None
     floor_area_sqm: Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
-    operating_hours_start: time | None = None
-    operating_hours_end: time | None = None
+    operating_hours_start: time
+    operating_hours_end: time
     operating_notes: str | None = None
-    setup_minutes_default: PositiveWholeNumber = Field(default=0, ge=0)
-    teardown_minutes_default: PositiveWholeNumber = Field(default=0, ge=0)
+    setup_minutes_default: PositiveWholeNumber = Field(default=0, ge=0, le=TURNAROUND_MAX_MINUTES)
+    teardown_minutes_default: PositiveWholeNumber = Field(
+        default=0, ge=0, le=TURNAROUND_MAX_MINUTES
+    )
     facilities: list[VenueFacilityIn] = Field(default_factory=list)
     layouts: list[VenueLayoutIn] = Field(default_factory=list)
     accessibility_features: list[VenueAccessibilityFeatureIn] = Field(default_factory=list)
@@ -193,8 +198,12 @@ class VenueUpdate(_OperatingHoursMixin):
     operating_hours_start: time | None = None
     operating_hours_end: time | None = None
     operating_notes: str | None = None
-    setup_minutes_default: PositiveWholeNumber | None = Field(default=None, ge=0)
-    teardown_minutes_default: PositiveWholeNumber | None = Field(default=None, ge=0)
+    setup_minutes_default: PositiveWholeNumber | None = Field(
+        default=None, ge=0, le=TURNAROUND_MAX_MINUTES
+    )
+    teardown_minutes_default: PositiveWholeNumber | None = Field(
+        default=None, ge=0, le=TURNAROUND_MAX_MINUTES
+    )
     status: str | None = Field(default=None, pattern="^(ACTIVE|WITHDRAWN)$")
     facilities: list[VenueFacilityIn] | None = None
     layouts: list[VenueLayoutIn] | None = None
@@ -209,6 +218,20 @@ class VenueUpdate(_OperatingHoursMixin):
     @classmethod
     def _normalize_operating_notes(cls, value):
         return _blank_to_none(value)
+
+    @field_validator(
+        "operating_hours_start",
+        "operating_hours_end",
+        "setup_minutes_default",
+        "teardown_minutes_default",
+    )
+    @classmethod
+    def _refuse_clearing(cls, value):
+        """AC13/AC14 (fix f8.3.4): these may be left out of an update, but never sent empty. A venue
+        saved earlier without opening hours keeps them unrecorded until both are given."""
+        if value is None:
+            raise ValueError("is required and cannot be cleared")
+        return value
 
     @model_validator(mode="after")
     def _check_operating_hours(self):

@@ -61,7 +61,7 @@ SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
 # Story 12.1 AC5, decided for f12.1.2 (14 Oct 2026) and not in the backlog: setup and teardown are
 # each at most 14 days, the longest an event may run. Keep in step by hand with
 # TURNAROUND_MAX_MINUTES in frontend/src/api/bookings.ts, which the request step's Setup and
-# Teardown inputs use.
+# Teardown inputs use. A venue's own defaults have the same limit (story 8.3 AC14, fix f8.3.4).
 TURNAROUND_MAX_MINUTES = 14 * 24 * 60
 
 

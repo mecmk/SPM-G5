@@ -90,8 +90,9 @@ export interface VenueInput {
   capacity: number
   description: string | null
   floor_area_sqm: string | null
-  operating_hours_start: string | null
-  operating_hours_end: string | null
+  /** Required (story 8.3 AC13, fix f8.3.4): never sent empty, new venue or edit. */
+  operating_hours_start: string
+  operating_hours_end: string
   operating_notes: string | null
   setup_minutes_default: number
   teardown_minutes_default: number
