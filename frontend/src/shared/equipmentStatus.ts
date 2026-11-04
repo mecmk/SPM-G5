@@ -60,7 +60,8 @@ const SHORT_WITHDRAW_ADVICE =
 const SHORT_REMOVE_ADVICE =
   "Technical Support can't supply these until the units are back; remove it if you need another type."
 
-/** Fix f16.2.2 (16.2 AC8): a short item's mark on its event's page, with what to do about it. */
+/** Fix f16.2.2 (16.2 AC8): a short item's mark on its event's page, with what to do about it.
+ *  Fix f16.2.3: for the viewer who can change the equipment; anyone else reads describeItemShort. */
 export function describeItemShortWithAdvice(
   unitsShort: number,
   quantity: number,

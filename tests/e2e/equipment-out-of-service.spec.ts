@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, mainOverflow, signIn } from './support'
+import {
+  ACCOUNTS,
+  corsHeaders,
+  EVENTS,
+  expectNoSidewaysScroll,
+  inFuture,
+  mainOverflow,
+  signIn,
+} from './support'
 
 /**
  * Story 16.2 - mark equipment out of service: what Technical Support and a coordinator click
@@ -28,6 +36,9 @@ import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, mainOverflow, signI
  *     sent. An accepted one reads Accepted, not Accepted (reserved). Seeded for the accepted
  *     screens; every status at once from stubbed shortages, since no seeded record leaves a
  *     Pending or unsent hold short and one that did would move figures other specs read.
+ *     Fix f16.2.3: only the viewer with the Withdraw or Remove button reads the advice; Technical
+ *     Support, a coordinator not the event's, and its own once the event awaits the safety check
+ *     read the plain mark.
  * AC9 (f16.2.2) Technical Support's holds schedule marks the same hold short. Which holds, and by
  *     how many, are backend cases.
  *
@@ -548,14 +559,14 @@ test.describe('takes a seeded hold short once', () => {
 })
 
 // --- AC8 (f16.2.2): what a short item says, whatever its status -----------------------------------
-test('16.2 AC8: a short item says to withdraw it, or to remove it if it was never sent, and an accepted one reads Accepted, not reserved', async ({
-  page,
-}) => {
-  // The showcase's three holding items - microphones accepted, a speaker set pending, laptops not
-  // yet sent - each stubbed short by one, so every status is seen without a record taking units.
-  const eventPath = `/events/${EVENTS.productShowcase}`
+const SHOWCASE_PATH = `/events/${EVENTS.productShowcase}`
+
+/** The showcase's three holding items - microphones accepted, a speaker set pending, laptops not
+ *  yet sent - each stubbed short by one, so every status is seen without a record taking units.
+ *  `status` stands in for the event's own, to show it past the point its equipment can change. */
+async function stubShowcaseShortByOne(page: Page, status?: string) {
   let holdingItems: string[] = []
-  await page.route(`**${eventPath}`, async (route) => {
+  await page.route(`**${SHOWCASE_PATH}`, async (route) => {
     if (route.request().resourceType() !== 'fetch') return route.fallback()
     const response = await route.fetch()
     const event = await response.json()
@@ -564,32 +575,73 @@ test('16.2 AC8: a short item says to withdraw it, or to remove it if it was neve
         ['REQUESTED', 'PENDING', 'ACCEPTED'].includes(item.status),
       )
       .map((item: { id: string }) => item.id)
-    return route.fulfill({ response, json: event })
+    return route.fulfill({ response, json: status === undefined ? event : { ...event, status } })
   })
-  await page.route(`**${eventPath}/equipment-shortages`, async (route) => {
-    const response = await route.fetch()
-    const json = holdingItems.map((id) => ({ item_id: id, units_short: 1 }))
-    return route.fulfill({ response, json })
-  })
+  await page.route(`**${SHOWCASE_PATH}/equipment-shortages`, (route) =>
+    route.fulfill({
+      json: holdingItems.map((id) => ({ item_id: id, units_short: 1 })),
+      headers: corsHeaders(route.request()),
+    }),
+  )
+}
 
+function showcaseItem(page: Page, name: string) {
+  return page
+    .getByRole('region', { name: 'Equipment requirements' })
+    .getByRole('listitem')
+    .filter({ hasText: name })
+}
+
+test('16.2 AC8: a short item says to withdraw it, or to remove it if it was never sent, and an accepted one reads Accepted, not reserved', async ({
+  page,
+}) => {
+  await stubShowcaseShortByOne(page)
   await signIn(page, ACCOUNTS.coordinator2)
-  await page.goto(eventPath)
-  const section = page.getByRole('region', { name: 'Equipment requirements' })
-  const item = (name: string) => section.getByRole('listitem').filter({ hasText: name })
+  await page.goto(SHOWCASE_PATH)
 
-  const mics = item('Wireless microphone')
+  const mics = showcaseItem(page, 'Wireless microphone')
   await expect(mics).toContainText(`Short: 1 of 3 out of service. ${SHORT_WITHDRAW_ADVICE}`)
   await expect(mics.getByText('Accepted', { exact: true })).toBeVisible()
   await expect(mics).not.toContainText('(reserved)')
 
-  const speakers = item('Portable speaker set')
+  const speakers = showcaseItem(page, 'Portable speaker set')
   await expect(speakers).toContainText(`Short: 1 of 1 out of service. ${SHORT_WITHDRAW_ADVICE}`)
   await expect(speakers.getByText('Pending', { exact: true })).toBeVisible()
 
-  await expect(item('Presentation laptop')).toContainText(
+  await expect(showcaseItem(page, 'Presentation laptop')).toContainText(
     `Short: 1 of 2 out of service. ${SHORT_REMOVE_ADVICE}`,
   )
 })
+
+// f16.2.3: the advice names a Withdraw or Remove button, so only whoever has one reads it.
+for (const viewer of [
+  { who: 'Technical Support', account: ACCOUNTS.techSupport },
+  { who: "a coordinator who isn't the event's", account: ACCOUNTS.coordinator },
+  {
+    who: "the event's coordinator once it awaits the safety check",
+    account: ACCOUNTS.coordinator2,
+    status: 'AWAITING_SAFETY_CHECK',
+  },
+]) {
+  test(`16.2 AC8: ${viewer.who} reads a short item's mark without the advice to withdraw or remove it`, async ({
+    page,
+  }) => {
+    await stubShowcaseShortByOne(page, viewer.status)
+    await signIn(page, viewer.account)
+    await page.goto(SHOWCASE_PATH)
+
+    const mics = showcaseItem(page, 'Wireless microphone')
+    await expect(mics).toContainText('Short: 1 of 3 out of service')
+    await expect(mics.getByText('Accepted', { exact: true })).toBeVisible()
+    const laptops = showcaseItem(page, 'Presentation laptop')
+    await expect(laptops).toContainText('Short: 1 of 2 out of service')
+    for (const item of [mics, showcaseItem(page, 'Portable speaker set'), laptops]) {
+      await expect(item).not.toContainText(SHORT_WITHDRAW_ADVICE)
+      await expect(item).not.toContainText(SHORT_REMOVE_ADVICE)
+      await expect(item.getByRole('button')).toHaveCount(0)
+    }
+  })
+}
 
 // --- On a phone -----------------------------------------------------------------------------------
 test("16.2 AC2: on a phone, the catalogue's columns and a type's page fit without sideways scrolling, its fields take the width and its button is big enough for a thumb", async ({
