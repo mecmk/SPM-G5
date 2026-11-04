@@ -1279,34 +1279,6 @@ def _mark_withdrawn(db: Session, booking: VenueBooking, *, actor: User) -> None:
 
 
 # --- 12.8: the coordinator cancels an approved booking ------------------------------------------
-def _notify_of_return_to_planning(
-    db: Session,
-    event: Event,
-    *,
-    actor: User,
-    title: str,
-    message: str,
-    recipients: Iterable[User],
-) -> None:
-    """Story 12.8 AC5, story 9.5 AC4: the event left the Safety Officers' check, or lost the
-    confirmation their approval allowed, so ``recipients`` are told ``message``. 12.8 tells the
-    organiser and every active Safety Officer; a venue closure tells the Safety Officers only,
-    since the organiser has the closure's notice."""
-    for recipient in recipients:
-        notify(
-            db,
-            recipient=recipient,
-            actor=actor,
-            notification_type=NotificationType.EVENT_RETURNED_TO_PLANNING,
-            event_id=event.id,
-            title=title,
-            message=message,
-            related_entity_type="event",
-            related_entity_id=event.id,
-            commit=False,
-        )
-
-
 def cancel_booking(
     db: Session, booking_id: uuid.UUID, data: BookingCancellation, *, actor: User
 ) -> VenueBooking:
@@ -1369,7 +1341,7 @@ def cancel_booking(
         details={"booking_id": str(booking.id)},
     )
     if is_returned:
-        _notify_of_return_to_planning(
+        events_service.notify_of_return_to_planning(
             db,
             event,
             actor=actor,
@@ -1562,7 +1534,7 @@ def end_bookings_for_closure(
             actor=actor,
         )
         if is_returned:
-            _notify_of_return_to_planning(
+            events_service.notify_of_return_to_planning(
                 db,
                 event,
                 actor=actor,

@@ -9,6 +9,8 @@ from __future__ import annotations
 import itertools
 import json
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
@@ -440,6 +442,20 @@ def make_equipment_item(
         db.flush()
     db.refresh(item)
     return item
+
+
+@contextmanager
+def while_in_planning(db: Session, event_id: uuid.UUID | str) -> Iterator[None]:
+    """Story 15.1 AC9: the API only changes equipment once the event is approved. For a test of an
+    event that came by a sent item some other way (a row from before the rule), this holds the
+    event in Planning for the calls that send it, then puts its status back."""
+    status = db.scalar(select(Event.status).where(Event.id == event_id))
+    update = text("UPDATE events SET status = :status WHERE id = :id")
+    db.execute(update, {"status": EventStatus.PLANNING, "id": event_id})
+    db.commit()
+    yield
+    db.execute(update, {"status": status, "id": event_id})
+    db.commit()
 
 
 def make_change_request(

@@ -62,6 +62,7 @@ from tests.support.factories import (
     make_equipment_hold,
     make_equipment_item,
     make_equipment_type,
+    while_in_planning,
 )
 from tests.support.seed import Users
 
@@ -85,7 +86,8 @@ def _sent(login_as, db: Session, period, *, quantity: int = 4) -> dict:
     it."""
     event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", quantity))
     coordinator = login_as(Users.COORDINATOR)
-    submitted = coordinator.post(f"/events/{event['id']}/equipment-submissions")
+    with while_in_planning(db, event["id"]):
+        submitted = coordinator.post(f"/events/{event['id']}/equipment-submissions")
     assert submitted.status_code == 201, submitted.text
     return _read(coordinator, event["id"])
 
@@ -104,9 +106,10 @@ def _requested_again(login_as, db: Session, period, *, quantity: int) -> tuple[d
     the new line."""
     event, _ = _declined(login_as, db, period)
     coordinator = login_as(Users.COORDINATOR)
-    added = coordinator.post(
-        f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", quantity)
-    )
+    with while_in_planning(db, event["id"]):
+        added = coordinator.post(
+            f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", quantity)
+        )
     assert added.status_code == 201, added.text
     event = _read(coordinator, event["id"])
     [line] = [line for line in event["equipment"] if line["status"] == REQUESTED]

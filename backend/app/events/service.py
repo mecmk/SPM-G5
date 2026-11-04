@@ -1582,12 +1582,12 @@ def return_event_to_planning(
 ) -> bool:
     """A Confirmed event, or one Awaiting Safety Check (story 21.1), goes back to Planning: story
     9.5 AC3, because a closure of a venue cancelled one of its bookings, 12.8 AC5, because its
-    coordinator did, and story 19.2 AC8, because a change to it was approved. Its confirmation
-    is cleared, recorded in the status history with ``reason``, and in the audit log as
-    EVENT_RETURNED_TO_PLANNING with ``details`` beside where it came from. Any other status is
-    left as it is (Planning is already where it should be), and False says nothing changed. The
-    caller holds the event's row lock, commits and tells whoever should know, so this leaves no
-    notice of its own."""
+    coordinator did, story 19.2 AC8, because a change to it was approved, and story 17.2 AC9,
+    because its coordinator withdrew accepted equipment. Its confirmation is cleared, recorded in
+    the status history with ``reason``, and in the audit log as EVENT_RETURNED_TO_PLANNING with
+    ``details`` beside where it came from. Any other status is left as it is (Planning is already
+    where it should be), and False says nothing changed. The caller holds the event's row lock,
+    commits and tells whoever should know, so this leaves no notice of its own."""
     if event.status not in _RETURNED_TO_PLANNING_FROM:
         return False
     from_status = event.status
@@ -1613,6 +1613,34 @@ def return_event_to_planning(
         commit=False,
     )
     return True
+
+
+def notify_of_return_to_planning(
+    db: Session,
+    event: Event,
+    *,
+    actor: User,
+    title: str,
+    message: str,
+    recipients: Iterable[User],
+) -> None:
+    """Story 12.8 AC5, story 9.5 AC4, story 17.2 AC9: the event left the Safety Officers' check, or
+    lost the confirmation their approval allowed, so ``recipients`` are told ``message``. 12.8 and
+    17.2 tell the organiser and every active Safety Officer; a venue closure tells the Safety
+    Officers only, since the organiser has the closure's notice."""
+    for recipient in recipients:
+        notify(
+            db,
+            recipient=recipient,
+            actor=actor,
+            notification_type=NotificationType.EVENT_RETURNED_TO_PLANNING,
+            event_id=event.id,
+            title=title,
+            message=message,
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
 
 
 def _notify_leads_of_submission(db: Session, event: Event, *, actor: User) -> None:
