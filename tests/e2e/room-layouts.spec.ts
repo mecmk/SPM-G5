@@ -12,7 +12,8 @@
  *     counting characters as the server does: an emoji is one.
  * AC7 so is the description box, at 500 characters.
  * AC8 a layout in use cannot be deleted: the dialog says where it is used.
- * AC9 other staff open the page and see the list, without Add, Edit or Delete.
+ * AC9 other staff and Event Organisers open the page and see the list, without Add, Edit or
+ *     Delete.
  * AC12 a layout deleted while another Venue Staff member is changing it: their save is refused,
  *      and their list refreshes.
  * The rules behind each refusal (AC5-AC7), the API's 401 and 403 (AC9), the request form's
@@ -303,14 +304,19 @@ test('8.6 AC8: deleting a layout in use is refused, and the dialog says where it
   await expect(layoutEntry(page, 'Theatre')).toBeVisible()
 })
 
-test('8.6 AC9: an Event Coordinator sees the layouts but cannot change them', async ({ page }) => {
-  await signIn(page, ACCOUNTS.coordinator)
-  await openRoomLayouts(page)
+for (const viewer of [
+  { who: 'an Event Coordinator', email: ACCOUNTS.coordinator },
+  { who: 'an Event Organiser', email: ACCOUNTS.organiser },
+]) {
+  test(`8.6 AC9: ${viewer.who} sees the layouts but cannot change them`, async ({ page }) => {
+    await signIn(page, viewer.email)
+    await openRoomLayouts(page)
 
-  await expect(layoutEntry(page, 'Theatre')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Add layout' })).toHaveCount(0)
-  await expect(layoutList(page).getByRole('button')).toHaveCount(0)
-})
+    await expect(layoutEntry(page, 'Theatre')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add layout' })).toHaveCount(0)
+    await expect(layoutList(page).getByRole('button')).toHaveCount(0)
+  })
+}
 
 test('8.6 AC12: a layout deleted while another Venue Staff member renames it is refused, and their list refreshes', async ({
   browser,

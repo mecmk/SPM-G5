@@ -63,6 +63,7 @@ def test_safety_officer_reviews_safety_and_writes_nothing_else():
     assert ROLE_PERMISSIONS[RoleCode.SAFETY_OFFICER] == {
         Permission.VENUES_READ,
         Permission.VENUE_CALENDAR_READ,
+        Permission.ROOM_LAYOUTS_READ,
         Permission.EVENTS_READ_ALL,
         Permission.BOOKINGS_READ,
         Permission.EQUIPMENT_READ,
@@ -83,8 +84,8 @@ def test_auth_me_lists_exactly_the_roles_permissions(client, user):
 
 # --- AC3 / AC4: enforced on the API, role by role ------------------------------------------
 # expected HTTP status per (role, action) for every venue endpoint. 403 = signed in but not
-# permitted. "refdata" is the venue form's pick-lists. "view" (story 8.2 AC3) is 200 for
-# TECH_SUPPORT_STAFF too (see VENUES_READ in permissions.py).
+# permitted. "refdata" is the venue form's pick-lists. Technical Support Staff read no venues
+# (f8.6.1).
 VENUE_ACTIONS = [
     "list",
     pytest.param("view", marks=pytest.mark.story("8.2", ac=3)),
@@ -119,9 +120,9 @@ MATRIX = {
         "delete": 204,
     },
     "TECH_SUPPORT_STAFF": {
-        "list": 200,
-        "view": 200,
-        "refdata": 200,
+        "list": 403,
+        "view": 403,
+        "refdata": 403,
         "create": 403,
         "update": 403,
         "delete": 403,
