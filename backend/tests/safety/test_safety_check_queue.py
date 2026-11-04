@@ -220,14 +220,21 @@ def test_accepted_tab_lists_events_whose_latest_review_approved_them(safety_clie
 @pytest.mark.story("21.1", ac=2)
 def test_declined_tab_lists_events_sent_back_and_not_yet_resent(safety_client):
     """The book fair was sent back too, but it awaits the check again, so it is Pending. Story
-    21.2's data summit was sent back on 6 Oct, after entering on 5 Oct."""
-    assert _ids(safety_client, "DECLINED") == [str(Events.NIGHT_WALK), str(Events.DATA_SUMMIT)]
+    21.2's data summit was sent back on 6 Oct, after entering on 5 Oct, and so were fix f21.2.1's
+    studio showcase and makers weekend, which entered later that day."""
+    assert _ids(safety_client, "DECLINED") == [
+        str(Events.NIGHT_WALK),
+        str(Events.DATA_SUMMIT),
+        str(Events.STUDIO_SHOWCASE),
+        str(Events.MAKERS_FAIR),
+    ]
 
 
 @pytest.mark.story("21.1", ac=2)
 def test_all_tab_lists_every_tab_oldest_first(safety_client):
     """By when each last entered the check: c8's earlier ones, night walk 4 Oct, food festival
-    5 Oct 09:00, data summit 5 Oct 12:00, concert 10 Oct, book fair 11 Oct, cyber clinic 12 Oct,
+    5 Oct 09:00, data summit 5 Oct 12:00, studio showcase 5 Oct 13:00, makers weekend 5 Oct 13:30,
+    concert 10 Oct, book fair 11 Oct, cyber clinic 12 Oct,
     AI workshop 13 Oct; story 9.5's alumni brunch, approved with no entry into the check on record,
     last.
     """
@@ -236,6 +243,8 @@ def test_all_tab_lists_every_tab_oldest_first(safety_client):
         str(Events.NIGHT_WALK),
         str(Events.FOOD_FESTIVAL),
         str(Events.DATA_SUMMIT),
+        str(Events.STUDIO_SHOWCASE),
+        str(Events.MAKERS_FAIR),
         str(Events.HARBOUR_CONCERT),
         str(Events.BOOK_FAIR),
         str(Events.CYBER_CLINIC),
@@ -256,6 +265,8 @@ def test_each_entry_says_which_tab_it_belongs_to(safety_client):
         str(Events.HARBOUR_CONCERT): "PENDING",
         str(Events.BOOK_FAIR): "PENDING",
         str(Events.DATA_SUMMIT): "DECLINED",
+        str(Events.STUDIO_SHOWCASE): "DECLINED",
+        str(Events.MAKERS_FAIR): "DECLINED",
         str(Events.CYBER_CLINIC): "PENDING",
         str(Events.AI_WORKSHOP): "PENDING",
     }

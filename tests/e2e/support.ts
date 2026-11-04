@@ -168,6 +168,13 @@ export const EVENTS = {
   // Story 21.3: Planning, secured, never reviewed; organiser, coordinator. safety-release.spec.ts
   // sends it for its safety review and releases its Seminar Room 2.1 booking for good.
   safetyRelease: '33333333-0000-0000-0000-000000021301',
+  // Fix f21.2.1: Planning; organiser, coordinator. Its safety review's finding named, and so
+  // released, its Seminar Room 2.1 booking; Exhibition Foyer was requested after it, Pending. Only
+  // read.
+  studioShowcase: '33333333-0000-0000-0000-000000021201',
+  // Fix f21.2.1: Planning; organiser, coordinator. Its review's venue finding names no booking; its
+  // Seminar Room 2.1 booking predates the review, its Exhibition Foyer request does not. Only read.
+  makersFair: '33333333-0000-0000-0000-000000021211',
   // Story 12.8: Planning; organiser, coordinator. cancel-approved-booking.spec.ts cancels its one
   // approved booking, Seminar Room 2.1 for "Main hall", for good.
   productBriefing: '33333333-0000-0000-0000-000000012801',

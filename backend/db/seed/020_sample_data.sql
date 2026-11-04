@@ -2971,6 +2971,181 @@ INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_
 ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
+-- Fix f21.2.1: tests/e2e/safety-flags.spec.ts, two events sent back by their safety review, each
+-- with one booking from before the review and one requested after it.
+-- The studio project showcase (3333..021201) was sent back
+-- by its safety review, whose one finding named its "Studio" booking at Seminar Room 2.1, so that
+-- booking was released (21.3). The coordinator then asked for Exhibition Foyer instead, after the
+-- review, and that request is still Pending. Only the released booking is flagged; the new one is
+-- not. Organiser 1, coordinator 1, 15 May 2029, which no other seeded booking of either venue
+-- touches. Every id is in the fix's 0212NN block: 01 the event, 02 its requirement, 03 the
+-- released booking, 04 the new request, 05-07 the status history, 08 the review, 09 its finding.
+-- ---------------------------------------------------------------------
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000021201', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Studio Project Showcase', 'Exhibition', 'Student teams show their studio projects to visitors.', '2029-05-15 09:00+08', '2029-05-15 17:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000021202', '33333333-0000-0000-0000-000000021201', 0, 'Studio', 60,
+     '2029-05-15 09:00+08', '2029-05-15 17:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at, cancelled_at, release_cause, release_reason, released_by_id) VALUES
+    ('44444444-0000-0000-0000-000000021203', '33333333-0000-0000-0000-000000021201', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2029-05-15 09:00+08', '2029-05-15 17:00+08', 0, 0,
+     60, 'CLASSROOM', NULL, 'CANCELLED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
+     'cccccccc-0000-0000-0000-000000021202', '2029-05-15 09:00+08', '2026-10-06 09:00+08', 'SAFETY_REVIEW',
+     'Book a room with a second exit; the seminar room has one door for sixty people.', '11111111-0000-0000-0000-000000000009'),
+    ('44444444-0000-0000-0000-000000021204', '33333333-0000-0000-0000-000000021201', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-05-15 09:00+08', '2029-05-15 17:00+08', 45, 45,
+     60, 'CLASSROOM', NULL, 'PENDING', NULL, NULL, NULL, '2026-10-08 10:00+08',
+     'cccccccc-0000-0000-0000-000000021202', NULL, NULL, NULL, NULL, NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = EXCLUDED.cancelled_at,
+    release_cause = EXCLUDED.release_cause, release_reason = EXCLUDED.release_reason,
+    released_by_id = EXCLUDED.released_by_id, replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0000-000000021205', '33333333-0000-0000-0000-000000021201', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000021206', '33333333-0000-0000-0000-000000021201', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000003', '2026-10-05 13:00+08', NULL),
+    ('99999999-0000-0000-0000-000000021207', '33333333-0000-0000-0000-000000021201', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-06 09:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- The review saw the Seminar Room 2.1 booking, which its finding named and so released.
+INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, facts) VALUES
+    ('ffffffff-0000-0000-0000-000000021208', '33333333-0000-0000-0000-000000021201', '11111111-0000-0000-0000-000000000009', '2026-10-06 09:00+08',
+     'CHANGES_REQUESTED',
+     '{"description": "Student teams show their studio projects to visitors.",
+       "expected_attendance": 60,
+       "starts_at": "2029-05-15T01:00:00+00:00", "ends_at": "2029-05-15T09:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000002", "name": "Seminar Room 2.1", "capacity": 80, "people_to_hold": 60,
+                   "layout": "CLASSROOM", "layout_name": "Classroom"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
+    outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
+
+INSERT INTO event_safety_review_findings (id, review_id, position, factor_code, arrangement, required_change) VALUES
+    ('ffffffff-0000-0000-0001-000000021209', 'ffffffff-0000-0000-0000-000000021208', 0, 'EMERGENCY_ACCESS', 'VENUE_BOOKINGS',
+     'Book a room with a second exit; the seminar room has one door for sixty people.')
+ON CONFLICT (id) DO UPDATE SET
+    review_id = EXCLUDED.review_id, position = EXCLUDED.position, factor_code = EXCLUDED.factor_code,
+    arrangement = EXCLUDED.arrangement, required_change = EXCLUDED.required_change;
+
+INSERT INTO event_safety_finding_bookings (finding_id, booking_id) VALUES
+    ('ffffffff-0000-0000-0001-000000021209', '44444444-0000-0000-0000-000000021203')
+ON CONFLICT DO NOTHING;
+
+-- The makers weekend (3333..021211) was sent back by a review whose finding is about its venue
+-- bookings but names none, so its approved "Main hall" booking at Seminar Room 2.1, which the
+-- review saw, is flagged. Exhibition Foyer, an additional venue the coordinator asked for after
+-- the review, is Pending and not flagged. Organiser 1, coordinator 1, 16 May 2029. Its ids are
+-- the block's 1N: 11 the event, 12 its requirement, 13 the approved booking, 14 the new request,
+-- 15-17 the status history, 18 the review, 19 its finding.
+INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
+                    assigned_coordinator_id, preferred_location, accessibility_none_required,
+                    contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
+    ('33333333-0000-0000-0000-000000021211', '11111111-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+     'Makers Weekend', 'Exhibition', 'Local makers sell and demonstrate their crafts.', '2029-05-16 09:00+08', '2029-05-16 17:00+08', 60, 'PLANNING',
+     '11111111-0000-0000-0000-000000000003', 'Tower B', TRUE, 'Olivia Organiser', 'organiser@acme.example', '+65 6111 2233',
+     '2026-10-01 09:00+08', '2026-10-02 09:00+08', '11111111-0000-0000-0000-000000000003')
+ON CONFLICT (id) DO UPDATE SET
+    organiser_id = EXCLUDED.organiser_id, organisation_id = EXCLUDED.organisation_id, name = EXCLUDED.name,
+    purpose = EXCLUDED.purpose, description = EXCLUDED.description, starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at, expected_attendance = EXCLUDED.expected_attendance, status = EXCLUDED.status,
+    assigned_coordinator_id = EXCLUDED.assigned_coordinator_id, preferred_location = EXCLUDED.preferred_location,
+    accessibility_none_required = EXCLUDED.accessibility_none_required, contact_name = EXCLUDED.contact_name,
+    contact_email = EXCLUDED.contact_email, contact_phone = EXCLUDED.contact_phone,
+    submitted_at = EXCLUDED.submitted_at, decided_at = EXCLUDED.decided_at, decided_by_id = EXCLUDED.decided_by_id,
+    cancelled_at = NULL, cancelled_by_id = NULL, cancellation_reason = NULL;
+
+INSERT INTO venue_requirements (id, event_id, position, name, capacity, starts_at, ends_at, layout_code) VALUES
+    ('cccccccc-0000-0000-0000-000000021212', '33333333-0000-0000-0000-000000021211', 0, 'Main hall', 60,
+     '2029-05-16 09:00+08', '2029-05-16 17:00+08', 'CLASSROOM')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, position = EXCLUDED.position, name = EXCLUDED.name,
+    capacity = EXCLUDED.capacity, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at,
+    layout_code = EXCLUDED.layout_code;
+
+INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, ends_at, setup_minutes, teardown_minutes,
+                            expected_attendance, required_layout_code, requirement_notes, status, decided_by_id, decided_at, decision_reason, created_at,
+                            venue_requirement_id, hold_expires_at) VALUES
+    ('44444444-0000-0000-0000-000000021213', '33333333-0000-0000-0000-000000021211', '22222222-0000-0000-0000-000000000002',
+     '11111111-0000-0000-0000-000000000003', '2029-05-16 09:00+08', '2029-05-16 17:00+08', 0, 0,
+     60, 'CLASSROOM', NULL, 'APPROVED', '11111111-0000-0000-0000-000000000005', '2026-10-03 09:00+08', NULL, '2026-10-02 12:00+08',
+     'cccccccc-0000-0000-0000-000000021212', '2029-05-16 09:00+08'),
+    ('44444444-0000-0000-0000-000000021214', '33333333-0000-0000-0000-000000021211', '22222222-0000-0000-0000-000000000004',
+     '11111111-0000-0000-0000-000000000003', '2029-05-16 09:00+08', '2029-05-16 17:00+08', 45, 45,
+     60, NULL, NULL, 'PENDING', NULL, NULL, NULL, '2026-10-08 10:00+08',
+     NULL, NULL)
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
+    starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, setup_minutes = EXCLUDED.setup_minutes,
+    teardown_minutes = EXCLUDED.teardown_minutes, expected_attendance = EXCLUDED.expected_attendance,
+    required_layout_code = EXCLUDED.required_layout_code, requirement_notes = EXCLUDED.requirement_notes,
+    status = EXCLUDED.status, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
+    decision_reason = EXCLUDED.decision_reason, created_at = EXCLUDED.created_at,
+    venue_requirement_id = EXCLUDED.venue_requirement_id, hold_expires_at = EXCLUDED.hold_expires_at,
+    hold_reminded_at = NULL, hold_completed_at = NULL, cancelled_at = NULL,
+    release_cause = NULL, release_reason = NULL, released_by_id = NULL,
+    replaced_by_booking_id = NULL,
+    closure_reason = NULL, closure_description = NULL
+WHERE NOT pg_temp.seeded_booking_is_displaced(EXCLUDED);
+
+INSERT INTO event_status_history (id, event_id, from_status, to_status, changed_by_id, changed_at, reason) VALUES
+    ('99999999-0000-0000-0000-000000021215', '33333333-0000-0000-0000-000000021211', 'UNDER_REVIEW', 'PLANNING', '11111111-0000-0000-0000-000000000003', '2026-10-02 09:00+08', NULL),
+    ('99999999-0000-0000-0000-000000021216', '33333333-0000-0000-0000-000000021211', 'PLANNING', 'AWAITING_SAFETY_CHECK', '11111111-0000-0000-0000-000000000003', '2026-10-05 13:30+08', NULL),
+    ('99999999-0000-0000-0000-000000021217', '33333333-0000-0000-0000-000000021211', 'AWAITING_SAFETY_CHECK', 'PLANNING', '11111111-0000-0000-0000-000000000009', '2026-10-06 09:00+08', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO event_safety_reviews (id, event_id, reviewed_by_id, reviewed_at, outcome, facts) VALUES
+    ('ffffffff-0000-0000-0000-000000021218', '33333333-0000-0000-0000-000000021211', '11111111-0000-0000-0000-000000000009', '2026-10-06 09:00+08',
+     'CHANGES_REQUESTED',
+     '{"description": "Local makers sell and demonstrate their crafts.",
+       "expected_attendance": 60,
+       "starts_at": "2029-05-16T01:00:00+00:00", "ends_at": "2029-05-16T09:00:00+00:00",
+       "venues": [{"id": "22222222-0000-0000-0000-000000000002", "name": "Seminar Room 2.1", "capacity": 80, "people_to_hold": 60,
+                   "layout": "CLASSROOM", "layout_name": "Classroom"}],
+       "accessibility": [], "accessibility_notes": null, "equipment": []}')
+ON CONFLICT (id) DO UPDATE SET
+    event_id = EXCLUDED.event_id, reviewed_by_id = EXCLUDED.reviewed_by_id, reviewed_at = EXCLUDED.reviewed_at,
+    outcome = EXCLUDED.outcome, facts = EXCLUDED.facts;
+
+INSERT INTO event_safety_review_findings (id, review_id, position, factor_code, arrangement, required_change) VALUES
+    ('ffffffff-0000-0000-0001-000000021219', 'ffffffff-0000-0000-0000-000000021218', 0, 'CROWD_MOVEMENT', 'VENUE_BOOKINGS',
+     'Add a second room so the stalls are not all in one hall.')
+ON CONFLICT (id) DO UPDATE SET
+    review_id = EXCLUDED.review_id, position = EXCLUDED.position, factor_code = EXCLUDED.factor_code,
+    arrangement = EXCLUDED.arrangement, required_change = EXCLUDED.required_change;
+
+-- ---------------------------------------------------------------------
 -- Story 12.8: tests/e2e/cancel-approved-booking.spec.ts. The riverside product briefing
 -- (3333..012801) is in Planning with one requirement, "Main hall", booked and approved at Seminar
 -- Room 2.1, for its coordinator to cancel with a reason. Organiser 1, coordinator 1, 22 May 2029,
@@ -3356,6 +3531,8 @@ FROM (VALUES
     ('33333333-0000-0000-0000-000000000031', '/images/events/training.jpg'),  -- Sales Onboarding Day
     ('33333333-0000-0000-0000-000000000046', '/images/events/training.jpg'),  -- Supplier Induction Morning
     ('33333333-0000-0000-0000-000000021301', '/images/events/training.jpg'),  -- Venue Safety Walkthrough
+    ('33333333-0000-0000-0000-000000021201', '/images/events/art-class.jpg'),  -- Studio Project Showcase
+    ('33333333-0000-0000-0000-000000021211', '/images/events/fair.jpg'),  -- Makers Weekend
     -- Art and craft classes
     ('33333333-0000-0000-0000-000000018503', '/images/events/art-class.jpg'),  -- Batik Printing Workshop
     ('33333333-0000-0000-0000-000000018405', '/images/events/art-class.jpg'),  -- Evening Watercolour Class
