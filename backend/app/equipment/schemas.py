@@ -489,7 +489,9 @@ class HeldItemStatus(StrEnum):
 class EquipmentHoldOut(BaseModel):
     """Story 17.3 AC1: one hold - its event, the units it still holds, the dates it runs from and
     to, which are its own, and its item's status. AC4: ``item_id`` is the item's, whose request
-    page (16.1) a sent hold opens. No defaults (response schema)."""
+    page (16.1) a sent hold opens. Fix f16.2.2 (16.2 AC9): ``units_short``, how many of its units
+    the records of units out of service leave it short, 0 when none. No defaults (response
+    schema)."""
 
     id: uuid.UUID
     event_id: uuid.UUID
@@ -499,6 +501,7 @@ class EquipmentHoldOut(BaseModel):
     starts_at: datetime
     ends_at: datetime
     status: HeldItemStatus
+    units_short: int
 
     @classmethod
     def from_held(cls, held: ScheduledHold) -> EquipmentHoldOut:
@@ -511,6 +514,7 @@ class EquipmentHoldOut(BaseModel):
             starts_at=held.hold.starts_at,
             ends_at=held.hold.ends_at,
             status=HeldItemStatus(held.item_status),
+            units_short=held.units_short,
         )
 
 

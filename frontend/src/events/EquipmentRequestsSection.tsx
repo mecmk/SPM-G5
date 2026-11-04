@@ -19,10 +19,10 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusBadge } from '../components/StatusBadge'
 import { ERROR_REGISTRY } from '../errors/registry'
 import {
-  EQUIPMENT_STATUS_LABELS,
   HOLDING_STATUSES,
   HOLD_LENGTH_SENTENCE,
-  describeItemShort,
+  describeItemShortWithAdvice,
+  equipmentStatusLabel,
   withdrawnWhenAndBy,
 } from '../shared/equipmentStatus'
 import { CANCEL, CLOSE, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
@@ -120,7 +120,9 @@ export interface EquipmentRequestsSectionProps {
  * highlighted and says so.
  * Story 16.2 AC4: an item that Technical Support's units out of service leave short says by how
  * many, for whoever reads equipment - its coordinator first - worked out by the server each time
- * the event is loaded, so the mark goes once enough units are back.
+ * the event is loaded, so the mark goes once enough units are back. Fix f16.2.2 (16.2 AC8): the
+ * mark says what to do - withdraw a sent item, remove an unsent one - and an accepted item left
+ * short reads Accepted, not Accepted (reserved).
  * Story 17.1 AC1: each item names the period it is for - what its hold covers, or its event's
  * while it holds nothing (the server decides). AC4: a released item says it holds nothing if it
  * was held until then, and keeps a decline's reason. AC6: the list is the event as loaded, so a
@@ -490,7 +492,11 @@ export function EquipmentRequestsSection({
                     <>
                       <br />
                       <span className="small item-short">
-                        {describeItemShort(shortByItem.get(item.id)!, item.quantity)}
+                        {describeItemShortWithAdvice(
+                          shortByItem.get(item.id)!,
+                          item.quantity,
+                          WITHDRAWABLE_STATUSES.includes(item.status),
+                        )}
                       </span>
                     </>
                   )}
@@ -505,7 +511,7 @@ export function EquipmentRequestsSection({
                 {!(isAwaitingDecision && item.status === 'REQUESTED') && (
                   <StatusBadge
                     status={BADGE_STATUSES[item.status] ?? item.status}
-                    label={EQUIPMENT_STATUS_LABELS[item.status]}
+                    label={equipmentStatusLabel(item.status, shortByItem.has(item.id))}
                   />
                 )}
                 {canChange &&

@@ -58,13 +58,14 @@ as a decision does, so the two are serialised (AC11).
 Story 17.3 - "As Technical Support Staff, I want a schedule of every equipment hold, grouped by
 equipment type, so that I can see at a glance which events have which equipment, from when to
 when." ``list_equipment_holds`` only reads: the holds still reserved, by their own dates, which
-are the units availability takes away.
+are the units availability takes away. Fix f16.2.2 (16.2 AC9): each hold also carries the units
+it is short, by 16.2 AC4's rule, so the schedule marks it as its event's equipment does.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
 from enum import StrEnum
@@ -2134,12 +2135,14 @@ class HoldRow:
 @dataclass(frozen=True)
 class ScheduledHold:
     """AC1: a hold as the schedule shows it - its event's name, its item's status and the units
-    it has not released, as availability counts them."""
+    it has not released, as availability counts them. Fix f16.2.2 (16.2 AC9): how many of those
+    units it is short, 0 when none."""
 
     hold: EquipmentReservation
     event_name: str
     item_status: str
     units: int
+    units_short: int
 
 
 @dataclass(frozen=True)
@@ -2189,15 +2192,22 @@ def check_hold_range(from_date: date | None, to_date: date | None, *, today: dat
         raise InvalidHoldRange(HOLDS_END_BEFORE_TODAY_MESSAGE)
 
 
-def group_holds(rows: Iterable[HoldRow], *, type_code: str | None) -> HoldsSchedule:
+def group_holds(
+    rows: Iterable[HoldRow], *, type_code: str | None, units_short: Mapping[uuid.UUID, int]
+) -> HoldsSchedule:
     """AC1/AC6: ``rows`` as one group per type, in the order given; AC3: with ``type_code``, that
-    type's group alone (``UnknownEquipmentType`` when no row is of it)."""
+    type's group alone (``UnknownEquipmentType`` when no row is of it). Fix f16.2.2 (16.2 AC9):
+    each hold short by the units ``units_short`` gives it, by hold id, and by none if it is not
+    there."""
     groups: dict[uuid.UUID, HoldGroup] = {}
     for row in rows:
         group = groups.setdefault(row.equipment_type.id, HoldGroup(row.equipment_type, []))
         if row.hold is not None:
             units = row.hold.quantity - row.hold.released_quantity
-            group.holds.append(ScheduledHold(row.hold, row.event_name, row.item_status, units))
+            short = units_short.get(row.hold.id, 0)
+            group.holds.append(
+                ScheduledHold(row.hold, row.event_name, row.item_status, units, short)
+            )
     types = [group.equipment_type for group in groups.values()]
     if type_code is None:
         return HoldsSchedule(types, list(groups.values()))
@@ -2205,6 +2215,44 @@ def group_holds(rows: Iterable[HoldRow], *, type_code: str | None) -> HoldsSched
     if not chosen:
         raise UnknownEquipmentType(type_code)
     return HoldsSchedule(types, chosen)
+
+
+def _units_short_by_hold(
+    db: Session, types: Collection[EquipmentType], *, now: datetime
+) -> dict[uuid.UUID, int]:
+    """Fix f16.2.2 (16.2 AC9): how many units each hold of ``types`` cannot have, for the holds
+    short of any - worked out by ``short_units`` from the same holds and records as
+    ``_short_holds``, so the schedule marks what the event's equipment marks (AC4). Two statements
+    however many types: their holds still reserved and not yet over, and their records not yet
+    ended."""
+    type_ids = {kind.id for kind in types}
+    held: dict[uuid.UUID, list[HeldUnits]] = {type_id: [] for type_id in type_ids}
+    for hold in db.scalars(
+        select(EquipmentReservation).where(
+            EquipmentReservation.equipment_type_id.in_(type_ids),
+            EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+            EquipmentReservation.ends_at > now,
+        )
+    ):
+        units = hold.quantity - hold.released_quantity
+        held[hold.equipment_type_id].append(
+            HeldUnits(hold.id, units, hold.starts_at, hold.ends_at, hold.reserved_at)
+        )
+    out: dict[uuid.UUID, list[events_service.OutOfServiceWindow]] = {
+        type_id: [] for type_id in type_ids
+    }
+    for record in db.scalars(
+        select(EquipmentUnavailabilityPeriod).where(
+            EquipmentUnavailabilityPeriod.equipment_type_id.in_(type_ids), _not_yet_ended(now)
+        )
+    ):
+        out[record.equipment_type_id].append(_window(record))
+    short: dict[uuid.UUID, int] = {}
+    for kind in types:
+        short |= short_units(
+            stock=kind.total_quantity, holds=held[kind.id], records=out[kind.id], now=now
+        )
+    return short
 
 
 def list_equipment_holds(
@@ -2219,7 +2267,9 @@ def list_equipment_holds(
     by name, each with its holds still reserved and not yet ended that have any part in the range,
     soonest first; ties by end, event name and id. One statement, however many types: the active
     types, each joined outer to its matching holds, so a type with none is still a row (AC6), and
-    with ``type_code`` the other types' rows carry no hold, so they still fill the filter (AC3)."""
+    with ``type_code`` the other types' rows carry no hold, so they still fill the filter (AC3).
+    Fix f16.2.2 (16.2 AC9): each hold with the units it is short (``_units_short_by_hold``), for
+    the types it lists holds of."""
     check_hold_range(from_date, to_date, today=singapore_today(now))
     window = hold_window(from_date, to_date)
     matching = [
@@ -2256,4 +2306,8 @@ def list_equipment_holds(
             EquipmentReservation.id,
         )
     ).all()
-    return group_holds((HoldRow(*row) for row in rows), type_code=type_code)
+    listed = [HoldRow(*row) for row in rows]
+    held_types = {row.equipment_type for row in listed if row.hold is not None}
+    return group_holds(
+        listed, type_code=type_code, units_short=_units_short_by_hold(db, held_types, now=now)
+    )

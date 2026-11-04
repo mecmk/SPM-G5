@@ -19,7 +19,11 @@ import {
   EQUIPMENT_HOLDS_TITLE,
   equipmentRequestPath,
 } from '../routes'
-import { EQUIPMENT_STATUS_LABELS, HOLD_LENGTH_SENTENCE } from '../shared/equipmentStatus'
+import {
+  HOLD_LENGTH_SENTENCE,
+  describeItemShort,
+  equipmentStatusLabel,
+} from '../shared/equipmentStatus'
 import { formatDateTime, isReadableDate, todayAsDateInput } from '../shared/format'
 import { queuePath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
@@ -271,8 +275,16 @@ function HoldGroupSection({ group, isRanged, backToSchedule }: HoldGroupSectionP
                   <td>
                     <StatusBadge
                       status={hold.status}
-                      label={EQUIPMENT_STATUS_LABELS[hold.status]}
+                      label={equipmentStatusLabel(hold.status, hold.units_short > 0)}
                     />
+                    {hold.units_short > 0 && (
+                      <>
+                        <br />
+                        <span className="small item-short">
+                          {describeItemShort(hold.units_short, hold.quantity)}
+                        </span>
+                      </>
+                    )}
                   </td>
                   <td>
                     {hold.status !== NOT_YET_SENT && (
@@ -304,6 +316,8 @@ function HoldGroupSection({ group, isRanged, backToSchedule }: HoldGroupSectionP
  * where any decision is made (16.1). AC5: the server lists only holds still reserved and not yet
  * ended. AC6: a type with no holds says so. AC7: App.tsx guards the route with equipment:manage,
  * and the backend refuses everyone else.
+ * Story 16.2 AC9 (fix f16.2.2): a hold that units out of service leave short is marked as on its
+ * event's page, and an accepted one reads Accepted, not Accepted (reserved).
  */
 export function EquipmentHoldsPage() {
   const [searchParams, setSearchParams] = useSearchParams()

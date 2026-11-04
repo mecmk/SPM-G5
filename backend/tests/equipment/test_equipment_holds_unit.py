@@ -16,6 +16,9 @@ AC3 It can be filtered by equipment type and by date range. A hold is shown when
     (AC5). (Here: today and the range's days are Singapore's, the period a range covers, its
     three refusals, and the type filter's group.)
 AC6 A type with no holds in the range says so. (Here: such a type stays, as a group with none.)
+
+Story 16.2 AC9 (fix f16.2.2): each hold on the schedule is marked short by the units 16.2 AC4
+marks on its event. (Here: each hold carries the shortfall it is given, and none when it has none.)
 """
 
 from __future__ import annotations
@@ -36,6 +39,8 @@ DAY = timedelta(days=1)
 START_BEFORE_TODAY = "The start date cannot be before today."
 END_BEFORE_START = "The end date cannot be before the start date."
 END_BEFORE_TODAY = "The end date cannot be before today."
+# Fix f16.2.2: no hold is short, as with no unit out of service.
+NONE_SHORT: dict[uuid.UUID, int] = {}
 
 
 def _type(code: str) -> EquipmentType:
@@ -227,6 +232,7 @@ def test_the_rows_fall_into_one_group_per_type_in_the_order_given():
             _row(speakers),
         ],
         type_code=None,
+        units_short=NONE_SHORT,
     )
 
     assert schedule.types == [laptops, mics, speakers]
@@ -244,7 +250,9 @@ def test_each_hold_keeps_its_event_and_its_items_status():
     hold = _hold(mics)
 
     schedule = service.group_holds(
-        [_row(mics, hold, event_name="Harbour Expo", item_status="REQUESTED")], type_code=None
+        [_row(mics, hold, event_name="Harbour Expo", item_status="REQUESTED")],
+        type_code=None,
+        units_short=NONE_SHORT,
     )
 
     (held,) = schedule.groups[0].holds
@@ -257,15 +265,29 @@ def test_a_hold_counts_the_units_it_has_not_released(quantity, released, units):
     mics = _type("WIRELESS_MIC")
 
     schedule = service.group_holds(
-        [_row(mics, _hold(mics, quantity=quantity, released=released))], type_code=None
+        [_row(mics, _hold(mics, quantity=quantity, released=released))],
+        type_code=None,
+        units_short=NONE_SHORT,
     )
 
     assert schedule.groups[0].holds[0].units == units
 
 
+@pytest.mark.story("16.2", ac=9)
+def test_each_hold_carries_the_units_it_is_short_and_none_when_it_is_whole():
+    mics = _type("WIRELESS_MIC")
+    short, whole = _hold(mics, quantity=3), _hold(mics)
+
+    schedule = service.group_holds(
+        [_row(mics, short), _row(mics, whole)], type_code=None, units_short={short.id: 2}
+    )
+
+    assert [held.units_short for held in schedule.groups[0].holds] == [2, 0]
+
+
 @pytest.mark.story("17.3", ac=1)
 def test_with_no_active_types_there_are_no_groups():
-    schedule = service.group_holds([], type_code=None)
+    schedule = service.group_holds([], type_code=None, units_short=NONE_SHORT)
 
     assert (schedule.types, schedule.groups) == ([], [])
 
@@ -278,7 +300,9 @@ def test_a_type_filter_keeps_only_that_types_group_and_every_type():
     laptops, mics = _type("LAPTOP"), _type("WIRELESS_MIC")
     hold = _hold(mics)
 
-    schedule = service.group_holds([_row(laptops), _row(mics, hold)], type_code="WIRELESS_MIC")
+    schedule = service.group_holds(
+        [_row(laptops), _row(mics, hold)], type_code="WIRELESS_MIC", units_short=NONE_SHORT
+    )
 
     assert schedule.types == [laptops, mics]
     assert [group.equipment_type for group in schedule.groups] == [mics]
@@ -290,7 +314,9 @@ def test_a_filtered_type_with_no_holds_is_still_its_group():
     laptops, mics = _type("LAPTOP"), _type("WIRELESS_MIC")
 
     schedule = service.group_holds(
-        [_row(laptops, _hold(laptops)), _row(mics)], type_code="WIRELESS_MIC"
+        [_row(laptops, _hold(laptops)), _row(mics)],
+        type_code="WIRELESS_MIC",
+        units_short=NONE_SHORT,
     )
 
     assert [(group.equipment_type, group.holds) for group in schedule.groups] == [(mics, [])]
@@ -299,6 +325,8 @@ def test_a_filtered_type_with_no_holds_is_still_its_group():
 @pytest.mark.story("17.3", ac=3)
 def test_a_type_filter_naming_no_listed_type_is_refused():
     with pytest.raises(service.UnknownEquipmentType) as refused:
-        service.group_holds([_row(_type("LAPTOP"))], type_code="NO_SUCH_KIT")
+        service.group_holds(
+            [_row(_type("LAPTOP"))], type_code="NO_SUCH_KIT", units_short=NONE_SHORT
+        )
 
     assert str(refused.value) == "Unknown equipment type: NO_SUCH_KIT."
