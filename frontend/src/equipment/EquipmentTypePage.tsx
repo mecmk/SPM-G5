@@ -9,7 +9,6 @@ import { PageHeader } from '../components/PageHeader'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_CATALOGUE_PATH, EQUIPMENT_CATALOGUE_TITLE } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
-import { describeBackInService } from './outOfServiceLabels'
 import { OutOfServiceForm } from './OutOfServiceForm'
 import { OutOfServiceRecords } from './OutOfServiceRecords'
 
@@ -86,12 +85,6 @@ function EquipmentTypeView({ typeId }: { typeId: string }) {
           <p className="cluster equipment-type-facts">
             <span>{page.total_quantity} in stock</span>
             <span>{page.out_of_service_now} out of service now</span>
-            {page.out_of_service_now > 0 && (
-              <span>
-                Back in service:{' '}
-                {describeBackInService(page.out_of_service_now, page.back_in_service_at)}
-              </span>
-            )}
             {page.storage_location && <span>Kept in {page.storage_location}</span>}
           </p>
           <div className="stack">

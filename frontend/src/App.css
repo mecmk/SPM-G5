@@ -4562,6 +4562,30 @@ button.requirement-choice.requirement-covered:hover,
   color: var(--accent);
 }
 
+.catalogue-periods {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* On a phone the four columns share the table's width, so the periods wrap inside their cell
+   rather than widening the table. */
+@media (max-width: 640px) {
+  .equipment-catalogue {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .equipment-catalogue th,
+  .equipment-catalogue td {
+    padding-inline: 0.5rem;
+    overflow-wrap: anywhere;
+  }
+}
+
 .out-of-service-form h2 {
   margin: 0;
 }

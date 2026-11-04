@@ -79,14 +79,7 @@ from tests.support.seed import Users
 
 TYPES_PATH = "/equipment-types"
 RECORD_KEYS = {"id", "quantity", "reason", "notes", "starts_at", "ends_at"}
-CATALOGUE_KEYS = {
-    "id",
-    "code",
-    "name",
-    "total_quantity",
-    "out_of_service_now",
-    "back_in_service_at",
-}
+CATALOGUE_KEYS = {"id", "code", "name", "total_quantity", "out_of_service_now", "records"}
 TYPE_PAGE_KEYS = CATALOGUE_KEYS | {"description", "storage_location", "records"}
 SHORT_HOLD_KEYS = {
     "event_id",
@@ -258,28 +251,27 @@ def test_the_catalogue_lists_each_type_with_its_stock_and_the_units_out_of_servi
 
 
 @pytest.mark.story("16.2", ac=2)
-def test_the_catalogue_and_a_types_page_say_when_the_first_units_out_are_back_in_service(
+def test_the_catalogue_lists_each_types_current_records_so_a_scheduled_period_is_seen(
     tech_client, db: Session
 ):
     kit = make_equipment_type(db, total_quantity=9)
-    sooner = _out(db, kit, 1, start=-1, end=2)
-    _out(db, kit, 1, start=-1, end=5)
-    _out(db, kit, 1, start=-1, end=None)  # open-ended: never the answer
-    _out(db, kit, 1, start=1, end=1.5)  # still to come: not out yet
-    _out(db, kit, 1, start=-4, end=-1)  # ended
-    open_only = make_equipment_type(db, total_quantity=4)
-    _out(db, open_only, 1, start=-1, end=None)
-    untouched = make_equipment_type(db, total_quantity=4)
-    _out(db, untouched, 1, start=1, end=2)
+    later = _out(db, kit, 4, start=1, end=None)  # scheduled, no end
+    in_force = _out(db, kit, 2, start=-1, end=3)
+    _out(db, kit, 1, start=-4, end=-1)  # ended: not current
+    bare = make_equipment_type(db, total_quantity=2)
 
     entries = {each["id"]: each for each in tech_client.get(TYPES_PATH).json()}
 
-    expected = sooner.ends_at.isoformat().replace("+00:00", "Z")
-    assert entries[str(kit.id)]["back_in_service_at"].replace("+00:00", "Z") == expected
-    assert entries[str(open_only.id)]["back_in_service_at"] is None
-    assert entries[str(untouched.id)]["back_in_service_at"] is None
-    page = tech_client.get(f"{TYPES_PATH}/{kit.id}").json()
-    assert page["back_in_service_at"].replace("+00:00", "Z") == expected
+    entry = entries[str(kit.id)]
+    assert entry["out_of_service_now"] == 2
+    assert [record["id"] for record in entry["records"]] == [str(in_force.id), str(later.id)]
+    assert set(entry["records"][0]) == RECORD_KEYS
+    scheduled = entry["records"][1]
+    assert (scheduled["quantity"], scheduled["ends_at"]) == (4, None)
+    assert scheduled["starts_at"].replace("+00:00", "Z") == later.starts_at.isoformat().replace(
+        "+00:00", "Z"
+    )
+    assert entries[str(bare.id)]["records"] == []
 
 
 @pytest.mark.story("16.2", ac=2)

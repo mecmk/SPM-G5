@@ -38,6 +38,7 @@ const THUMB_TARGET = 44
 
 const CONF_PHONE = 'Conference phone' // stock 6
 const PROJECTOR = 'Portable projector' // stock 8
+const VIDEO_CAMERA = 'Video camera' // stock 4, only this spec records against it
 const LED_SCREEN = 'Mobile LED screen' // stock 3, all held by the light showcase
 const LIGHT_SHOWCASE = 'Riverside Light Showcase'
 
@@ -139,7 +140,6 @@ test("16.2 AC2: Technical Support opens the catalogue from the navigation, and e
   await expect(projectors.getByRole('cell').nth(1)).toHaveText('8')
   await expect(projectors.getByRole('cell').nth(2)).toHaveText('0')
   await expect(projectors.getByRole('cell').nth(3)).toHaveText('—')
-  await expect(catalogue(page).getByRole('columnheader', { name: 'Back in service' })).toBeVisible()
 
   await projectors.getByRole('link', { name: PROJECTOR }).click()
 
@@ -253,7 +253,6 @@ test.describe('records units out of service', () => {
     const badge = saved.getByText('In force', { exact: true })
     await expect(badge).toBeVisible()
     await expect(page.getByRole('main')).toContainText('2 out of service now')
-    await expect(page.getByRole('main')).toContainText('Back in service:')
     const note = (await saved.getByText(serials).boundingBox())!
     expect(note.x + note.width).toBeLessThanOrEqual((await badge.boundingBox())!.x)
 
@@ -277,10 +276,42 @@ test.describe('records units out of service', () => {
       .click()
     await expect(saved).toHaveCount(0)
     await expect(page.getByRole('main')).toContainText('0 out of service now')
-    await expect(page.getByRole('main')).not.toContainText('Back in service:')
     await expect(
       form(page).getByRole('heading', { name: 'Take units out of service' }),
     ).toBeVisible()
+  })
+
+  test('16.2 AC2: a period still to come shows on the catalogue with its units, its status and from when to when', async ({
+    page,
+  }) => {
+    await signIn(page, ACCOUNTS.techSupport)
+    await openType(page, VIDEO_CAMERA)
+    const note = `Scheduled check ${Date.now()}`
+
+    await fillRecord(page, {
+      units: '2',
+      reason: 'Under maintenance',
+      note,
+      from: inFuture(2),
+      until: inFuture(3),
+    })
+    await form(page).getByRole('button', { name: 'Take out of service' }).click()
+    await expect(record(page, note).getByText('Scheduled', { exact: true })).toBeVisible()
+
+    await page.getByRole('link', { name: '← Equipment catalogue' }).click()
+    const row = catalogue(page).getByRole('row', { name: new RegExp(VIDEO_CAMERA) })
+    await expect(row.getByRole('cell').nth(2)).toHaveText('0')
+    await expect(row.getByRole('cell').nth(3)).toContainText('2 out of service')
+    await expect(row.getByRole('cell').nth(3)).toContainText('Scheduled')
+    await expect(row.getByRole('cell').nth(3)).toContainText('until')
+
+    await row.getByRole('link', { name: VIDEO_CAMERA }).click()
+    await record(page, note).getByRole('button', { name: 'End' }).click()
+    await page
+      .getByRole('dialog', { name: 'Remove this record?' })
+      .getByRole('button', { name: 'Remove', exact: true })
+      .click()
+    await expect(record(page, note)).toHaveCount(0)
   })
 
   test('16.2 AC3: an edit can take the whole stock out, as the record is not counted against itself', async ({

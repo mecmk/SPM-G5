@@ -1618,11 +1618,12 @@ def starts_in_the_past(starts_at: datetime, *, now: datetime) -> bool:
 
 @dataclass(frozen=True)
 class CatalogueEntry:
-    """AC2: one active type, the units out of service now, and when the first of them are back."""
+    """AC2: one active type, the units out of service now, and its current records - in force or
+    still to come - soonest first."""
 
     equipment_type: EquipmentType
     out_of_service_now: int
-    back_in_service_at: datetime | None
+    records: list[EquipmentUnavailabilityPeriod]
 
 
 @dataclass(frozen=True)
@@ -1631,7 +1632,6 @@ class TypePage:
 
     equipment_type: EquipmentType
     out_of_service_now: int
-    back_in_service_at: datetime | None
     records: list[EquipmentUnavailabilityPeriod]
 
 
@@ -1655,26 +1655,26 @@ def _not_yet_ended(now: datetime) -> ColumnElement[bool]:
 
 
 def list_equipment_catalogue(db: Session, *, now: datetime) -> list[CatalogueEntry]:
-    """AC2: every active type, by name, with the units its records have out of service now and the
-    soonest end among those records (open-ended ones never answer it)."""
-    out_now = {
-        type_id: (units, back_at)
-        for type_id, units, back_at in db.execute(
-            select(
-                EquipmentUnavailabilityPeriod.equipment_type_id,
-                func.sum(EquipmentUnavailabilityPeriod.quantity),
-                func.min(EquipmentUnavailabilityPeriod.ends_at),
-            )
-            .where(EquipmentUnavailabilityPeriod.starts_at <= now, _not_yet_ended(now))
-            .group_by(EquipmentUnavailabilityPeriod.equipment_type_id)
-        )
-    }
+    """AC2: every active type, by name, with the units its records have out of service now and
+    those records, so a period still to come shows beside the ones in force."""
+    current: dict[uuid.UUID, list[EquipmentUnavailabilityPeriod]] = {}
+    for record in db.scalars(
+        select(EquipmentUnavailabilityPeriod)
+        .where(_not_yet_ended(now))
+        .order_by(EquipmentUnavailabilityPeriod.starts_at, EquipmentUnavailabilityPeriod.id)
+    ):
+        current.setdefault(record.equipment_type_id, []).append(record)
     types = db.scalars(
         select(EquipmentType)
         .where(EquipmentType.is_active.is_(True))
         .order_by(EquipmentType.name, EquipmentType.id)
     )
-    return [CatalogueEntry(each, *out_now.get(each.id, (0, None))) for each in types]
+    entries = []
+    for each in types:
+        records = current.get(each.id, [])
+        out_now = sum(record.quantity for record in records if record.starts_at <= now)
+        entries.append(CatalogueEntry(each, out_now, records))
+    return entries
 
 
 def _active_type(db: Session, type_id: uuid.UUID) -> EquipmentType:
@@ -1697,14 +1697,8 @@ def get_equipment_type_page(db: Session, type_id: uuid.UUID, *, now: datetime) -
             .order_by(EquipmentUnavailabilityPeriod.starts_at, EquipmentUnavailabilityPeriod.id)
         )
     )
-    in_force = [record for record in records if record.starts_at <= now]
-    ends = [record.ends_at for record in in_force if record.ends_at is not None]
-    return TypePage(
-        equipment_type,
-        sum(record.quantity for record in in_force),
-        min(ends, default=None),
-        records,
-    )
+    out_now = sum(record.quantity for record in records if record.starts_at <= now)
+    return TypePage(equipment_type, out_now, records)
 
 
 def _record(db: Session, type_id: uuid.UUID, record_id: uuid.UUID) -> EquipmentUnavailabilityPeriod:

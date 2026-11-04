@@ -1,20 +1,45 @@
 import { Link } from 'react-router'
-import { listEquipmentCatalogue } from '../api/equipment'
+import { listEquipmentCatalogue, type OutOfServiceRecord } from '../api/equipment'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { StatusBadge } from '../components/StatusBadge'
 import { LoadingState } from '../layout/LoadingState'
 import { EQUIPMENT_CATALOGUE_TITLE, equipmentTypePath } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
-import { describeBackInService } from './outOfServiceLabels'
+import { describeOutPeriod, describeUnitsOut, hasStarted } from './outOfServiceLabels'
 
 /**
  * Story 16.2 AC2 - the equipment catalogue, for Technical Support: every active type, by name,
- * with its stock, the units out of service now and when the first are back, each opening the type's page. AC6: App.tsx
+ * with its stock, the units out of service now and every period they are out - in force or
+ * scheduled, from when to when - each opening the type's page. AC6: App.tsx
  * guards the route with equipment:manage, and the backend refuses everyone else. On a phone the
  * headers and names wrap (App.css), so the four columns fit and nothing scrolls sideways.
  */
+async function loadCatalogue() {
+  return { types: await listEquipmentCatalogue(), loadedAt: Date.now() }
+}
+
+/** One period a type's units are out: how many, In force or Scheduled by the page's clock when it
+ *  loaded, and from when to when. */
+function PeriodRow({ record, loadedAt }: { record: OutOfServiceRecord; loadedAt: number }) {
+  const isInForce = hasStarted(record, loadedAt)
+  return (
+    <li>
+      <strong>{describeUnitsOut(record.quantity)}</strong>{' '}
+      <StatusBadge
+        status={isInForce ? 'warning' : 'info'}
+        label={isInForce ? 'In force' : 'Scheduled'}
+      />
+      <br />
+      <span className="item-timing">{describeOutPeriod(record)}</span>
+    </li>
+  )
+}
+
 export function EquipmentCataloguePage() {
-  const { data: types, error, isLoading } = useLoaded(listEquipmentCatalogue)
+  const { data: loaded, error, isLoading } = useLoaded(loadCatalogue)
+  const types = loaded?.types ?? null
+  const loadedAt = loaded?.loadedAt ?? 0
 
   return (
     <div className="page page-wide">
@@ -42,7 +67,7 @@ export function EquipmentCataloguePage() {
                 <th>Equipment</th>
                 <th>In stock</th>
                 <th>Out of service now</th>
-                <th>Back in service</th>
+                <th>Out of service periods</th>
               </tr>
             </thead>
             <tbody>
@@ -53,7 +78,17 @@ export function EquipmentCataloguePage() {
                   </td>
                   <td className="mono">{kind.total_quantity}</td>
                   <td className="mono">{kind.out_of_service_now}</td>
-                  <td>{describeBackInService(kind.out_of_service_now, kind.back_in_service_at)}</td>
+                  <td>
+                    {kind.records.length === 0 ? (
+                      '—'
+                    ) : (
+                      <ul className="catalogue-periods">
+                        {kind.records.map((record) => (
+                          <PeriodRow key={record.id} record={record} loadedAt={loadedAt} />
+                        ))}
+                      </ul>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
