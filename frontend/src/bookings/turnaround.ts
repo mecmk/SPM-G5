@@ -1,5 +1,6 @@
 import { TURNAROUND_MAX_MINUTES, type Booking } from '../api/bookings'
 import type { ErrorCode } from '../errors/registry'
+import { formatMinutesDuration } from '../shared/bookingStatus'
 import { formatSchedule } from '../shared/format'
 
 // Every event runs on Singapore time, which has no daylight saving, so a day is always 24 hours
@@ -23,12 +24,10 @@ export interface DurationDraft {
   minutes: string
 }
 
-/** f12.1.2 (story 12.1 AC1): what the request step says of the setup and teardown fields. */
+/** f12.1.2 (story 12.1 AC1), and f12.1.3 (AC18): what the request step says of the setup and
+ * teardown fields, which open at the venue's defaults. */
 export const TURNAROUND_HINT =
-  'How long the venue is needed before the event starts and after it ends. Both stay 0 unless you enter more.'
-
-/** f12.1.2 (story 12.1 AC1): setup and teardown are 0 until the coordinator enters more. */
-export const ZERO_DURATION: DurationDraft = { days: '0', hours: '0', minutes: '0' }
+  "How long the venue is needed before the event starts and after it ends. Both start at the venue's own setup and turnaround times; change either if this event needs more or less."
 
 /** f12.1.2 (story 12.1 AC1): the booked period - from the setup before a request's own start to
  * the teardown after its own end, as moments with their zone. */
@@ -47,13 +46,26 @@ function wholeNumberOf(part: string): number | null {
 }
 
 /**
- * Story 12.6 AC2: a setup or teardown of `minutes` as the fields of the step show it - whole days,
- * then hours, then minutes - so the original's is there to read and change.
+ * Story 12.6 AC2, and f12.1.3 (story 12.1 AC18): a setup or teardown of `minutes` as the fields of
+ * the step show it - whole days, then hours, then minutes - so the venue's default is there to
+ * read and change.
  */
 export function minutesToDuration(minutes: number): DurationDraft {
   const days = Math.floor(minutes / (24 * 60))
   const hours = Math.floor((minutes % (24 * 60)) / 60)
   return { days: String(days), hours: String(hours), minutes: String(minutes % 60) }
+}
+
+/**
+ * f12.1.3 (story 12.1 AC18/AC19): how a setup or teardown of `minutes` stands against the venue's
+ * `defaultMinutes` - the same sentence on the request step, Venue Staff's queue card and the
+ * request's page. `minutes` is null for a figure the step cannot read, which is not the default.
+ */
+export function venueDefaultNote(minutes: number | null, defaultMinutes: number): string {
+  const duration = formatMinutesDuration(defaultMinutes)
+  return minutes === defaultMinutes
+    ? `Venue's default: ${duration}.`
+    : `Changed from the venue's default: ${duration}.`
 }
 
 /** f12.1.2 (story 12.1 AC1/AC5): a setup or teardown draft in whole minutes, or null when any of

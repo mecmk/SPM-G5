@@ -67,6 +67,7 @@ import {
 import { useLoaded } from '../shared/useLoaded'
 import { holdExpiryRefusal } from './holdExpiry'
 import { venueStaffOutsideHoursNotice } from './turnaround'
+import { TurnaroundAgainstDefaults } from './TurnaroundAgainstDefaults'
 
 /** Story 13.1.2 AC4: requests per numbered page. */
 const QUEUE_PAGE_SIZE = 10
@@ -195,6 +196,9 @@ function withDecisionInPlace(queue: QueuePage, decided: Booking): QueuePage {
  * f12.1.2 (story 12.1 AC17): a request can be approved from its card (13.2 AC1), so a card whose
  * setup or teardown runs outside the venue's opening hours says so under the venue, with the
  * booked period.
+ *
+ * f12.1.3 (story 12.1 AC19): each card shows the request's setup and teardown against its
+ * venue's defaults, marking a changed one, so Venue Staff weigh it when approving from the card.
  *
  * Story 6.2 AC14: a Cancelled tab lists, read-only, the bookings released when their event was
  * cancelled. AC16: such a card says when it was approved, if it was, and when it was cancelled.
@@ -449,6 +453,13 @@ export function BookingRequestsPage() {
                       <p className="fact-label">Attendance</p>
                       <p className="fact-value">{entry.expected_attendance}</p>
                     </div>
+                    <TurnaroundAgainstDefaults
+                      setupMinutes={entry.setup_minutes}
+                      teardownMinutes={entry.teardown_minutes}
+                      setupDefault={entry.venue_setup_minutes_default}
+                      teardownDefault={entry.venue_teardown_minutes_default}
+                      blockClassName="subtle-block"
+                    />
                     <div className="subtle-block">
                       <p className="fact-label">Submitted by</p>
                       <p className="fact-value">{entry.requested_by_name}</p>

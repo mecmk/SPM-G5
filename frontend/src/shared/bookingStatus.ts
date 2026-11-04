@@ -90,8 +90,9 @@ export function closingReason(
   return releasedByLabel(booking) !== null ? booking.release_reason : booking.decision_reason
 }
 
-/** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording. */
-function formatMinutesDuration(minutes: number): string {
+/** "None", "1 hr", "1 hr 30 min" or "45 min" - the setup/teardown line's duration wording, and
+ * f12.1.3's (story 12.1 AC18/AC19) for a setup or teardown against the venue's default. */
+export function formatMinutesDuration(minutes: number): string {
   if (minutes === 0) return NONE
   const hours = Math.floor(minutes / 60)
   const remainder = minutes % 60

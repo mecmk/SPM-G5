@@ -127,6 +127,8 @@ function fakeBooking(index: number, name: string) {
     held_until: '2027-03-01T03:00:00Z',
     venue_operating_hours_start: null,
     venue_operating_hours_end: null,
+    venue_setup_minutes_default: 0,
+    venue_teardown_minutes_default: 0,
     replaces_venue_name: null,
     approval_releases_venue_name: null,
     released_at: null,

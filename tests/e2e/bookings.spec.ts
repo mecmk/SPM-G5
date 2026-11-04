@@ -1064,9 +1064,9 @@ const DAY_MS = 24 * 60 * 60 * 1000
 /** The seeded Smart Cities Expo's first day, 14 Mar 2028: venue-requirement-search.spec.ts needs
  *  its venues free on it and the day after. */
 const EXPO_STARTS = Date.parse('2028-03-14T00:00:00+08:00')
-/** What a booking with no setup or teardown says under the venue: its times only, as the event
- *  page's booking card does. */
-const TWO_DAY_SETUP_LINE = 'Setup: None · Event: 09:00–17:00 · Teardown: None'
+/** What the booking says under the venue: the request step opens at Sunrise Studio's own setup
+ *  and teardown times (12.1 AC18), so Venue Staff see them around the event's times. */
+const TWO_DAY_SETUP_LINE = 'Setup: 15 min · Event: 09:00–17:00 · Teardown: 15 min'
 
 /**
  * The first day of a two-day event that books Sunrise Studio: a slot between 400 and 520 days

@@ -309,6 +309,11 @@ class BookingQueueEntry(BaseModel):
     held_until: datetime
     venue_operating_hours_start: time | None
     venue_operating_hours_end: time | None
+    # f12.1.3 (story 12.1 AC19): the venue's setup and turnaround defaults as they stand now, so
+    # the card shows the request's own figures against them; a later change to the defaults moves
+    # these, never the request's (AC21).
+    venue_setup_minutes_default: int
+    venue_teardown_minutes_default: int
     # Story 12.6 AC3: for a replacement, the venue it replaces and the venue approving it will
     # release (only while that booking still holds its venue); None for any other request.
     replaces_venue_name: str | None
@@ -352,6 +357,8 @@ class BookingQueueEntry(BaseModel):
             held_until=booking.held_until,
             venue_operating_hours_start=booking.venue.operating_hours_start,
             venue_operating_hours_end=booking.venue.operating_hours_end,
+            venue_setup_minutes_default=booking.venue.setup_minutes_default,
+            venue_teardown_minutes_default=booking.venue.teardown_minutes_default,
             replaces_venue_name=booking.replaces_venue_name,
             approval_releases_venue_name=booking.approval_releases_venue_name,
             released_at=booking.released_at,
