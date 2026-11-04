@@ -348,6 +348,10 @@ class Bookings:
     # and the additional venue at Exhibition Foyer requested after it, Pending.
     APPROVED_MAKERS_FAIR_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000021213")
     PENDING_MAKERS_FAIR_FOYER = uuid.UUID("44444444-0000-0000-0000-000000021214")
+    # Fix f21.2.1: Events.MAKERS_FAIR's additional venues asked for before its review: Grand Hall,
+    # still Pending, and Garden Atrium, rejected by Vera.
+    PENDING_MAKERS_FAIR_GRAND_HALL = uuid.UUID("44444444-0000-0000-0000-000000021220")
+    REJECTED_MAKERS_FAIR_GARDEN_ATRIUM = uuid.UUID("44444444-0000-0000-0000-000000021221")
     # Story 12.8: Events.PRODUCT_BRIEFING's requirement "Main hall" at Seminar Room 2.1, approved.
     PRODUCT_BRIEFING_SEMINAR_ROOM = uuid.UUID("44444444-0000-0000-0000-000000012803")
     # Story 12.6's, at Exhibition Foyer unless said otherwise, each ended by its closure (see

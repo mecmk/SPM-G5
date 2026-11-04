@@ -3066,9 +3066,11 @@ ON CONFLICT DO NOTHING;
 -- The makers weekend (3333..021211) was sent back by a review whose finding is about its venue
 -- bookings but names none, so its approved "Main hall" booking at Seminar Room 2.1, which the
 -- review saw, is flagged. Exhibition Foyer, an additional venue the coordinator asked for after
--- the review, is Pending and not flagged. Organiser 1, coordinator 1, 16 May 2029. Its ids are
--- the block's 1N: 11 the event, 12 its requirement, 13 the approved booking, 14 the new request,
--- 15-17 the status history, 18 the review, 19 its finding.
+-- the review, is Pending and not flagged. Of two more additional venues asked for before the
+-- review, Grand Hall, still Pending, is flagged, and Garden Atrium, which Venue Staff rejected,
+-- is not. Organiser 1, coordinator 1, 16 May 2029. Its ids are the block's 1N and 2N: 11 the
+-- event, 12 its requirement, 13 the approved booking, 14 the new request, 15-17 the status
+-- history, 18 the review, 19 its finding, 20 the pending and 21 the rejected earlier request.
 INSERT INTO events (id, organiser_id, organisation_id, name, purpose, description, starts_at, ends_at, expected_attendance, status,
                     assigned_coordinator_id, preferred_location, accessibility_none_required,
                     contact_name, contact_email, contact_phone, submitted_at, decided_at, decided_by_id) VALUES
@@ -3104,6 +3106,15 @@ INSERT INTO venue_bookings (id, event_id, venue_id, requested_by_id, starts_at, 
     ('44444444-0000-0000-0000-000000021214', '33333333-0000-0000-0000-000000021211', '22222222-0000-0000-0000-000000000004',
      '11111111-0000-0000-0000-000000000003', '2029-05-16 09:00+08', '2029-05-16 17:00+08', 45, 45,
      60, NULL, NULL, 'PENDING', NULL, NULL, NULL, '2026-10-08 10:00+08',
+     NULL, NULL),
+    ('44444444-0000-0000-0000-000000021220', '33333333-0000-0000-0000-000000021211', '22222222-0000-0000-0000-000000000001',
+     '11111111-0000-0000-0000-000000000003', '2029-05-16 09:00+08', '2029-05-16 17:00+08', 0, 0,
+     60, NULL, NULL, 'PENDING', NULL, NULL, NULL, '2026-10-04 10:00+08',
+     NULL, NULL),
+    ('44444444-0000-0000-0000-000000021221', '33333333-0000-0000-0000-000000021211', '22222222-0000-0000-0000-000000000006',
+     '11111111-0000-0000-0000-000000000003', '2029-05-16 09:00+08', '2029-05-16 17:00+08', 0, 0,
+     60, NULL, NULL, 'REJECTED', '11111111-0000-0000-0000-000000000005', '2026-10-04 15:00+08',
+     'The atrium is closed to stalls that weekend.', '2026-10-03 10:00+08',
      NULL, NULL)
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, venue_id = EXCLUDED.venue_id, requested_by_id = EXCLUDED.requested_by_id,
