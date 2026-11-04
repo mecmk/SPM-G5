@@ -337,7 +337,7 @@ test('8.1 AC12: a venue deleted elsewhere cannot be deleted again, and the list 
 
 for (const { role, email } of [
   { role: 'a coordinator', email: ACCOUNTS.coordinator },
-  { role: 'Technical Support', email: ACCOUNTS.techSupport },
+  { role: 'a Safety Officer', email: ACCOUNTS.safetyOfficer },
 ]) {
   test(`8.1 AC12: ${role} browses the catalogue without the manage controls`, async ({ page }) => {
     await signIn(page, email)

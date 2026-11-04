@@ -11,9 +11,9 @@
  * reach); backend/tests/venues/test_venue_calendar.py covers the data itself.
  * AC8 previous / next keep the venue and the calendar, whatever is loading or has failed.
  * AC10 a venue with nothing booked shows no unavailable days.
- * AC11 (restricted to every internal role, as VENUE_CALENDAR_READ is in _INTERNAL_COMMON): the
- * refusals are a backend case, backend/tests/venues/test_venue_calendar.py::
- * test_calendar_is_restricted_to_internal_roles; here Venue Staff and Technical Support open a
+ * AC11 (restricted to the internal roles that read venues, as VENUE_CALENDAR_READ is in
+ * _VENUE_READ): the refusals are a backend case, backend/tests/venues/test_venue_calendar.py::
+ * test_calendar_is_restricted_to_internal_roles; here Venue Staff and Safety Officers open a
  * venue from the catalogue and see its calendar.
  * A day with entries opens a list of that day's items in time order. No criterion names the list:
  * a test of what it says carries the AC that shows, and a test of how it opens carries none.
@@ -541,10 +541,10 @@ test('9.1 AC7: a held request on a day only its setup reaches says held, not boo
 })
 
 // D1: Venue Staff have no other route to a calendar than the shared catalogue (f8.1.1), and
-// Technical Support keeps calendar access, so both are shown reaching it the way they would.
+// neither have Safety Officers, so both are shown reaching it the way they would.
 for (const viewer of [
   { who: 'Venue Staff', email: ACCOUNTS.venueStaff },
-  { who: 'Technical Support', email: ACCOUNTS.techSupport },
+  { who: 'Safety Officers', email: ACCOUNTS.safetyOfficer },
 ]) {
   test(`9.1 AC11: ${viewer.who} open a venue from the catalogue and see its calendar`, async ({
     page,

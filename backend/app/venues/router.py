@@ -53,6 +53,7 @@ uploads_router = APIRouter(prefix="/uploads/venues", tags=["uploads"])
 
 CanRead = Depends(require_permission(Permission.VENUES_READ))
 CanReadCalendar = Depends(require_permission(Permission.VENUE_CALENDAR_READ))
+CanReadRoomLayouts = Depends(require_permission(Permission.ROOM_LAYOUTS_READ))
 CanManage = Depends(require_permission(Permission.VENUES_MANAGE))
 CanRequestBookings = Depends(require_permission(Permission.BOOKINGS_REQUEST))
 CanManageUnavailability = Depends(require_permission(Permission.VENUE_UNAVAILABILITY_MANAGE))
@@ -85,9 +86,9 @@ def reference_data(db: DbSession) -> VenueReferenceData:
     )
 
 
-@router.get("/layouts", response_model=list[RoomLayoutOut], dependencies=[CanRead])
+@router.get("/layouts", response_model=list[RoomLayoutOut], dependencies=[CanReadRoomLayouts])
 def list_room_layouts(db: DbSession) -> list[RoomLayoutOut]:
-    """Story 8.6 AC1/AC9: every room layout, for any role that reads venues. Declared above
+    """Story 8.6 AC1/AC9: every room layout, for any role that reads them. Declared above
     ``/{venue_id}`` so the literal path is not read as a venue id."""
     return [RoomLayoutOut.model_validate(layout) for layout in service.list_room_layouts(db)]
 
@@ -205,7 +206,7 @@ def get_venue_calendar(
     ends_at: Annotated[AwareDatetime, Query()],
 ) -> list[VenueUnavailableWindowOut]:
     """Story 9.1 AC1/AC2: approved bookings, pending requests (held) and unavailability periods
-    overlapping the range. AC11: internal roles only (VENUE_CALENDAR_READ is in _INTERNAL_COMMON).
+    overlapping the range. AC11: roles that read venues only (VENUE_CALENDAR_READ, _VENUE_READ).
     Story 12.7 AC1: a booked window carries when its open hold expires; AC11: a lapsed one is
     gone."""
     try:
