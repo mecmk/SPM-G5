@@ -27,6 +27,7 @@ from app.db import get_db
 from app.venues import service
 from app.venues.schemas import (
     AffectedBookingOut,
+    FacilityReferenceItem,
     ReferenceItem,
     RoomLayoutCreate,
     RoomLayoutOut,
@@ -78,7 +79,7 @@ def reference_data(db: DbSession) -> VenueReferenceData:
     """Pick-list values for the venue form (facilities, layouts, accessibility features)."""
     data = service.list_reference_data(db)
     return VenueReferenceData(
-        facilities=[ReferenceItem.model_validate(x) for x in data["facilities"]],
+        facilities=[FacilityReferenceItem.model_validate(x) for x in data["facilities"]],
         layouts=[ReferenceItem.model_validate(x) for x in data["layouts"]],
         accessibility_features=[
             ReferenceItem.model_validate(x) for x in data["accessibility_features"]
@@ -386,12 +387,15 @@ def create_venue(
     actor: Annotated[CurrentUser, CanManage],
 ) -> VenueOut:
     """Story 8.3 AC1 / AC4: only Venue Staff may create venues. Story 8.6 AC11: a layout that
-    no longer exists is 422, naming it."""
+    no longer exists is 422, naming it. 8.3 AC11/AC12 (fix f2.7.5): so is a counted facility
+    without a quantity, or another with one."""
     try:
         venue = service.create_venue(db, payload, actor=actor)
     except service.VenueNameTaken as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except service.UnknownReferenceCode as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.InvalidFacilityQuantity as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.RoomLayoutGone as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
@@ -406,7 +410,8 @@ def update_venue(
     actor: Annotated[CurrentUser, CanManage],
 ) -> VenueOut:
     """Story 8.3 AC2 / AC4: only Venue Staff may edit venues. Story 8.6 AC11: a layout that
-    no longer exists is 422, naming it."""
+    no longer exists is 422, naming it. 8.3 AC11/AC12 (fix f2.7.5): so is a counted facility
+    without a quantity, or another with one."""
     try:
         venue = service.update_venue(db, venue_id, payload, actor=actor)
     except service.VenueNotFound:
@@ -414,6 +419,8 @@ def update_venue(
     except service.VenueNameTaken as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
     except (service.UnknownReferenceCode, service.InvalidOperatingHours) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
+    except service.InvalidFacilityQuantity as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
     except service.RoomLayoutGone as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None

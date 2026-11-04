@@ -1,4 +1,4 @@
-import type { Venue, VenueInput, VenueStatus } from '../api/venues'
+import type { FacilityReferenceItem, Venue, VenueInput, VenueStatus } from '../api/venues'
 import type { ErrorCode } from '../errors/registry'
 
 /**
@@ -118,9 +118,13 @@ function isValidFloorArea(value: string): boolean {
 
 /**
  * Story 8.3 AC1/AC3: every problem with the form as an error-registry code, in the form's order,
- * or none. The backend checks the same rules again; this only saves a round trip.
+ * or none. The backend checks the same rules again; this only saves a round trip. AC11 (fix
+ * f2.7.5): a counted facility needs how many the venue has.
  */
-export function validateVenueForm(form: VenueFormState): ErrorCode[] {
+export function validateVenueForm(
+  form: VenueFormState,
+  facilities: readonly FacilityReferenceItem[],
+): ErrorCode[] {
   const problems: ErrorCode[] = []
   if (!form.name.trim()) problems.push('VENUE_NAME_REQUIRED')
   if (!form.location.trim()) problems.push('VENUE_LOCATION_REQUIRED')
@@ -134,6 +138,10 @@ export function validateVenueForm(form: VenueFormState): ErrorCode[] {
   }
   const quantities = Object.values(form.facilities).map((facility) => facility.quantity)
   if (!quantities.every(isBlankOrPositiveWholeNumber)) problems.push('VENUE_QUANTITY_INVALID')
+  const isCountedLeftBlank = facilities.some(
+    (facility) => facility.is_countable && form.facilities[facility.code]?.quantity.trim() === '',
+  )
+  if (isCountedLeftBlank) problems.push('VENUE_FACILITY_QUANTITY_REQUIRED')
   const layoutCapacities = Object.values(form.layouts).map((layout) => layout.layoutCapacity)
   if (!layoutCapacities.every(isBlankOrPositiveWholeNumber)) {
     problems.push('VENUE_LAYOUT_CAPACITY_INVALID')

@@ -32,6 +32,7 @@ export type IconName =
   | 'x-circle'
   | 'clock'
   | 'message'
+  | 'wrench'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   home: <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
@@ -116,6 +117,9 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z" />
       <path d="M10 20.5a2 2 0 0 0 4 0" />
     </>
+  ),
+  wrench: (
+    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3.5 17.2a1.8 1.8 0 0 0 2.6 2.6l5.8-5.8a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.6-.6-2.4z" />
   ),
   plus: <path d="M12 5v14M5 12h14" />,
   search: (

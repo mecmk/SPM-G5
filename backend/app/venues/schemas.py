@@ -37,8 +37,15 @@ class ReferenceItem(BaseModel):
     description: str | None = None
 
 
+class FacilityReferenceItem(ReferenceItem):
+    """A facility a venue can offer. Story 8.3 AC11/AC12 (fix f2.7.5): whether it is counted, so
+    the form asks how many only of those."""
+
+    is_countable: bool
+
+
 class VenueReferenceData(BaseModel):
-    facilities: list[ReferenceItem]
+    facilities: list[FacilityReferenceItem]
     layouts: list[ReferenceItem]
     accessibility_features: list[ReferenceItem]
 

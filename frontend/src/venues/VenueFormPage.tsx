@@ -341,7 +341,7 @@ export function VenueFormPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form) return
-    const problems = validateVenueForm(form)
+    const problems = validateVenueForm(form, reference?.facilities ?? [])
     setFormProblems(problems)
     setSaveError(null)
     if (problems.length > 0) return
@@ -530,7 +530,9 @@ export function VenueFormPage() {
 
           <fieldset className="card">
             <legend>Facilities</legend>
-            <p className="form-hint">Tick what the venue offers. Quantity is optional.</p>
+            <p className="form-hint">
+              Tick what the venue offers, and say how many of each one that is counted.
+            </p>
             <ul className="check-list">
               {reference.facilities.map((item) => {
                 const selected = form.facilities[item.code]
@@ -546,17 +548,22 @@ export function VenueFormPage() {
                     </label>
                     {selected && (
                       <div className="inline-fields">
-                        <input
-                          onBeforeInput={refuseNonDigits}
-                          type="number"
-                          min={1}
-                          step={1}
-                          className="inline-number"
-                          placeholder="Qty"
-                          aria-label={`${item.name} quantity`}
-                          value={selected.quantity}
-                          onChange={(e) => updateFacility(item.code, { quantity: e.target.value })}
-                        />
+                        {/* 8.3 AC11/AC12 (fix f2.7.5): only a counted facility asks how many. */}
+                        {item.is_countable && (
+                          <input
+                            onBeforeInput={refuseNonDigits}
+                            type="number"
+                            min={1}
+                            step={1}
+                            className="inline-number"
+                            placeholder="Qty"
+                            aria-label={`${item.name} quantity`}
+                            value={selected.quantity}
+                            onChange={(e) =>
+                              updateFacility(item.code, { quantity: e.target.value })
+                            }
+                          />
+                        )}
                         <input
                           placeholder="Notes"
                           aria-label={`${item.name} notes`}
@@ -649,7 +656,10 @@ export function VenueFormPage() {
             {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
             {/* A problem the form no longer has closes its toast, as error toasts have no timer. */}
             {formProblems
-              .filter((code) => form && validateVenueForm(form).includes(code))
+              .filter(
+                (code) =>
+                  form && validateVenueForm(form, reference?.facilities ?? []).includes(code),
+              )
               .map((code) => (
                 <ErrorToast
                   key={code}

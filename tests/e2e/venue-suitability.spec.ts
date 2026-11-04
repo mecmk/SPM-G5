@@ -104,7 +104,9 @@ test("11.1 AC1: in an event's catalogue each venue shows Suitable or Unsuitable,
   await expect(tag(page, 'Boardroom 3.4', 'Unsuitable')).toBeVisible()
   await expect(boardroom.getByText('Capacity 16 < 60 people', { exact: true })).toBeVisible()
   await expect(boardroom.getByText('Layout Classroom not offered', { exact: true })).toBeVisible()
-  await expect(boardroom.getByText('Projector & screen not offered', { exact: true })).toBeVisible()
+  await expect(
+    boardroom.getByText('Projector & screen ×1 not offered', { exact: true }),
+  ).toBeVisible()
   await expect(tag(page, 'Grand Hall', 'Unsuitable')).toBeVisible()
   await expect(
     venueCard(page, 'Grand Hall').getByText('Layout Classroom not offered'),
@@ -280,7 +282,7 @@ test('11.1 AC5: a characteristic the venue has not recorded reads Unknown', asyn
 
   const boardroom = venueCard(page, 'Boardroom 3.4')
   await expect(boardroom.getByText('Layout Classroom: Unknown', { exact: true })).toBeVisible()
-  await expect(boardroom.getByText('Projector & screen: Unknown', { exact: true })).toBeVisible()
+  await expect(boardroom.getByText('Projector & screen ×1: Unknown', { exact: true })).toBeVisible()
   const grandHall = venueCard(page, 'Grand Hall')
   await expect(grandHall.getByText('Hearing loop: Unknown', { exact: true })).toBeVisible()
   await expect(grandHall.getByText('Projector & screen ×3: Unknown', { exact: true })).toBeVisible()
@@ -347,7 +349,7 @@ test('11.1 AC2/AC3/AC6: an unsuitable venue is requested with a justification, w
   await expect(suitability.getByText('Unsuitable', { exact: true })).toBeVisible()
   await expect(suitability.getByText('Layout Classroom not offered', { exact: true })).toBeVisible()
   await expect(
-    suitability.getByText('Projector & screen not offered', { exact: true }),
+    suitability.getByText('Projector & screen ×1 not offered', { exact: true }),
   ).toBeVisible()
   await page.getByRole('textbox', { name: 'Justification' }).fill(justification)
 

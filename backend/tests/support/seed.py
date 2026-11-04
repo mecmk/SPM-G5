@@ -439,11 +439,13 @@ class VenueRequirements:
     cccc..NN). These three are the ones that also require facilities. Story 8.4: the Smart Cities
     Expo's three requirements are numbered within their event (cccc..0028-..0N)."""
 
-    DATA_LITERACY_MAIN = _r(2)  # Events.SUBMITTED: CLASSROOM, PROJECTOR + WIFI, 60 people
-    NIMBUS_MAIN = _r(3)  # Events.APPROVED: THEATRE, PROJECTOR + SOUND_SYSTEM + STAGE, 350
+    DATA_LITERACY_MAIN = _r(2)  # Events.SUBMITTED: CLASSROOM, PROJECTOR x1 + WIFI, 60 people
+    NIMBUS_MAIN = _r(3)  # Events.APPROVED: THEATRE, PROJECTOR x1 + SOUND_SYSTEM + STAGE, 350
     # Story 12.5: Nimbus's second, which Bookings' pending Seminar Room 2.1 request is for.
-    NIMBUS_BREAKOUT = uuid.UUID("cccccccc-0000-0000-0003-000000000002")  # CLASSROOM, PROJECTOR, 60
-    PARTNER_BRIEFING_MAIN = _r(18)  # Events.PARTNER_BRIEFING: CLASSROOM, PROJECTOR, 60
+    NIMBUS_BREAKOUT = uuid.UUID(
+        "cccccccc-0000-0000-0003-000000000002"
+    )  # CLASSROOM, PROJECTOR x1, 60
+    PARTNER_BRIEFING_MAIN = _r(18)  # Events.PARTNER_BRIEFING: CLASSROOM, PROJECTOR x1, 60
     # Events.SMART_CITIES_EXPO, in the banner's order:
     EXPO_PLENARY_HALL = uuid.UUID("cccccccc-0000-0000-0028-000000000001")  # THEATRE, 300
     EXPO_BREAKOUT_ROOM = uuid.UUID("cccccccc-0000-0000-0028-000000000002")  # CLASSROOM, 40

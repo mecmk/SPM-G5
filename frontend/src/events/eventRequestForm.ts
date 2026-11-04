@@ -1,5 +1,11 @@
 import { WITHDRAWABLE_STATUSES } from '../api/equipment'
-import type { EquipmentItemStatus, EventDetail, EventInput, VenueRequirement } from '../api/events'
+import type {
+  EquipmentItemStatus,
+  EventDetail,
+  EventFacilityReferenceItem,
+  EventInput,
+  VenueRequirement,
+} from '../api/events'
 import type { ErrorCode } from '../errors/registry'
 import { NOT_CORRECTED_STATUSES } from '../shared/equipmentStatus'
 import { inputToInstant, instantToInput, isReadableDateTime, nowAsInput } from '../shared/format'
@@ -14,7 +20,8 @@ export interface NoteDraft {
 }
 
 export interface FacilityDraft {
-  /** Optional: how many are needed, for example 3 breakout rooms. */
+  /** How many are needed, for example 2 projectors: a counted facility only (fix f2.7.5), and
+   * needed to submit (2.7 AC21). */
   quantity: string
   notes: string
 }
@@ -446,10 +453,30 @@ function getAttendanceProblem(attendance: string): ErrorCode | null {
 }
 
 /** Story 2.1 AC3, and AC22 (fix f2.1.5): what is wrong with a facility quantity, or null. Blank is
- * fine: how many is optional. */
+ * fine on a draft; a counted facility's is still needed to submit (2.7 AC21, fix f2.7.5). */
 function getFacilityQuantityProblem(quantity: string): ErrorCode | null {
   if (isAboveRequestLimit(quantity)) return 'EVENT_FACILITY_QUANTITY_TOO_LARGE'
   if (!isBlankOrPositiveWholeNumber(quantity)) return 'EVENT_FACILITY_QUANTITY_INVALID'
+  return null
+}
+
+/** Story 2.7 AC21 (fix f2.7.5): the first counted facility ticked without how many, to stop a
+ * submission before anything is sent; a draft may leave it blank. */
+export function findBlankCountedQuantity(
+  form: EventFormState,
+  facilities: readonly EventFacilityReferenceItem[],
+): FormProblem | null {
+  for (const requirement of form.venueRequirements) {
+    for (const facility of facilities) {
+      const chosen = requirement.facilities[facility.code]
+      if (facility.is_countable && chosen !== undefined && chosen.quantity.trim() === '') {
+        return {
+          code: 'EVENT_FACILITY_QUANTITY_REQUIRED',
+          fieldId: getFacilityQuantityId(requirement.key, facility.code),
+        }
+      }
+    }
+  }
   return null
 }
 
@@ -666,7 +693,10 @@ export function getLiveProblems(
  * words it. Shown as the form is filled in, so a refused submission is never a surprise; the
  * backend still checks, and names anything missing.
  */
-export function getMissingForSubmission(form: EventFormState): string[] {
+export function getMissingForSubmission(
+  form: EventFormState,
+  facilities: readonly EventFacilityReferenceItem[],
+): string[] {
   const missing: string[] = []
   if (!form.purpose.trim()) missing.push('purpose')
   if (!form.description.trim()) missing.push('description')
@@ -684,6 +714,14 @@ export function getMissingForSubmission(form: EventFormState): string[] {
     if (!requirement.name.trim()) missing.push(`venue requirement ${index + 1}: name`)
     if (!isPositiveWholeNumber(requirement.capacity)) {
       missing.push(`venue requirement ${index + 1}: number of people`)
+    }
+    // 2.7 AC21 (fix f2.7.5): how many of each counted facility ticked, in the form's order - the
+    // backend's `_REQUIREMENT_MISSING_FACILITY_QUANTITY_LABEL`, word for word.
+    for (const facility of facilities) {
+      const chosen = requirement.facilities[facility.code]
+      if (facility.is_countable && chosen !== undefined && chosen.quantity.trim() === '') {
+        missing.push(`venue requirement ${index + 1}: how many ${facility.name}`)
+      }
     }
   })
   const hasAccessibilityAnswer =

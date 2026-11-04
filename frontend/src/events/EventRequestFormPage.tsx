@@ -65,6 +65,7 @@ import {
   getLatestEndInput,
   getLatestStartInput,
   getLiveProblems,
+  findBlankCountedQuantity,
   getMissingForSubmission,
   getVenueRequirementFieldId,
   isEquipmentTypeTaken,
@@ -409,13 +410,20 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
       ),
     [form, event, judgedAvailability, isEquipmentApproved],
   )
+  // Story 2.7 AC21 (fix f2.7.5): the blank count a submission is refused for. No draft check
+  // reports it, so it is held here, and its toast closes once the count is filled in.
+  const blankCountedQuantity = useMemo(
+    () => (form && reference ? findBlankCountedQuantity(form, reference.facilities) : null),
+    [form, reference],
+  )
   const liveProblems: Record<string, ErrorCode> = {
     ...(form ? getLiveProblems(form, judgedAvailability) : {}),
     ...(form && isNameTouched && !form.name.trim()
       ? { [FIELD_ID.name]: 'EVENT_NAME_REQUIRED' as ErrorCode }
       : {}),
   }
-  const missingForSubmission = form ? getMissingForSubmission(form) : []
+  const missingForSubmission =
+    form && reference ? getMissingForSubmission(form, reference.facilities) : []
   const isDetailsChanged =
     form !== null &&
     event !== null &&
@@ -698,6 +706,13 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
     setFormProblems((current) => current.filter((problem) => problem !== code))
   }
 
+  /** Say a problem the browser found, mark its field and move to it. */
+  function showFormProblem(current: EventFormState, problem: FormProblem) {
+    setFormProblems([problem.code])
+    setInvalidFields({ ids: [problem.fieldId], form: current })
+    document.getElementById(problem.fieldId)?.focus()
+  }
+
   /**
    * The last save's refusal, and every problem the form's own check found, each a toast. A problem
    * the form no longer has closes its toast: an error toast has no timer, so fixing the field is
@@ -705,7 +720,11 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
    */
   function renderSaveErrors() {
     const isStillHeld = (code: ErrorCode) =>
-      INCOMPLETE_DATE_CODES.includes(code) ? incompleteDateId !== null : heldProblemCodes.has(code)
+      INCOMPLETE_DATE_CODES.includes(code)
+        ? incompleteDateId !== null
+        : code === 'EVENT_FACILITY_QUANTITY_REQUIRED'
+          ? blankCountedQuantity !== null
+          : heldProblemCodes.has(code)
     return (
       <>
         {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
@@ -790,9 +809,14 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   /**
    * AC9-AC11: save the details, then submit them. If the backend refuses the submission (it names
    * whatever is missing), the details stay saved as a draft, and the message is shown on the
-   * draft's edit page.
+   * draft's edit page. Story 2.7 AC21 (fix f2.7.5): a counted facility without how many stops it
+   * before anything is sent, even the draft.
    */
   async function handleSubmitRequest() {
+    if (form && blankCountedQuantity) {
+      showFormProblem(form, blankCountedQuantity)
+      return
+    }
     setIsSaving(true)
     try {
       const result = await saveDraft(false)
@@ -1270,23 +1294,27 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
                           </label>
                           {selected && (
                             <div className="inline-fields">
-                              <input
-                                onBeforeInput={refuseNonDigits}
-                                type="number"
-                                inputMode="numeric"
-                                min={1}
-                                step={1}
-                                className="inline-number"
-                                placeholder="How many"
-                                aria-label={`${item.name} quantity, ${requirementLabel}`}
-                                {...fieldProps(quantityId)}
-                                value={selected.quantity}
-                                onChange={(e) =>
-                                  updateRequirementFacility(requirement, item.code, {
-                                    quantity: e.target.value,
-                                  })
-                                }
-                              />
+                              {/* 2.7 AC21/AC22 (fix f2.7.5): only a counted facility asks how
+                                  many. */}
+                              {item.is_countable && (
+                                <input
+                                  onBeforeInput={refuseNonDigits}
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={1}
+                                  step={1}
+                                  className="inline-number"
+                                  placeholder="How many"
+                                  aria-label={`${item.name} quantity, ${requirementLabel}`}
+                                  {...fieldProps(quantityId)}
+                                  value={selected.quantity}
+                                  onChange={(e) =>
+                                    updateRequirementFacility(requirement, item.code, {
+                                      quantity: e.target.value,
+                                    })
+                                  }
+                                />
+                              )}
                               <input
                                 placeholder="Notes"
                                 aria-label={`${item.name} notes, ${requirementLabel}`}
