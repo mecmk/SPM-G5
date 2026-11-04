@@ -837,7 +837,7 @@ test("12.1 AC18: the request step starts at the venue's setup and turnaround tim
   await expect(teardown).toContainText(venueDefault('15 min'))
   await expect(turnaround).toContainText('Wed, 3 Feb 2027 · 08:15–12:15')
 
-  // The same figure in other units is the default again.
+  // Entered again, the same figure is the default again.
   await turnaroundField(turnaround, 'Setup', 'Minutes').fill('0')
   await turnaroundField(turnaround, 'Setup', 'Hours').fill('0')
   await turnaroundField(turnaround, 'Setup', 'Minutes').fill('30')
@@ -900,8 +900,8 @@ test("12.1 AC19: Venue Staff see a request at the venue's setup and turnaround t
 test("12.1 AC21: Switch to this venue starts at the new venue's times, not the replaced request's", async ({
   page,
 }) => {
-  // Opened as Switch to this venue opens it, for Nimbus's Breakout room, whose pending request is
-  // Seminar Room 2.1's 30 and 15 minutes. Nothing is sent.
+  // Opened at the address Switch to this venue builds, for Nimbus's Breakout room, whose pending
+  // request is Seminar Room 2.1's 30 and 15 minutes. Nothing is sent.
   await signIn(page, ACCOUNTS.coordinator)
   await page.goto(
     `/events/${NIMBUS.id}/request-venue/${FOYER.id}?requirement=${NIMBUS_BREAKOUT}&replaces=${NIMBUS_BREAKOUT_REQUEST}`,
