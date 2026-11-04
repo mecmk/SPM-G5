@@ -407,6 +407,12 @@ export interface OrganiserBooking {
   venue_location: string
   /** The venue's first picture, as on its catalogue card; null when it has none. */
   venue_cover_image_url: string | null
+  /** Fix f13.2.1.1 (13.2.1 AC7): the venue's capacity, and the booked layout with the capacity
+   * the venue gives it, as the venue stands now. Both layout fields null when no layout is asked
+   * for; `layout_capacity` null too when the venue gives the layout no figure of its own. */
+  venue_capacity: number
+  layout_name: string | null
+  layout_capacity: number | null
   /** Null for an additional venue (story 12.5 AC5). */
   venue_requirement_name: string | null
   starts_at: string
@@ -447,6 +453,12 @@ export interface BookingOutcome {
   venue_location: string
   /** The venue's first picture, as on its catalogue card; null when it has none. */
   venue_cover_image_url: string | null
+  /** Fix f13.2.1.1 (13.2.1 AC7): the venue's capacity, and the booked layout with the capacity
+   * the venue gives it, as the venue stands now. Both layout fields null when no layout is asked
+   * for; `layout_capacity` null too when the venue gives the layout no figure of its own. */
+  venue_capacity: number
+  layout_name: string | null
+  layout_capacity: number | null
   /** Story 12.5 AC2/AC4: the venue requirement the booking is for, so the event's page and the
    * catalogue's banner can tell which requirements are covered. Both null for an additional
    * venue (AC5). */
