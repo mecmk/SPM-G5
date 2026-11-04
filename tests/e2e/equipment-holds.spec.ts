@@ -21,6 +21,9 @@
  * AC6 a type with no holds says so: in a range, from the seeded data; with no range, or either end
  *     of one, from a stubbed answer, since some seeded hold of every type is still to come.
  * AC7 another role is told the page is not permitted; the API's 401 and 403 are backend cases.
+ * AC8 (f17.3.1) the schedule says a hold has no expiry and what ends it.
+ * AC9 (f17.3.1) an event's Equipment requirements section says the same while it holds equipment
+ *     (the showcase, as its coordinator), and not when it holds none (the seeded partner briefing).
  * A failed load says why (stubbed 500), and on a phone the page does not scroll sideways.
  *
  * Every flow reads the seeded Bayfront Product Showcase (backend/db/seed/020_sample_data.sql) on
@@ -31,6 +34,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   ACCOUNTS,
+  EVENTS,
   corsHeaders,
   expectNoSidewaysScroll,
   mainOverflow,
@@ -48,6 +52,11 @@ const SHOWCASE_TO = 'Wed, 9 Apr 2031, 17:00'
 const BEFORE_SHOWCASE_DAY = '2031-04-08'
 // The seeded roadshow's microphones, accepted, in June 2027: outside the showcase's day.
 const ROADSHOW = 'Regional Partner Roadshow'
+// The showcase's event page; coordinator 2 is its coordinator.
+const SHOWCASE_EVENT_PATH = '/events/33333333-0000-0000-0000-000000017301'
+
+const HOLD_LENGTH =
+  "Equipment is held for the event's dates, with no expiry, until the item is withdrawn or removed, Technical Support decline it, or the event is cancelled or rejected."
 
 const START_BEFORE_TODAY = 'The start date cannot be before today.'
 const END_BEFORE_START = 'The end date cannot be before the start date.'
@@ -167,6 +176,33 @@ test('17.3 AC1/AC2: Technical Support opens the schedule and sees the showcase h
   // AC5: Technical Support declined the camera, so it holds nothing.
   await expect(group(page, 'Video camera')).toBeVisible()
   await expect(showcaseRow(page, 'Video camera')).toHaveCount(0)
+})
+
+test('17.3 AC8: the schedule says a hold has no expiry and what ends it', async ({ page }) => {
+  await signIn(page, ACCOUNTS.techSupport)
+  await openHolds(page)
+
+  await expect(page.getByRole('main').getByText(HOLD_LENGTH)).toBeVisible()
+})
+
+test("17.3 AC9: an event's equipment section says how long its equipment is held", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator2)
+  await page.goto(SHOWCASE_EVENT_PATH)
+  const section = page.getByRole('region', { name: 'Equipment requirements' })
+  await expect(section.getByText('Wireless microphone')).toBeVisible()
+  await expect(section.getByText(HOLD_LENGTH)).toBeVisible()
+})
+
+test("17.3 AC9: an event holding no equipment doesn't say how long it is held", async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.coordinator)
+  await page.goto(`/events/${EVENTS.partnerBriefing}`)
+  const none = page.getByRole('region', { name: 'Equipment requirements' })
+  await expect(none.getByText('No equipment requested.')).toBeVisible()
+  await expect(none.getByText(HOLD_LENGTH)).toHaveCount(0)
 })
 
 test('17.3 AC3: filtering by type and by either end of a range keeps just those filters in the address, and Clear filters shows every hold again', async ({

@@ -19,7 +19,7 @@ import {
   EQUIPMENT_HOLDS_TITLE,
   equipmentRequestPath,
 } from '../routes'
-import { EQUIPMENT_STATUS_LABELS } from '../shared/equipmentStatus'
+import { EQUIPMENT_STATUS_LABELS, HOLD_LENGTH_SENTENCE } from '../shared/equipmentStatus'
 import { formatDateTime, isReadableDate, todayAsDateInput } from '../shared/format'
 import { queuePath } from '../shared/queueView'
 import { useLoaded } from '../shared/useLoaded'
@@ -331,6 +331,8 @@ export function EquipmentHoldsPage() {
         title={EQUIPMENT_HOLDS_TITLE}
         subtitle="Every unit held for an event, by equipment type: which event, how many, and from when to when."
       />
+      {/* Fix f17.3.1 (AC8): a hold has no expiry, so say what ends one. */}
+      <p className="muted">{HOLD_LENGTH_SENTENCE}</p>
 
       <div className="stack">
         <HoldFiltersForm
