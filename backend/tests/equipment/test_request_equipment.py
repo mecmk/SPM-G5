@@ -29,10 +29,11 @@ AC6  A type with none available cannot be chosen. Each type can appear only once
 AC7  An Accepted item is locked: the coordinator can no longer edit or remove it.
 AC8  (test_equipment_date_recheck.py) If the event's dates change during review, every item is
      re-checked against the new dates.
-AC9  Only the assigned coordinator can record, edit, remove or submit equipment, and only while the
-     event is Under Review, Clarification Requested or Planning. Once the event is Confirmed,
-     Completed, Cancelled or Rejected, no equipment changes can be made. The API refuses anyone
-     else, including direct requests.
+AC9  Only the assigned coordinator can record, edit, remove or submit equipment, and only once the
+     event is approved: while it is Planning or Confirmed, as for a venue request (f15.1.2). Under
+     Review or Clarification Requested it is too early, and Awaiting Safety Check, Completed,
+     Cancelled or Rejected no equipment changes can be made. The API refuses anyone else, including
+     direct requests.
 AC10 (test_equipment_request_conflicts.py) If two coordinators try to hold the last units at the
      same moment, only the first succeeds. A double-click on Save or Submit acts once.
 
@@ -78,13 +79,10 @@ START = datetime(2027, 8, 2, 9, 0, tzinfo=SGT)
 END = datetime(2027, 8, 2, 17, 0, tzinfo=SGT)
 NOTES_LIMIT = 1000
 WRITE_ACTIONS = ("add", "edit", "remove", "submit")
-OPEN_STATUSES = (
-    EventStatus.UNDER_REVIEW,
-    EventStatus.CLARIFICATION_REQUESTED,
-    EventStatus.PLANNING,
-)
+OPEN_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
+NOT_YET_OPEN_STATUSES = (EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED)
 CLOSED_STATUSES = (
-    EventStatus.CONFIRMED,
+    EventStatus.AWAITING_SAFETY_CHECK,
     EventStatus.COMPLETED,
     EventStatus.CANCELLED,
     EventStatus.REJECTED,
@@ -262,6 +260,8 @@ def test_the_coordinator_sees_and_submits_what_the_organiser_asked_for(login_as,
         3,
         "REQUESTED",
     )
+    approved = client.post(f"/events/{created['id']}/approve")
+    assert approved.status_code == 200, approved.text
     sent = _submit(client, created["id"])
 
     assert sent.status_code == 201, sent.text
@@ -978,7 +978,7 @@ def test_a_coordinator_not_assigned_to_the_event_is_refused(login_as, db: Sessio
 @pytest.mark.parametrize(
     ("action", "expected"), [("add", 201), ("edit", 200), ("remove", 204), ("submit", 201)]
 )
-def test_equipment_can_change_while_the_event_is_in_review_or_planning(
+def test_equipment_can_change_while_the_event_is_planning_or_confirmed(
     coordinator_client, db: Session, status, action, expected
 ):
     event, item, spare = _ready(db, status=status)
@@ -986,6 +986,24 @@ def test_equipment_can_change_while_the_event_is_in_review_or_planning(
     response = _call(coordinator_client, action, event, item, spare)
 
     assert response.status_code == expected, response.text
+
+
+@pytest.mark.story("15.1", ac=9)
+@pytest.mark.parametrize("status", NOT_YET_OPEN_STATUSES)
+@pytest.mark.parametrize("action", WRITE_ACTIONS)
+def test_equipment_cannot_change_before_the_event_is_approved(
+    coordinator_client, db: Session, status, action
+):
+    event, item, spare = _ready(db, status=status)
+    before = _snapshot(db, event.id)
+
+    response = _call(coordinator_client, action, event, item, spare)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.EQUIPMENT_NOT_YET_OPEN_MESSAGE.format(
+        status=status.lower().replace("_", " ")
+    )
+    assert _snapshot(db, event.id) == before
 
 
 @pytest.mark.story("15.1", ac=9)
@@ -1001,7 +1019,7 @@ def test_equipment_cannot_change_once_the_event_is_closed(
 
     assert response.status_code == 409
     assert response.json()["detail"] == service.EQUIPMENT_CLOSED_MESSAGE.format(
-        status=status.lower()
+        status=status.lower().replace("_", " ")
     )
     assert _snapshot(db, event.id) == before
 

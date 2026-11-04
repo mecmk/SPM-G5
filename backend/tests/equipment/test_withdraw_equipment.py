@@ -15,16 +15,19 @@ AC3  A withdrawn item stays on the event page as Withdrawn, with who withdrew it
      Withdrawn and adds the line as a new item (CL-196).
 AC4  Technical Support are notified of each withdrawal, naming the event, the equipment and the
      quantity. In their queue the item shows as Withdrawn, read-only, with no Accept or Decline.
-AC5  Equipment can be withdrawn while the event is Under Review, Clarification Requested or
-     Planning. Once it is Awaiting Safety Check, Confirmed, Completed, Cancelled or Rejected,
-     Withdraw is not offered and an attempt is refused.
+AC5  Equipment can be withdrawn while the event is Planning or Confirmed (f15.1.2). Under Review or
+     Clarification Requested it is too early, and once it is Awaiting Safety Check, Completed,
+     Cancelled or Rejected, Withdraw is not offered and an attempt is refused.
 AC6  Only Pending and Accepted items can be withdrawn. Declined, cancelled and already-withdrawn
      items hold nothing to release.
 AC7  Closing the confirmation leaves the item unchanged.
 AC8  Withdrawing the event's last item leaves it with no equipment, which does not stop it going
      for its safety check (21.2 AC11).
 AC9  If the event already has a safety approval, withdrawing equipment changes what was approved,
-     so the event needs a new safety review before it can be confirmed (21.2 AC14).
+     so the event needs a new safety review before it can be confirmed (21.2 AC14). A Confirmed
+     event that loses an Accepted item goes back to Planning, and the organiser and Safety Officers
+     are told, as for a cancelled booking (12.8 AC5); losing a Pending item changes nothing approved
+     (f15.1.2).
 AC10 Only the event's assigned coordinator can withdraw equipment. The organiser sees withdrawn
      items read-only; other users are refused.
 AC11 If Technical Support accept or decline an item at the moment it is withdrawn, whichever is
@@ -94,6 +97,7 @@ from tests.support.factories import (
     make_event,
     make_secured_event,
     make_user,
+    while_in_planning,
 )
 from tests.support.seed import Users
 
@@ -105,20 +109,19 @@ SGT = timezone(timedelta(hours=8))
 START = datetime(2027, 11, 8, 9, 0, tzinfo=SGT)
 END = datetime(2027, 11, 8, 17, 0, tzinfo=SGT)
 
-OPEN_EVENT_STATUSES = (
-    EventStatus.UNDER_REVIEW,
-    EventStatus.CLARIFICATION_REQUESTED,
-    EventStatus.PLANNING,
-)
+OPEN_EVENT_STATUSES = (EventStatus.PLANNING, EventStatus.CONFIRMED)
+NOT_YET_OPEN_EVENT_STATUSES = (EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED)
 CLOSED_EVENT_STATUSES = (
     EventStatus.AWAITING_SAFETY_CHECK,
-    EventStatus.CONFIRMED,
     EventStatus.COMPLETED,
     EventStatus.CANCELLED,
     EventStatus.REJECTED,
 )
 
 EVENT_CLOSED_MESSAGE = "This event is {status}, so its equipment can no longer be changed."
+EVENT_NOT_YET_OPEN_MESSAGE = (
+    "This event is {status}, so equipment can only be requested once it is approved."
+)
 NOT_ASSIGNED_MESSAGE = "Only the coordinator assigned to this event can change its equipment."
 ALREADY_WITHDRAWN_MESSAGE = "This equipment item has already been withdrawn."
 NOT_WITHDRAWABLE_MESSAGES = {
@@ -352,12 +355,13 @@ def _withdrawn_line(login_as, db: Session, period, quantity: int = 2) -> tuple[d
     """A submitted event with one laptop line, sent and withdrawn, as the coordinator reads it."""
     event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", quantity))
     coordinator = login_as(Users.COORDINATOR)
-    assert coordinator.post(f"/events/{event['id']}/equipment-submissions").status_code == 201
-    [line] = _read(coordinator, event["id"])["equipment"]
-    withdrawn = coordinator.post(
-        _withdrawal_path(event["id"], line["id"]), json={"expected_status": line["status"]}
-    )
-    assert withdrawn.status_code == 201, withdrawn.text
+    with while_in_planning(db, event["id"]):
+        assert coordinator.post(f"/events/{event['id']}/equipment-submissions").status_code == 201
+        [line] = _read(coordinator, event["id"])["equipment"]
+        withdrawn = coordinator.post(
+            _withdrawal_path(event["id"], line["id"]), json={"expected_status": line["status"]}
+        )
+        assert withdrawn.status_code == 201, withdrawn.text
     return _read(coordinator, event["id"]), line["id"]
 
 
@@ -415,7 +419,8 @@ def test_a_correction_cannot_edit_a_withdrawn_item(login_as, db: Session):
 def test_the_type_requested_again_can_still_be_corrected(login_as, db: Session):
     event, _ = _withdrawn_line(login_as, db, _period(140))
     coordinator = login_as(Users.COORDINATOR)
-    added = coordinator.post(f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", 1))
+    with while_in_planning(db, event["id"]):
+        added = coordinator.post(f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", 1))
     assert added.status_code == 201, added.text
     event = _read(coordinator, event["id"])
     current = [
@@ -437,7 +442,8 @@ def test_the_type_requested_again_can_still_be_corrected(login_as, db: Session):
 def test_a_correction_beside_a_withdrawn_item_leaves_the_other_holds_alone(login_as, db: Session):
     event, _ = _withdrawn_line(login_as, db, _period(210))
     coordinator = login_as(Users.COORDINATOR)
-    added = coordinator.post(f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", 1))
+    with while_in_planning(db, event["id"]):
+        added = coordinator.post(f"/events/{event['id']}/equipment", json=_equipment("LAPTOP", 1))
     assert added.status_code == 201, added.text
     event = _read(coordinator, event["id"])
     before = _holds(db, event["id"])
@@ -468,7 +474,8 @@ def _sent_line(login_as, db: Session, period, *, is_accepted: bool) -> tuple[dic
     it, and that line."""
     event = _submitted_with_equipment(login_as, db, period, _equipment("LAPTOP", 2))
     coordinator = login_as(Users.COORDINATOR)
-    assert coordinator.post(f"/events/{event['id']}/equipment-submissions").status_code == 201
+    with while_in_planning(db, event["id"]):
+        assert coordinator.post(f"/events/{event['id']}/equipment-submissions").status_code == 201
     [line] = _read(coordinator, event["id"])["equipment"]
     if is_accepted:
         decided = login_as(Users.TECH_SUPPORT).post(
@@ -716,6 +723,20 @@ def test_withdrawing_is_allowed_while_the_event_is_open(coordinator_client, db, 
 
 
 @pytest.mark.story("17.2", ac=5)
+@pytest.mark.parametrize("event_status", NOT_YET_OPEN_EVENT_STATUSES)
+def test_withdrawing_is_refused_before_the_event_is_approved(coordinator_client, db, event_status):
+    item = _sent(db, event=_event(db, status=event_status))
+
+    response = _withdraw(coordinator_client, item)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == EVENT_NOT_YET_OPEN_MESSAGE.format(
+        status=event_status.lower().replace("_", " ")
+    )
+    _assert_unchanged(db, item, ACCEPTED)
+
+
+@pytest.mark.story("17.2", ac=5)
 @pytest.mark.parametrize("event_status", CLOSED_EVENT_STATUSES)
 def test_withdrawing_is_refused_once_the_event_is_closed(coordinator_client, db, event_status):
     item = _sent(db, event=_event(db, status=event_status))
@@ -795,6 +816,45 @@ def test_withdrawing_after_a_safety_approval_needs_a_new_review(coordinator_clie
 
     assert response.status_code == 409
     assert "The event's equipment changed after the safety approval" in response.json()["detail"]
+
+
+@pytest.mark.story("17.2", ac=9)
+def test_withdrawing_an_accepted_item_returns_a_confirmed_event_to_planning(
+    coordinator_client, db: Session
+):
+    secured = make_secured_event(
+        db, status=EventStatus.CONFIRMED, confirmed_at=datetime(2026, 10, 2, tzinfo=UTC)
+    )
+    event_id = secured.event.id
+
+    assert _withdraw(coordinator_client, secured.equipment).status_code == 201
+
+    db.expire_all()
+    event = db.get(Event, event_id)
+    assert (event.status, event.confirmed_at) == (EventStatus.PLANNING, None)
+    told = db.scalars(
+        select(Notification.recipient_id).where(
+            Notification.event_id == event_id,
+            Notification.notification_type == "EVENT_RETURNED_TO_PLANNING",
+        )
+    ).all()
+    assert {event.organiser_id, Users.SAFETY_OFFICER.id} <= set(told)
+
+
+@pytest.mark.story("17.2", ac=9)
+def test_withdrawing_a_pending_item_leaves_a_confirmed_event_confirmed(
+    coordinator_client, db: Session
+):
+    confirmed_at = datetime(2026, 10, 2, tzinfo=UTC)
+    event = _event(db, status=EventStatus.CONFIRMED, confirmed_at=confirmed_at)
+    event_id = event.id
+    item = _sent(db, event=event, status=PENDING)
+
+    assert _withdraw(coordinator_client, item).status_code == 201
+
+    db.expire_all()
+    event = db.get(Event, event_id)
+    assert (event.status, event.confirmed_at) == (EventStatus.CONFIRMED, confirmed_at)
 
 
 # --- AC10: only the assigned coordinator ----------------------------------------------------------

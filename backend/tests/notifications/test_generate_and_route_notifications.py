@@ -512,9 +512,9 @@ class _Refused(NamedTuple):
         ),
         pytest.param(
             _Refused(
-                Users.COORDINATOR, f"/events/{Events.CONFIRMED}/equipment-submissions", None, 409
+                Users.COORDINATOR, f"/events/{Events.SUBMITTED}/equipment-submissions", None, 409
             ),
-            id="send-equipment-once-the-event-is-confirmed",
+            id="send-equipment-before-the-event-is-approved",
         ),
     ],
 )

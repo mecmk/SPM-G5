@@ -24,14 +24,10 @@ export const BOOKABLE_EVENT_STATUSES: readonly EventStatus[] = ['PLANNING', 'CON
 
 /**
  * Story 15.1 AC9: the statuses in which the assigned coordinator may change an event's equipment,
- * mirroring `_OPEN_EVENT_STATUSES` in backend/app/equipment/service.py. Once the event is
- * Confirmed, or closed, its equipment is read-only.
+ * mirroring `_OPEN_EVENT_STATUSES` in backend/app/equipment/service.py. f15.1.2: only once it is
+ * approved, as for a venue (`BOOKABLE_EVENT_STATUSES`). Otherwise its equipment is read-only.
  */
-export const EQUIPMENT_OPEN_STATUSES: readonly EventStatus[] = [
-  'UNDER_REVIEW',
-  'CLARIFICATION_REQUESTED',
-  'PLANNING',
-]
+export const EQUIPMENT_OPEN_STATUSES: readonly EventStatus[] = ['PLANNING', 'CONFIRMED']
 
 /**
  * Story 5.4 AC3 / 5.5 AC1: an event's "active" statuses - submitted and not yet closed - mirroring
@@ -105,8 +101,9 @@ export const DETAILS_LOCKED_HINT =
 export const ARRANGED_STATUSES: readonly EventStatus[] = ['PLANNING', 'AWAITING_SAFETY_CHECK']
 
 /**
- * Story 7.2 AC15: why the edit form shows an approved event's equipment read-only. Only Planning
- * opens the Equipment requirements section (15.1 AC9, `EQUIPMENT_OPEN_STATUSES`).
+ * Story 7.2 AC15: why the edit form shows an approved event's equipment read-only. Of the statuses
+ * that form shows it in, only Planning opens the Equipment requirements section (15.1 AC9,
+ * `EQUIPMENT_OPEN_STATUSES`).
  */
 export const EQUIPMENT_LOCKED_HINT =
   'Once the event is approved, its equipment can no longer be changed here. While the event is in Planning, change it in the Equipment requirements section of the event page.'
