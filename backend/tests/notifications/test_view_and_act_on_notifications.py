@@ -85,6 +85,7 @@ from tests.support.factories import (
     make_event,
     make_secured_event,
     make_user,
+    while_in_planning,
 )
 from tests.support.seed import SEED_PASSWORD, Bookings, Events, SeedUser, Users, Venues
 
@@ -775,13 +776,14 @@ def test_a_pending_request_on_an_event_not_going_ahead_sends_the_coordinator_to_
 
 def _send_one_item(coordinator: TestClient, db: Session, event) -> str:
     """The coordinator records one item for ``event`` and sends it to Technical Support (15.1)."""
-    added = coordinator.post(
-        f"/events/{event.id}/equipment",
-        json={"equipment_type_code": make_equipment_type(db).code, "quantity": 1},
-    )
-    assert added.status_code == 201, added.text
-    sent = coordinator.post(f"/events/{event.id}/equipment-submissions")
-    assert sent.status_code == 201, sent.text
+    code = make_equipment_type(db).code
+    with while_in_planning(db, event.id):
+        added = coordinator.post(
+            f"/events/{event.id}/equipment", json={"equipment_type_code": code, "quantity": 1}
+        )
+        assert added.status_code == 201, added.text
+        sent = coordinator.post(f"/events/{event.id}/equipment-submissions")
+        assert sent.status_code == 201, sent.text
     return added.json()["id"]
 
 

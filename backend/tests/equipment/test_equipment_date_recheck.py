@@ -40,7 +40,7 @@ EARLIER_SENT = datetime(2026, 9, 4, 10, 0, tzinfo=UTC)
 def _event(db: Session, *, starts_at: datetime = OLD_START, ends_at: datetime = OLD_END) -> Event:
     return make_event(
         db,
-        status=EventStatus.UNDER_REVIEW,
+        status=EventStatus.PLANNING,
         assigned_coordinator_id=Users.COORDINATOR.id,
         starts_at=starts_at,
         ends_at=ends_at,

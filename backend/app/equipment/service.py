@@ -31,10 +31,10 @@ The checks made under those locks cannot race, which is why "a type is open only
 edit that removes a line and adds the same type back, since the ORM inserts before it deletes
 within one flush.
 
-Who and when (AC9): only the event's assigned coordinator, and only while the event is Under
-Review, Clarification Requested or Planning. A draft is private to its organiser (2.1 AC8), so it
-is not found. Item statuses are ``EquipmentRequestStatus``; ACCEPTED and DECLINED are Technical
-Support's to set (story 16.1), and an item in either is locked (AC7).
+Who and when (AC9): only the event's assigned coordinator, and only while the event is Planning
+or Confirmed (f15.1.2). A draft is private to its organiser (2.1 AC8), so it is not found. Item
+statuses are ``EquipmentRequestStatus``; ACCEPTED and DECLINED are Technical Support's to set
+(story 16.1), and an item in either is locked (AC7).
 
 Story 15.2 - "As a Technical Support Staff member I want to see the equipment requests waiting for
 me, with what is available for each, so that I can work through them in a sensible order." The
@@ -116,6 +116,9 @@ NOT_ASSIGNED_COORDINATOR_MESSAGE = (
     "Only the coordinator assigned to this event can change its equipment."
 )
 EQUIPMENT_CLOSED_MESSAGE = "This event is {status}, so its equipment can no longer be changed."
+EQUIPMENT_NOT_YET_OPEN_MESSAGE = (
+    "This event is {status}, so equipment can only be requested once it is approved."
+)
 ITEM_CLOSED_MESSAGE = "This equipment item is {status}, so it can no longer be changed."
 TYPE_ALREADY_REQUESTED_MESSAGE = "This event already has an open request for {name}."
 NOT_ENOUGH_AVAILABLE_MESSAGE = "Not enough {name} available for this event's dates."
@@ -168,9 +171,19 @@ NOT_WITHDRAWABLE_MESSAGES = {
 # Story 17.2 AC11: the item is no longer in the status the coordinator saw when they confirmed.
 STATUS_CHANGED_MESSAGE = "This equipment item is now {status}. Check it before you withdraw it."
 
-# AC9: the event statuses in which the assigned coordinator may change its equipment.
-_OPEN_EVENT_STATUSES = frozenset(
-    {EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED, EventStatus.PLANNING}
+# AC9 (f15.1.2): the event statuses in which the assigned coordinator may change its equipment:
+# approved, as for a venue request (``_BOOKABLE_EVENT_STATUSES`` in app/bookings/service.py).
+_OPEN_EVENT_STATUSES = frozenset({EventStatus.PLANNING, EventStatus.CONFIRMED})
+# Submitted and awaiting a decision, so its equipment has yet to open rather than closed.
+_NOT_YET_OPEN_EVENT_STATUSES = frozenset(
+    {EventStatus.UNDER_REVIEW, EventStatus.CLARIFICATION_REQUESTED}
+)
+# Story 17.2 AC9: a Confirmed event that loses accepted equipment goes back to Planning.
+_RETURNED_TO_PLANNING_REASON = "{equipment} was withdrawn by its coordinator."
+_RETURNED_TITLE = '"{event}" is back in Planning'
+_RETURNED_MESSAGE = (
+    '{coordinator} withdrew {equipment} from "{event}" while it was confirmed, so it is back in '
+    "Planning and needs a new safety check before it is confirmed again."
 )
 # AC2/AC7: the items the coordinator may still edit. Each can be removed too, but a Pending one
 # (17.2 AC2), which is withdrawn instead.
@@ -280,10 +293,15 @@ class EquipmentConflict(RuntimeError):
 
 
 class EquipmentClosed(EquipmentConflict):
-    """AC9: the event is no longer Under Review, Clarification Requested or Planning."""
+    """AC9: the event is not Planning or Confirmed, so has yet to be approved or is past them."""
 
     def __init__(self, event: Event) -> None:
-        super().__init__(EQUIPMENT_CLOSED_MESSAGE.format(status=as_words(event.status)))
+        message = (
+            EQUIPMENT_NOT_YET_OPEN_MESSAGE
+            if event.status in _NOT_YET_OPEN_EVENT_STATUSES
+            else EQUIPMENT_CLOSED_MESSAGE
+        )
+        super().__init__(message.format(status=as_words(event.status)))
 
 
 class ItemClosed(EquipmentConflict):
@@ -1361,6 +1379,34 @@ def release_for_rejected_event(
 # --- story 17.2: the coordinator withdraws an item they no longer need ----------------------------
 
 
+def _return_to_planning_without(
+    db: Session, event: Event, item: EventEquipmentRequest, *, actor: User
+) -> None:
+    """Story 17.2 AC9: ``item``, accepted and now withdrawn, was part of what a Confirmed event's
+    safety check approved, so the event goes back to Planning and whoever should know is told. An
+    event already in Planning stays there."""
+    equipment = item.equipment_type.name
+    is_returned = events_service.return_event_to_planning(
+        db,
+        event,
+        actor=actor,
+        at=item.withdrawn_at,
+        reason=_RETURNED_TO_PLANNING_REASON.format(equipment=equipment),
+        details={"item_id": str(item.id)},
+    )
+    if is_returned:
+        events_service.notify_of_return_to_planning(
+            db,
+            event,
+            actor=actor,
+            title=_RETURNED_TITLE.format(event=event.name),
+            message=_RETURNED_MESSAGE.format(
+                coordinator=actor.full_name, equipment=equipment, event=event.name
+            ),
+            recipients=(event.organiser, *active_members(db, role_code=RoleCode.SAFETY_OFFICER)),
+        )
+
+
 def withdraw_equipment_item(
     db: Session,
     event_id: uuid.UUID,
@@ -1376,7 +1422,9 @@ def withdraw_equipment_item(
     equipment can change (``_event_for_change``). AC6: only a Pending or Accepted item. AC11: the
     event's row lock serialises this with a decision, and the item must still be in the status
     the coordinator saw, so whichever is saved first wins and the other is told the status now.
-    AC8/AC9 need nothing here: the safety check reads accepted items only (story 21.2)."""
+    AC8/AC9: the safety check reads accepted items only (story 21.2), so nothing more is needed
+    before confirmation, but a Confirmed event that loses an Accepted item goes back to Planning
+    for a new one, and the organiser and Safety Officers are told, as in story 12.8 AC5."""
     event = _event_for_change(db, event_id, actor=actor)
     # Read only once the event is locked, so a decision saved while this waited is seen (AC11).
     item = db.get(EventEquipmentRequest, item_id)
@@ -1407,6 +1455,8 @@ def withdraw_equipment_item(
         },
         commit=False,
     )
+    if withdrawn_from == EquipmentRequestStatus.ACCEPTED:
+        _return_to_planning_without(db, event, item, actor=actor)
     db.commit()
     db.refresh(item)
     return item

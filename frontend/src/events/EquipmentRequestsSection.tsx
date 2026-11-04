@@ -86,9 +86,12 @@ function trimmedNotes(notes: string): string | null {
 export interface EquipmentRequestsSectionProps {
   eventId: string
   equipment: EquipmentLine[]
-  /** AC9: the event's assigned coordinator, while it is Under Review, Clarification Requested or
-   *  Planning. Everyone else who can see the event gets the list alone. */
+  /** AC9: the event's assigned coordinator, while it is Planning or Confirmed. Everyone else who
+   *  can see the event gets the list alone. */
   canChange: boolean
+  /** f15.1.2: the event awaits a decision, so nothing can be sent yet and an unsent item shows no
+   *  "Not yet sent" badge. */
+  isAwaitingDecision: boolean
   /** Story 21.2 AC4: the latest safety review says the equipment must change. */
   isFlagged: boolean
   /** Story 16.2 AC4: the viewer reads equipment (an internal role), so the items units out of
@@ -128,6 +131,7 @@ export function EquipmentRequestsSection({
   eventId,
   equipment,
   canChange,
+  isAwaitingDecision,
   isFlagged,
   canSeeShortages,
   onChanged,
@@ -494,10 +498,12 @@ export function EquipmentRequestsSection({
                   )}
                 </span>
                 <span className="mono">×{item.quantity}</span>
-                <StatusBadge
-                  status={BADGE_STATUSES[item.status] ?? item.status}
-                  label={EQUIPMENT_STATUS_LABELS[item.status]}
-                />
+                {!(isAwaitingDecision && item.status === 'REQUESTED') && (
+                  <StatusBadge
+                    status={BADGE_STATUSES[item.status] ?? item.status}
+                    label={EQUIPMENT_STATUS_LABELS[item.status]}
+                  />
+                )}
                 {canChange &&
                   (EDITABLE_STATUSES.includes(item.status) ||
                     WITHDRAWABLE_STATUSES.includes(item.status)) && (

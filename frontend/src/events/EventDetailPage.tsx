@@ -716,8 +716,8 @@ export function EventDetailPage() {
   const flagged = flaggedArrangements(safety)
   const isVenueFlagged = flagged.includes('VENUE_BOOKINGS')
   /** Story 15.1 AC9: only the assigned coordinator, holding equipment:request, may change the
-   *  event's equipment, and only while it is Under Review, Clarification Requested or Planning -
-   *  mirroring the backend's own checks. Everyone else sees the list alone. */
+   *  event's equipment, and only while it is Planning or Confirmed - mirroring the backend's own
+   *  checks. Everyone else sees the list alone. */
   const canChangeEquipment =
     can(PERMISSIONS.EQUIPMENT_REQUEST) &&
     isAssignedCoordinator &&
@@ -1370,6 +1370,7 @@ export function EventDetailPage() {
           eventId={event.id}
           equipment={event.equipment}
           canChange={canChangeEquipment}
+          isAwaitingDecision={AWAITING_DECISION_STATUSES.includes(event.status)}
           isFlagged={flagged.includes('EQUIPMENT')}
           canSeeShortages={can(PERMISSIONS.EQUIPMENT_READ)}
           onChanged={reloadEvent}
