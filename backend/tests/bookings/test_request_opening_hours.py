@@ -1,4 +1,5 @@
-"""Story 12.1 AC16 and AC17 - f12.1.2: opening hours on the booking's own times.
+"""Story 12.1 AC16 and AC17 - f12.1.2: opening hours on the booking's own times; AC23 - f12.1.4:
+a booking over several days.
 
 AC16 A request is checked against the venue's opening hours on the event's own times, or its
      venue requirement's (12.5), not on the booked period: setup and teardown may run outside the
@@ -8,6 +9,9 @@ AC16 A request is checked against the venue's opening hours on the event's own t
 AC17 When setup or teardown runs outside the opening hours, the request step says so before
      submitting, and Venue Staff see it on the request (13.1), so they decide when approving
      (13.2).
+AC23 A booking over more than one day, or overnight, is within the hours when its own times start
+     within them on its first day and end within them on its last; the nights between are not
+     checked. A start at or after closing, or an end at or before opening, is outside.
 
 The customer's answers behind them (12 Oct 2026): an event's own times are agreed with the
 organiser inside the venue's opening hours before it is requested (Q28), and whether its setup and
@@ -251,6 +255,78 @@ def test_a_switch_is_checked_on_its_own_times_too(coordinator_client, db):
 
     assert response.status_code == 201, response.text
     assert datetime.fromisoformat(response.json()["held_from"]) == _at(7)
+
+
+# --- AC23: a booking over several days, on its first start and last end ------------------------
+@pytest.mark.story("12.1", ac=23)
+def test_several_days_ending_earlier_in_the_day_than_they_start_are_accepted(
+    coordinator_client, db
+):
+    """The case f12.1.4 was raised for: Monday 13:13 to Wednesday 13:00 at a venue open 08:00 to
+    22:00. Read as daily sessions it ran 13:13 to 13:00 and was refused at every venue with hours;
+    it starts and ends within them, and the nights between are not checked."""
+    event = _event(db, _at(13, 13), _at(13, day=7))
+
+    venue = make_venue(db, hours=(OPENS, time(22, 0)))
+
+    response = _request(coordinator_client, event.id, venue.id)
+
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.story("12.1", ac=23)
+@pytest.mark.parametrize(
+    ("starts_at", "ends_at"),
+    [
+        (_at(8), _at(18, day=7)),
+        (_at(17), _at(9, day=6)),
+    ],
+    ids=["from opening on the first day to closing on the last", "overnight"],
+)
+def test_several_days_starting_and_ending_within_the_hours_are_accepted(
+    coordinator_client, db, starts_at, ends_at
+):
+    """Starting exactly at opening and ending exactly at closing are within, as on one day
+    (AC16); an evening to the next morning leaves only the night out of the hours."""
+    event = _event(db, starts_at, ends_at)
+
+    response = _request(coordinator_client, event.id, _venue(db).id)
+
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.story("12.1", ac=23)
+@pytest.mark.parametrize(
+    ("starts_at", "ends_at", "named"),
+    [
+        (_at(7, 59), _at(12, day=6), "from Mon 5 Apr 2027, 07:59 to Tue 6 Apr 2027, 12:00"),
+        (_at(14), _at(18, 1, day=6), "from Mon 5 Apr 2027, 14:00 to Tue 6 Apr 2027, 18:01"),
+        (_at(18), _at(12, day=6), "from Mon 5 Apr 2027, 18:00 to Tue 6 Apr 2027, 12:00"),
+        (_at(14), _at(8, day=6), "from Mon 5 Apr 2027, 14:00 to Tue 6 Apr 2027, 08:00"),
+    ],
+    ids=[
+        "a minute before opening on the first day",
+        "a minute past closing on the last day",
+        "starting at closing",
+        "ending at opening",
+    ],
+)
+def test_several_days_starting_or_ending_outside_the_hours_are_refused(
+    coordinator_client, db, starts_at, ends_at, named
+):
+    """A first day that starts before opening or at closing, or a last day that ends at opening or
+    after closing, is outside the hours, and the refusal names them (AC14) with their dates, since
+    times alone ("from 14:00 to 08:00") would read as an end before the start."""
+    venue = _venue(db, name="Days Room")
+    event = _event(db, starts_at, ends_at)
+
+    response = _request(coordinator_client, event.id, venue.id)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        f"Days Room is open 08:00 to 18:00, so it cannot take an event {named}."
+    )
+    assert _bookings_for(db, event.id) == 0
 
 
 # --- AC17: Venue Staff see setup and teardown outside the hours on the request (13.1) -----------

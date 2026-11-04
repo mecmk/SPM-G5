@@ -687,26 +687,25 @@ def find_blocking_unavailability(
 
 
 def closed_for(venue: Venue, *, starts_at: datetime, ends_at: datetime) -> bool:
-    """Story 8.1 AC3 and 12.1 AC14: whether ``venue``'s recorded opening hours leave out part
-    of the period's daily window. A venue with no recorded hours is never closed: no rule can
-    apply. A booking request passes its own times, never its booked period (12.1 AC16)."""
+    """Story 8.1 AC3 and 12.1 AC14: whether ``venue``'s recorded opening hours leave out the
+    period's start or end. A venue with no recorded hours is never closed: no rule can apply. A
+    booking request passes its own times, never its booked period (12.1 AC16).
+
+    12.1 AC23 (f12.1.4): a period is open when it starts within the hours on its first day and
+    ends within them on its last. The nights between a period over several days are not checked:
+    Venue Staff weigh them when approving, as they do setup and teardown (Q51). A start at
+    closing, or an end at opening, is outside. ``_free_for`` applies the same rule in SQL."""
     if venue.operating_hours_start is None or venue.operating_hours_end is None:
         return False
-    window = daily_window(starts_at, ends_at)
-    return (
-        window is None
-        or window[0] < venue.operating_hours_start
-        or window[1] > venue.operating_hours_end
-    )
+    opens, closes = venue.operating_hours_start, venue.operating_hours_end
+    start, end = _singapore_time(starts_at), _singapore_time(ends_at)
+    return not (opens <= start < closes and opens < end <= closes)
 
 
-def daily_window(starts_at: datetime, ends_at: datetime) -> tuple[time, time] | None:
-    """Story 8.1 AC3: a period read as daily sessions, from its start time to its end time in
-    Singapore time - the schema stores one continuous period, and reading a two-day event as
-    continuous would close every venue overnight. None when the end time is not after the start
-    time: the period passes midnight, which no daily opening hours can cover."""
-    start, end = starts_at.astimezone(_SINGAPORE).time(), ends_at.astimezone(_SINGAPORE).time()
-    return (start, end) if end > start else None
+def _singapore_time(moment: datetime) -> time:
+    """The time of day of ``moment`` on the Singapore clock, which every venue's opening hours
+    are kept in."""
+    return moment.astimezone(_SINGAPORE).time()
 
 
 def _search_period(query: VenueSearchQuery) -> tuple[datetime, datetime] | None:
@@ -826,8 +825,8 @@ def _capacity_fits(
 
 
 def _free_for(starts_at: datetime, ends_at: datetime) -> list[ColumnElement[bool]]:
-    """AC3: free for the whole period - not booked or held, not blocked, and not closed at those
-    hours (``daily_window``). A venue with no recorded hours is kept."""
+    """AC3: free for the whole period - not booked or held, not blocked, and open when it starts
+    and ends, by ``closed_for``'s rule (12.1 AC23). A venue with no recorded hours is kept."""
     held = (
         select(VenueBooking.id)
         .where(
@@ -844,11 +843,12 @@ def _free_for(starts_at: datetime, ends_at: datetime) -> list[ColumnElement[bool
         .exists()
     )
     hours_unknown = Venue.operating_hours_start.is_(None)
-    window = daily_window(starts_at, ends_at)
-    if window is None:
-        return [~held, ~blocked, hours_unknown]
+    start, end = _singapore_time(starts_at), _singapore_time(ends_at)
     open_then = and_(
-        Venue.operating_hours_start <= window[0], Venue.operating_hours_end >= window[1]
+        Venue.operating_hours_start <= start,
+        Venue.operating_hours_end > start,
+        Venue.operating_hours_start < end,
+        Venue.operating_hours_end >= end,
     )
     return [~held, ~blocked, or_(hours_unknown, open_then)]
 

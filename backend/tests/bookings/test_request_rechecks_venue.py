@@ -5,7 +5,7 @@ A venue can stop being available between the catalogue search and Send request, 
 
 * booked or held - s12.1's ``VenueHeld`` (test_venue_hold.py), not repeated here;
 * blocked - an unavailability period overlapping the event's period;
-* closed at those hours - the event's daily window falls outside the venue's opening hours.
+* closed at those hours - the event starts or ends outside the venue's opening hours (AC23).
 
 A venue with no recorded hours can still be requested, and a closure that only touches the
 event's period does not block it (AC6). Every event here is a Planning event assigned to Chloe,

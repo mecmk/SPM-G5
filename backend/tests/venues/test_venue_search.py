@@ -336,11 +336,15 @@ HOURS_CASES = {
     "opening to closing": (OPEN_8_TO_6, _at(1, 8), _at(1, 18), True),
     "a minute before opening": (OPEN_8_TO_6, _at(1, 7, 59), _at(1, 12), False),
     "a minute after closing": (OPEN_8_TO_6, _at(1, 12), _at(1, 18, 1), False),
-    # Several days are daily sessions from the start time to the end time.
-    "several days of daily sessions": (OPEN_8_TO_6, _at(1, 9), _at(3, 17), True),
-    # An end time before the start time passes midnight, which no recorded hours cover - even
-    # hours that cover both times.
-    "past midnight": ((time(0, 0), time(23, 59)), _at(1, 17), _at(2, 9), False),
+    # f12.1.4: several days start within the hours on the first day and end within them on the
+    # last; the nights between are not checked, so the end time may come before the start time.
+    "several days": (OPEN_8_TO_6, _at(1, 9), _at(3, 17), True),
+    "several days, ending earlier in the day": (OPEN_8_TO_6, _at(1, 13, 13), _at(3, 13), True),
+    "overnight": (OPEN_8_TO_6, _at(1, 17), _at(2, 9), True),
+    "several days, a minute before opening": (OPEN_8_TO_6, _at(1, 7, 59), _at(3, 12), False),
+    "several days, a minute after closing": (OPEN_8_TO_6, _at(1, 12), _at(3, 18, 1), False),
+    "several days, starting at closing": (OPEN_8_TO_6, _at(1, 18), _at(3, 12), False),
+    "several days, ending at opening": (OPEN_8_TO_6, _at(1, 12), _at(3, 8), False),
 }
 
 
