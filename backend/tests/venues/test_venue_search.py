@@ -343,6 +343,8 @@ HOURS_CASES = {
     "overnight": (OPEN_8_TO_6, _at(1, 17), _at(2, 9), True),
     "several days, a minute before opening": (OPEN_8_TO_6, _at(1, 7, 59), _at(3, 12), False),
     "several days, a minute after closing": (OPEN_8_TO_6, _at(1, 12), _at(3, 18, 1), False),
+    "several days, starting at closing": (OPEN_8_TO_6, _at(1, 18), _at(3, 12), False),
+    "several days, ending at opening": (OPEN_8_TO_6, _at(1, 12), _at(3, 8), False),
 }
 
 
