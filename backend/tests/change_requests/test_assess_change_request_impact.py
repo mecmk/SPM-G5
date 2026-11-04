@@ -1277,6 +1277,34 @@ def test_opening_hours_are_judged_on_the_booked_times_not_the_setup(login_as, db
 
 
 @pytest.mark.story("19.3", ac=5)
+def test_new_dates_over_several_days_are_judged_on_their_first_start_and_last_end(
+    login_as, db: Session
+):
+    """Moved to 13:00 one day until 11:00 two days later, at a hall open 09:00-17:00: it starts and
+    ends within the hours, so it is not flagged, though the end's time is before the start's.
+    12.1 judges a period over several days that way (12.1 AC23, f12.1.4)."""
+    day = future_datetime(days=60).date()
+    starts_at = datetime.combine(day, time(2, 0), tzinfo=UTC)  # 10:00 in Singapore
+    event = _planning_event(db, starts_at=starts_at, ends_at=starts_at + timedelta(hours=6))
+    hall = _book(
+        db,
+        event,
+        people=100,
+        requirement_id=_requirement(db, event, capacity=100),
+        venue=make_venue(db, capacity=500, hours=(time(9, 0), time(17, 0))),
+    )
+    moved = starts_at + timedelta(days=7, hours=3)  # 13:00 in Singapore
+    request = _raise(
+        login_as, db, event, "schedule", _schedule(moved, moved + timedelta(days=2, hours=-2))
+    )
+
+    row = _bookings_by_id(_impact(login_as, request))[str(hall.id)]
+
+    assert row["will_be_cancelled"] is True
+    assert row["is_outside_opening_hours"] is False
+
+
+@pytest.mark.story("19.3", ac=5)
 def test_an_equipment_shortfall_names_required_available_and_short(login_as, db: Session):
     event = _planning_event(db)
     microphones = make_equipment_type(db, total_quantity=5)

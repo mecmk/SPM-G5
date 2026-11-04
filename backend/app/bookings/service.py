@@ -277,9 +277,9 @@ VENUE_BLOCKED_REASONS = {
     UnavailabilityReason.SAFETY: " for safety reasons",
     UnavailabilityReason.OTHER: "",
 }
+# Closed at those hours: the period names both dates when it runs over several days (12.1 AC23).
 VENUE_CLOSED_MESSAGE = (
-    "{venue} is open {opens:%H:%M} to {closes:%H:%M}, so it cannot take an event from "
-    "{starts:%H:%M} to {ends:%H:%M}."
+    "{venue} is open {opens:%H:%M} to {closes:%H:%M}, so it cannot take an event {period}."
 )
 
 REQUIRED_FACILITIES_SENTENCE = "Required facilities: {facilities}."
@@ -441,8 +441,7 @@ class VenueClosed(ValueError):
                 venue=venue.name,
                 opens=venue.operating_hours_start,
                 closes=venue.operating_hours_end,
-                starts=starts_at.astimezone(_SINGAPORE),
-                ends=ends_at.astimezone(_SINGAPORE),
+                period=_describe_own_times(starts_at, ends_at),
             )
         )
         self.venue = venue
@@ -1660,6 +1659,16 @@ def _describe_held_period(held_from: datetime, held_until: datetime) -> str:
     start, end = held_from.astimezone(_SINGAPORE), held_until.astimezone(_SINGAPORE)
     if start.date() == end.date():
         return f"on {_describe_day(start)} from {start:%H:%M} to {end:%H:%M}"
+    return _describe_own_times(held_from, held_until)
+
+
+def _describe_own_times(starts_at: datetime, ends_at: datetime) -> str:
+    """A request's own times in Singapore time, as a sentence ending: "from 07:30 to 12:00" on
+    one day, or with both dates over several, where times alone would read as ending before they
+    start (12.1 AC23)."""
+    start, end = starts_at.astimezone(_SINGAPORE), ends_at.astimezone(_SINGAPORE)
+    if start.date() == end.date():
+        return f"from {start:%H:%M} to {end:%H:%M}"
     return f"from {_describe_day(start)}, {start:%H:%M} to {_describe_day(end)}, {end:%H:%M}"
 
 

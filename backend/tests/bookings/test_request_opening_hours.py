@@ -299,10 +299,10 @@ def test_several_days_starting_and_ending_within_the_hours_are_accepted(
 @pytest.mark.parametrize(
     ("starts_at", "ends_at", "named"),
     [
-        (_at(7, 59), _at(12, day=6), "from 07:59 to 12:00"),
-        (_at(14), _at(18, 1, day=6), "from 14:00 to 18:01"),
-        (_at(18), _at(12, day=6), "from 18:00 to 12:00"),
-        (_at(14), _at(8, day=6), "from 14:00 to 08:00"),
+        (_at(7, 59), _at(12, day=6), "from Mon 5 Apr 2027, 07:59 to Tue 6 Apr 2027, 12:00"),
+        (_at(14), _at(18, 1, day=6), "from Mon 5 Apr 2027, 14:00 to Tue 6 Apr 2027, 18:01"),
+        (_at(18), _at(12, day=6), "from Mon 5 Apr 2027, 18:00 to Tue 6 Apr 2027, 12:00"),
+        (_at(14), _at(8, day=6), "from Mon 5 Apr 2027, 14:00 to Tue 6 Apr 2027, 08:00"),
     ],
     ids=[
         "a minute before opening on the first day",
@@ -315,7 +315,8 @@ def test_several_days_starting_or_ending_outside_the_hours_are_refused(
     coordinator_client, db, starts_at, ends_at, named
 ):
     """A first day that starts before opening or at closing, or a last day that ends at opening or
-    after closing, is outside the hours, and the refusal names them (AC14)."""
+    after closing, is outside the hours, and the refusal names them (AC14) with their dates, since
+    times alone ("from 14:00 to 08:00") would read as an end before the start."""
     venue = _venue(db, name="Days Room")
     event = _event(db, starts_at, ends_at)
 
