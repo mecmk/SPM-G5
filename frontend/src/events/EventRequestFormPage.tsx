@@ -31,7 +31,6 @@ import {
   DETAILS_CORRECTABLE_STATUSES,
   DETAILS_LOCKED_HINT,
   DETAILS_LOCKED_STATUSES,
-  EQUIPMENT_LOCKED_HINT,
   TERMINAL_STATUSES,
 } from '../shared/eventStatus'
 import { CANCEL, formatDateTime, inputToInstant, nowAsInput } from '../shared/format'
@@ -197,8 +196,8 @@ const SENT_EQUIPMENT_HINT =
  * Event Coordinator edits the event. AC1-AC3: its internal notes, until it is closed. AC4/AC10:
  * until it is confirmed, the organiser's request too, cover picture included - the same fields,
  * the same controls and the same checks; and every field marked * must be filled to save them, as
- * on the backend. AC15: once approved, the equipment is shown read-only, as it is changed in its
- * own section. AC12: once confirmed, those fields are shown greyed out. AC7:
+ * on the backend. AC15: once approved, the equipment is not shown, as it is changed in its own
+ * section (f7.2.5). AC12: once confirmed, those fields are shown greyed out. AC7:
  * equipment no longer free for new dates is marked on its line, as 2.1 does. AC6/AC9: a save made
  * against a copy that was approved or changed meanwhile is refused, and the page offers a reload.
  */
@@ -290,6 +289,12 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   const isEquipmentApproved =
     canCorrectDetails && event !== null && ARRANGED_STATUSES.includes(event.status)
   const isEquipmentReadOnly = isReadOnly || isEquipmentApproved
+  /** Story 7.2 AC15 (f7.2.5): once approved, even Confirmed, the coordinator's form shows no
+   *  equipment at all. Under review it shows it, editable. The lines stay in the form's state. */
+  const isEquipmentHidden =
+    isCoordinatorEdit &&
+    event !== null &&
+    (ARRANGED_STATUSES.includes(event.status) || DETAILS_LOCKED_STATUSES.includes(event.status))
   // Story 7.2 AC7: an event being corrected is not counted against its own equipment holds.
   const excludedEventId = isCoordinatorEdit && eventId !== undefined ? eventId : null
   const savedPictureUrl = isPictureRemoved ? null : mediaUrl(event?.cover_image_url ?? null)
@@ -1433,90 +1438,89 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
             </div>
           </fieldset>
 
-          <fieldset className="card" disabled={isEquipmentReadOnly}>
-            <legend>Equipment</legend>
-            {isEquipmentApproved && <p className="form-hint">{EQUIPMENT_LOCKED_HINT}</p>}
-            {form.equipment.length === 0 && !isEquipmentApproved && (
-              <p className="form-hint">No equipment requested. Add each item you need.</p>
-            )}
-            {form.equipment.map((line, index) => (
-              <fieldset
-                key={line.key}
-                className="equipment-item"
-                disabled={line.status === 'ACCEPTED'}
-              >
-                <legend>{`Equipment item ${index + 1}`}</legend>
-                <div className="form-grid">
-                  <label className="span-2">
-                    Equipment type
-                    <select
-                      {...fieldProps(getEquipmentTypeId(line.key))}
-                      value={line.typeCode}
-                      disabled={isSentToTechnicalSupport(line)}
-                      onChange={(e) => updateEquipment(line.key, { typeCode: e.target.value })}
+          {!isEquipmentHidden && (
+            <fieldset className="card" disabled={isEquipmentReadOnly}>
+              <legend>Equipment</legend>
+              {form.equipment.length === 0 && (
+                <p className="form-hint">No equipment requested. Add each item you need.</p>
+              )}
+              {form.equipment.map((line, index) => (
+                <fieldset
+                  key={line.key}
+                  className="equipment-item"
+                  disabled={line.status === 'ACCEPTED'}
+                >
+                  <legend>{`Equipment item ${index + 1}`}</legend>
+                  <div className="form-grid">
+                    <label className="span-2">
+                      Equipment type
+                      <select
+                        {...fieldProps(getEquipmentTypeId(line.key))}
+                        value={line.typeCode}
+                        disabled={isSentToTechnicalSupport(line)}
+                        onChange={(e) => updateEquipment(line.key, { typeCode: e.target.value })}
+                      >
+                        <option value={NO_EQUIPMENT_CHOSEN}>Choose equipment…</option>
+                        {line.typeCode !== NO_EQUIPMENT_CHOSEN &&
+                          !reference.equipment_types.some(
+                            (type) => type.code === line.typeCode,
+                          ) && <option value={line.typeCode}>{line.typeName}</option>}
+                        {reference.equipment_types.map((type) => {
+                          const isTaken = isEquipmentTypeTaken(form.equipment, line.key, type.code)
+                          const isNoneLeft = availabilityByType?.[type.code] === 0
+                          const note = isTaken
+                            ? ' (already added)'
+                            : isNoneLeft
+                              ? ' (none available)'
+                              : ''
+                          return (
+                            <option
+                              key={type.code}
+                              value={type.code}
+                              disabled={isTaken || isNoneLeft}
+                            >
+                              {`${type.name}${note}`}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </label>
+                    <label>
+                      Quantity
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
+                        {...fieldProps(getEquipmentQuantityId(line.key))}
+                        value={line.quantity}
+                        onChange={(e) => updateEquipment(line.key, { quantity: e.target.value })}
+                      />
+                      {renderProblem(getEquipmentQuantityId(line.key))}
+                    </label>
+                    <label className="span-all">
+                      Technical notes
+                      <input
+                        value={line.notes}
+                        onChange={(e) => updateEquipment(line.key, { notes: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  {equipmentAvailabilityNote(line)}
+                  {!isEquipmentReadOnly && isSentToTechnicalSupport(line) && (
+                    <p className="form-hint">{SENT_EQUIPMENT_HINT}</p>
+                  )}
+                  {!isSentToTechnicalSupport(line) && (
+                    <button
+                      type="button"
+                      className="secondary button-sm"
+                      onClick={() => removeEquipment(line.key)}
                     >
-                      <option value={NO_EQUIPMENT_CHOSEN}>Choose equipment…</option>
-                      {line.typeCode !== NO_EQUIPMENT_CHOSEN &&
-                        !reference.equipment_types.some((type) => type.code === line.typeCode) && (
-                          <option value={line.typeCode}>{line.typeName}</option>
-                        )}
-                      {reference.equipment_types.map((type) => {
-                        const isTaken = isEquipmentTypeTaken(form.equipment, line.key, type.code)
-                        const isNoneLeft = availabilityByType?.[type.code] === 0
-                        const note = isTaken
-                          ? ' (already added)'
-                          : isNoneLeft
-                            ? ' (none available)'
-                            : ''
-                        return (
-                          <option
-                            key={type.code}
-                            value={type.code}
-                            disabled={isTaken || isNoneLeft}
-                          >
-                            {`${type.name}${note}`}
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </label>
-                  <label>
-                    Quantity
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      step={1}
-                      {...fieldProps(getEquipmentQuantityId(line.key))}
-                      value={line.quantity}
-                      onChange={(e) => updateEquipment(line.key, { quantity: e.target.value })}
-                    />
-                    {renderProblem(getEquipmentQuantityId(line.key))}
-                  </label>
-                  <label className="span-all">
-                    Technical notes
-                    <input
-                      value={line.notes}
-                      onChange={(e) => updateEquipment(line.key, { notes: e.target.value })}
-                    />
-                  </label>
-                </div>
-                {equipmentAvailabilityNote(line)}
-                {!isEquipmentReadOnly && isSentToTechnicalSupport(line) && (
-                  <p className="form-hint">{SENT_EQUIPMENT_HINT}</p>
-                )}
-                {!isEquipmentApproved && !isSentToTechnicalSupport(line) && (
-                  <button
-                    type="button"
-                    className="secondary button-sm"
-                    onClick={() => removeEquipment(line.key)}
-                  >
-                    Remove
-                  </button>
-                )}
-              </fieldset>
-            ))}
-            {!isEquipmentApproved && (
+                      Remove
+                    </button>
+                  )}
+                </fieldset>
+              ))}
               <button
                 type="button"
                 className="secondary"
@@ -1525,11 +1529,11 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
               >
                 Add equipment
               </button>
-            )}
-            {hasEveryEquipmentType && !isEquipmentApproved && (
-              <p className="form-hint">Every equipment type is already on this request.</p>
-            )}
-          </fieldset>
+              {hasEveryEquipmentType && (
+                <p className="form-hint">Every equipment type is already on this request.</p>
+              )}
+            </fieldset>
+          )}
 
           {canEditNotes && (
             <div className="form-actions">

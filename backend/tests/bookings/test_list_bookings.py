@@ -154,21 +154,22 @@ def test_counts_cover_every_status_whatever_tab_or_page_is_asked_for(venue_staff
     unfiltered = venue_staff_client.get(BOOKINGS_PATH).json()
     narrowed = venue_staff_client.get(f"{PENDING_QUEUE_PATH}&limit=1").json()
 
-    # Seed: 45 approved (2 of them story 21.1's, 2 story 18.1's, 4 story 21.2's, 1 story 19.2's,
+    # Seed: 46 approved (2 of them story 21.1's, 2 story 18.1's, 4 story 21.2's, 1 story 19.2's,
     # 5 story 12.6's, 1 story 6.2's, 1 fix f7.1.2's, 2 story 21.3's, 1 story 12.8's, 22 chore
-    # c8's, 2 story 9.5's), 11 pending (2 of them story 9.4's, 1 story 12.6's, 1 story 9.5's),
-    # 1 withdrawn (story 12.6's), 17 cancelled (1 story 6.2's, by an earlier change; 11 story
-    # 12.6's the closure of their day cancelled, which story 9.5's migration did; the heritage
-    # walk's, released with its cancelled event; 1 story 9.5's replaced original;
-    # fix f7.1.3's 3, released by the safety review, its coordinator and a closure) and 1 expired
+    # c8's, 2 story 9.5's, 1 fix f21.2.1's), 14 pending (2 of them story 9.4's, 1 story 12.6's,
+    # 1 story 9.5's, 3 fix f21.2.1's), 1 withdrawn (story 12.6's), 18 cancelled (1 story 6.2's, by
+    # an earlier change; 11 story 12.6's the closure of their day cancelled, which story 9.5's
+    # migration did; the heritage walk's, released with its cancelled event; 1 story 9.5's replaced
+    # original; fix f7.1.3's 3, released by the safety review, its coordinator and a closure; fix
+    # f21.2.1's 1, released by the safety review) and 1 expired
     # booking (story 12.7); the factory adds one rejected to the 3 story 12.6's the migration
-    # rejected.
+    # rejected and fix f21.2.1's 1.
     assert unfiltered["counts"] == {
-        "pending": 11,
-        "approved": 45,
-        "rejected": 4,
+        "pending": 14,
+        "approved": 46,
+        "rejected": 5,
         "withdrawn": 1,
-        "cancelled": 17,
+        "cancelled": 18,
         "expired": 1,
     }
     assert narrowed["counts"] == unfiltered["counts"]
@@ -241,7 +242,7 @@ def test_limit_caps_the_page_and_total_counts_the_whole_tab(venue_staff_client):
     body = venue_staff_client.get(f"{PENDING_QUEUE_PATH}&limit=2").json()
 
     assert len(body["items"]) == 2
-    assert body["total"] == 11  # the seeded pending bookings, as counted above
+    assert body["total"] == 14  # the seeded pending bookings, as counted above
 
 
 @pytest.mark.story("13.1.2", ac=4)
