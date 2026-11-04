@@ -101,14 +101,6 @@ export const DETAILS_LOCKED_HINT =
 export const ARRANGED_STATUSES: readonly EventStatus[] = ['PLANNING', 'AWAITING_SAFETY_CHECK']
 
 /**
- * Story 7.2 AC15: why the edit form shows an approved event's equipment read-only. Of the statuses
- * that form shows it in, only Planning opens the Equipment requirements section (15.1 AC9,
- * `EQUIPMENT_OPEN_STATUSES`).
- */
-export const EQUIPMENT_LOCKED_HINT =
-  'Once the event is approved, its equipment can no longer be changed here. While the event is in Planning, change it in the Equipment requirements section of the event page.'
-
-/**
  * Story 19.1 AC5/AC11/AC12: the statuses a change request can be raised in - Planning, and
  * Confirmed since fix f19.1.1 (Q39) - mirroring the backend's `_REQUESTABLE_STATUSES`
  * (backend/app/change_requests/service.py). Before approval, changes go through clarification; a
