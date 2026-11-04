@@ -28,6 +28,16 @@ export const NOT_CORRECTED_STATUSES: readonly EquipmentItemStatus[] = [
   'DECLINED',
 ]
 
+/** Fix f17.3.1 (17.3 AC8/AC9): how long equipment stays held. Unlike a venue booking's hold
+ *  (12.7), an equipment hold has no expiry; the backend's `_release_holds` callers
+ *  (backend/app/equipment/service.py) are what end one. */
+export const HOLD_LENGTH_SENTENCE =
+  "Equipment is held for the event's dates, with no expiry, until the item is withdrawn or removed, Technical Support declines it, an approved change removes it, the event moves to dates it can't be held for, or the event is cancelled or rejected."
+
+/** The item statuses that hold units for the event (`_held_by_event`'s RESERVED holds): not yet
+ *  sent, waiting on Technical Support, or accepted. */
+export const HOLDING_STATUSES: readonly EquipmentItemStatus[] = ['REQUESTED', 'PENDING', 'ACCEPTED']
+
 /** Story 17.2 AC3/AC4: when an item was withdrawn and by whom, as the event page and Technical
  *  Support's queue both show it. */
 export function withdrawnWhenAndBy(withdrawnAt: string, withdrawnByName: string | null): string {
