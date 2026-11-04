@@ -97,8 +97,10 @@ author's call. Never flatten a `taste` into a "must".
   renders `role="alert"`, and that is not decoration: e2e specs locate the message with `getByRole('alert')`, so a hand-made toast or a
   `<p className="error">` passes review, renders fine, and fails the suite. It is rendered where
   the error belongs, not portalled, so a spec can still find it inside its dialog or section. An
-  error a check can raise twice in a row with the same message (an empty reason) passes
-  `onDismiss` to clear it, or the second failure shows nothing.
+  error the page holds in its own state passes `onDismiss` to clear it (`onErrorDismiss` on a
+  `ConfirmDialog`): a closed toast stays closed while its message is unchanged, so without it the
+  same failure a second time shows nothing. A load error from `useLoaded` needs none, as a reload
+  clears it.
 
   ```tsx
   // Good

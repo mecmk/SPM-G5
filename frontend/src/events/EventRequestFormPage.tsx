@@ -1,4 +1,11 @@
-import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+} from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError, formatApiError, mediaUrl } from '../api/client'
 import {
@@ -390,6 +397,18 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
   }, [datesKey, excludedEventId])
 
   // Problems with the name and the numbers, said next to each field as it is typed.
+  // The codes the form still has, so a save's problem toast closes once its field is fixed.
+  const heldProblemCodes = useMemo(
+    () =>
+      new Set(
+        form
+          ? validateEventForm(form, event, judgedAvailability, {
+              isEquipmentLeftOut: isEquipmentApproved,
+            }).map((problem) => problem.code)
+          : [],
+      ),
+    [form, event, judgedAvailability, isEquipmentApproved],
+  )
   const liveProblems: Record<string, ErrorCode> = {
     ...(form ? getLiveProblems(form, judgedAvailability) : {}),
     ...(form && isNameTouched && !form.name.trim()
@@ -685,15 +704,8 @@ export function EventRequestFormPage({ isCoordinatorEdit = false }: EventRequest
    * what takes it away, besides its close button.
    */
   function renderSaveErrors() {
-    const heldCodes = new Set(
-      form
-        ? validateEventForm(form, event, judgedAvailability, {
-            isEquipmentLeftOut: isEquipmentApproved,
-          }).map((problem) => problem.code)
-        : [],
-    )
     const isStillHeld = (code: ErrorCode) =>
-      INCOMPLETE_DATE_CODES.includes(code) ? incompleteDateId !== null : heldCodes.has(code)
+      INCOMPLETE_DATE_CODES.includes(code) ? incompleteDateId !== null : heldProblemCodes.has(code)
     return (
       <>
         {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}

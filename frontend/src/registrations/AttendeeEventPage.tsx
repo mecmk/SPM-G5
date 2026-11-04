@@ -465,6 +465,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
           isFirstTime={profile === null || !profile.has_confirmed_details}
           isBusy={isRegistering}
           error={detailsError}
+          onErrorDismiss={() => setDetailsError(null)}
           onConfirm={handleConfirmDetails}
           onCancel={handleCancelDetails}
         />
@@ -477,6 +478,7 @@ function AttendeeEventView({ eventId }: { eventId: string }) {
           registration={registration}
           isBusy={isSavingGuests}
           error={guestsError}
+          onErrorDismiss={() => setGuestsError(null)}
           onSave={handleSaveGuests}
           onCancel={handleCancelGuests}
         />

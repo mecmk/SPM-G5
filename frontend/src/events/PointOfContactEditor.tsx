@@ -145,7 +145,7 @@ export function PointOfContactEditor({ event, onSaved }: PointOfContactEditorPro
           )}
         </label>
       </div>
-      {saveError && <ErrorToast message={saveError} />}
+      {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
       <div className="page-actions">
         <button type="submit" disabled={isSaving}>
           {isSaving ? 'Saving…' : 'Save contact details'}

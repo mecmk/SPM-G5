@@ -24,8 +24,8 @@ export interface ConfirmDialogProps {
   /** The error message's id, so a field in `children` can point at it with `aria-describedby`
    *  (story 19.2 AC4: the rejection reason). */
   errorId?: string
-  /** Called when the error's toast closes. A dialog whose own check can fail twice in a row with
-   *  the same message (an empty reason) clears its error here, so the next failure shows again. */
+  /** Called when the error's toast is closed. The dialog's owner clears its error here, so the
+   *  same failure a second time (an empty reason, the same refusal) shows again. */
   onErrorDismiss?: () => void
   /** A class added to the dialog, so one dialog can be styled apart from the others (story 5.6:
    *  the Reassign dialog's 44px phone targets). */

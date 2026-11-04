@@ -21,8 +21,20 @@ function refuse(pattern: RegExp) {
 /** A whole number: digits only, so no sign, decimal point or exponent. */
 export const refuseNonDigits = refuse(NOT_DIGIT)
 
-/** A decimal number: digits and a point. */
-export const refuseNonDecimal = refuse(NOT_DECIMAL)
+const POINT = '.'
+const refuseNotDecimal = refuse(NOT_DECIMAL)
+
+/**
+ * A decimal number: digits and one point. A second point is refused once the value shows one
+ * (`1.2`); a number field reads a trailing point (`1.`) as `1`, so `1..` is left to the save check.
+ */
+export function refuseNonDecimal(event: InputEvent<HTMLInputElement>) {
+  refuseNotDecimal(event)
+  const points = (event.data ?? '').split(POINT).length - 1
+  if (points > 1 || (points === 1 && event.currentTarget.value.includes(POINT))) {
+    event.preventDefault()
+  }
+}
 
 /** A phone number: digits, spaces, dashes and a +, as `shared/phone.ts` accepts. */
 export const refuseNonPhone = refuse(NOT_PHONE)

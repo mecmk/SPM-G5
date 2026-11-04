@@ -386,7 +386,7 @@ export function OutOfServiceForm({
           )}
         </label>
 
-        {formError && <ErrorToast message={formError} />}
+        {formError && <ErrorToast message={formError} onDismiss={() => setFormError(null)} />}
 
         <div className="cluster">
           <button type="submit" className="brand" disabled={isSaving}>
@@ -407,6 +407,7 @@ export function OutOfServiceForm({
           tone="primary"
           isBusy={isSaving}
           error={confirmError}
+          onErrorDismiss={() => setConfirmError(null)}
           onConfirm={handleConfirmShort}
           onCancel={handleCancelShort}
         >

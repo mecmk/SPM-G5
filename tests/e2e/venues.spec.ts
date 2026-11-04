@@ -130,6 +130,15 @@ test('8.3 AC3: capacity must be a positive whole number before anything is sent'
   expect(createCalls).toBe(0)
 })
 
+test('8.3 AC3: floor area takes one decimal point as it is typed', async ({ page }) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+  const floorArea = page.getByLabel('Floor area (m²)')
+
+  await floorArea.pressSequentially('1.2.3')
+  await expect(floorArea).toHaveValue('1.23')
+})
+
 test('8.3 AC1: a duplicate venue name is refused with the reason', async ({ page }) => {
   await signIn(page, ACCOUNTS.venueStaff)
   await page.goto('/venues/new')

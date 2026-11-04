@@ -52,6 +52,7 @@ export function DeleteRoomLayoutDialog({
       confirmLabel="Delete layout"
       isBusy={isDeleting}
       error={error}
+      onErrorDismiss={() => setError(null)}
       onConfirm={confirmDelete}
       onCancel={onCancel}
       canConfirm={!isGone}

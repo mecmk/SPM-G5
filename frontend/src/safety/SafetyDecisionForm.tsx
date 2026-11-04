@@ -276,7 +276,7 @@ export function SafetyDecisionForm({ check, onDecided, onRefused }: SafetyDecisi
           </div>
         )}
 
-        {error && <ErrorToast message={error} />}
+        {error && <ErrorToast message={error} onDismiss={() => setError(null)} />}
         <div>
           <button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Recording…' : 'Record decision'}

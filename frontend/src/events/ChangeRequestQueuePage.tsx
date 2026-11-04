@@ -164,7 +164,7 @@ export function ChangeRequestQueuePage() {
 
       {error && <ErrorToast message={error} />}
       {referencesError && <ErrorToast message={referencesError} />}
-      {reloadError && <ErrorToast message={reloadError} />}
+      {reloadError && <ErrorToast message={reloadError} onDismiss={() => setReloadError(null)} />}
 
       <div className="stack">
         <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />

@@ -19,6 +19,8 @@ interface AttendeeDetailsDialogProps {
   isBusy: boolean
   /** Why the details were refused, shown in the dialog so nothing typed is lost. */
   error: string | null
+  /** Called when the error\'s toast is closed, so the same refusal shows again next time. */
+  onErrorDismiss?: () => void
   onConfirm: (details: AttendeeDetails, guests: GuestInput[]) => void
   onCancel: () => void
 }
@@ -42,6 +44,7 @@ export function AttendeeDetailsDialog({
   isFirstTime,
   isBusy,
   error,
+  onErrorDismiss,
   onConfirm,
   onCancel,
 }: AttendeeDetailsDialogProps) {
@@ -60,6 +63,7 @@ export function AttendeeDetailsDialog({
       tone="primary"
       isBusy={isBusy}
       error={error}
+      onErrorDismiss={onErrorDismiss}
       onConfirm={handleConfirm}
       onCancel={onCancel}
       className="attendee-details-dialog"

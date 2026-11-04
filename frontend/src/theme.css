@@ -657,7 +657,7 @@ th {
    on screen. The negative margin lets the pinned row cover the dialog's bottom padding, so a
    dialog short enough not to scroll keeps App.css's spacing. */
 .dialog {
-  max-height: calc(100svh - 2rem);
+  max-height: calc(100svh - 2rem - var(--error-toasts-space, 0px));
   overflow-y: auto;
 }
 

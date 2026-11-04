@@ -138,7 +138,9 @@ export function RegistrationListSection({ eventId }: { eventId: string }) {
               </table>
             </div>
           )}
-          {loadMoreError && <ErrorToast message={loadMoreError} />}
+          {loadMoreError && (
+            <ErrorToast message={loadMoreError} onDismiss={() => setLoadMoreError(null)} />
+          )}
           {list.items.length < list.total && (
             <div className="load-more">
               <p className="small muted">

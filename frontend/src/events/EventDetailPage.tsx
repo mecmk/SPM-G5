@@ -1027,7 +1027,10 @@ export function EventDetailPage() {
             )}
           </div>
           {canSeeRegistrations && event.registration_required && registrationsError && (
-            <ErrorToast message={registrationsError} />
+            <ErrorToast
+              message={registrationsError}
+              onDismiss={() => setRegistrationsError(null)}
+            />
           )}
           {showsRegistrations && (
             <div className="cluster">
@@ -1501,6 +1504,7 @@ export function EventDetailPage() {
           tone="primary"
           isBusy={isApproving}
           error={approveError}
+          onErrorDismiss={() => setApproveError(null)}
           onConfirm={confirmApprove}
           onCancel={cancelApprove}
         >
@@ -1563,6 +1567,7 @@ export function EventDetailPage() {
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
           error={withdrawError}
+          onErrorDismiss={() => setWithdrawError(null)}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >

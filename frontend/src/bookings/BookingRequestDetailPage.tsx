@@ -555,6 +555,7 @@ export function BookingRequestDetailPage() {
           tone="primary"
           isBusy={isApproving}
           error={approveError}
+          onErrorDismiss={() => setApproveError(null)}
           onConfirm={confirmApprove}
           onCancel={cancelApprove}
         >
@@ -621,6 +622,7 @@ export function BookingRequestDetailPage() {
           tone="primary"
           isBusy={isSavingExpiry}
           error={expiryError}
+          onErrorDismiss={() => setExpiryError(null)}
           onConfirm={confirmChangeExpiry}
           onCancel={cancelChangeExpiry}
         >

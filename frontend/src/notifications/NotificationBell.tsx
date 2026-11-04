@@ -166,7 +166,9 @@ export function NotificationBell({ placement, isSidebarCollapsed = false }: Noti
                 </button>
               </header>
               <div className="notification-scroll">
-                {markAllError && <ErrorToast message={markAllError} />}
+                {markAllError && (
+                  <ErrorToast message={markAllError} onDismiss={() => setMarkAllError(null)} />
+                )}
                 {listError && <ErrorToast message={listError} />}
                 {notifications !== null && notifications.length === 0 && !listError && (
                   <p className="notification-empty">{NO_NOTIFICATIONS}</p>

@@ -3188,6 +3188,8 @@ tbody tr:hover td {
   box-shadow: var(--shadow);
   /* Centred by its auto margins, not a transform, so an error toast inside it is placed against
      the screen rather than the dialog. */
+  /* Clear of the error toasts at the screen's foot, so they never cover its buttons. */
+  bottom: var(--error-toasts-space, 0px);
   height: fit-content;
   margin: auto;
 }
@@ -3496,6 +3498,15 @@ tbody tr:hover td {
   z-index: 61;
   width: min(22rem, calc(100vw - 2rem));
   margin: 0;
+  box-sizing: border-box;
+}
+
+/* The toasts have no timer, so the page keeps their height free at its foot: its last buttons can
+   always be scrolled clear of them (toastStack.ts sets the variable). */
+#root::after {
+  content: '';
+  flex: none;
+  height: var(--error-toasts-space, 0px);
 }
 
 .error-toast-message {

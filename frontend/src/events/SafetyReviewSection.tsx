@@ -150,7 +150,9 @@ export function SafetyReviewSection({
               />
             )}
 
-          {actionError && unchangedWarning === null && <ErrorToast message={actionError} />}
+          {actionError && unchangedWarning === null && (
+            <ErrorToast message={actionError} onDismiss={() => setActionError(null)} />
+          )}
         </>
       )}
 
@@ -161,6 +163,7 @@ export function SafetyReviewSection({
           tone="primary"
           isBusy={isBusy}
           error={actionError}
+          onErrorDismiss={() => setActionError(null)}
           onConfirm={handleSubmitAnyway}
           onCancel={handleCancelWarning}
         >

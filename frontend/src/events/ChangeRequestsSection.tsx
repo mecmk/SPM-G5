@@ -535,7 +535,7 @@ export function ChangeRequestsSection({
           {canDecide && ' Approve or reject each pending one.'}
         </p>
       </div>
-      {listError && <ErrorToast message={listError} />}
+      {listError && <ErrorToast message={listError} onDismiss={() => setListError(null)} />}
       {referencesError && <ErrorToast message={referencesError} />}
       {requests !== null && requests.length === 0 && (
         <p className="muted">No change requests for this event.</p>
@@ -869,7 +869,7 @@ export function ChangeRequestsSection({
               {problem.message}
             </span>
           ))}
-          {sendError && <ErrorToast message={sendError} />}
+          {sendError && <ErrorToast message={sendError} onDismiss={() => setSendError(null)} />}
           <div className="page-actions">
             <button type="submit" disabled={isSending}>
               {isSending ? 'Sending…' : 'Send change request'}
@@ -899,6 +899,7 @@ export function ChangeRequestsSection({
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
           error={withdrawError}
+          onErrorDismiss={() => setWithdrawError(null)}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >

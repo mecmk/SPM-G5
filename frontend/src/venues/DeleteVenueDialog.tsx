@@ -46,6 +46,7 @@ export function DeleteVenueDialog({
       confirmLabel="Delete venue"
       isBusy={isDeleting}
       error={error}
+      onErrorDismiss={() => setError(null)}
       onConfirm={confirmDelete}
       onCancel={onCancel}
     >

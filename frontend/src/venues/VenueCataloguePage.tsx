@@ -425,6 +425,7 @@ export function VenueCataloguePage() {
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
           error={withdrawError}
+          onErrorDismiss={() => setWithdrawError(null)}
           onConfirm={confirmWithdraw}
           onCancel={cancelWithdraw}
         >

@@ -2,6 +2,11 @@ import { useSyncExternalStore } from 'react'
 
 /** The space between two stacked toasts, matching `.toast-stack`'s gap. */
 const GAP_PX = 8
+/** The stack's distance from the bottom of the screen, matching `.error-toast`'s 1rem. */
+const EDGE_PX = 16
+/** The room the error toasts take at the foot of the screen, which the page and dialogs keep clear
+ *  (`#root::after`, `.dialog` in App.css), so a toast never hides a form's buttons for good. */
+const SPACE_VARIABLE = '--error-toasts-space'
 
 /**
  * The error toasts on screen, oldest first, with their heights. Each `ErrorToast` is rendered
@@ -13,6 +18,8 @@ let shown: { id: string; height: number }[] = []
 const listeners = new Set<() => void>()
 
 function announce() {
+  const space = shown.length > 0 ? heightOf(shown) + EDGE_PX : 0
+  document.documentElement.style.setProperty(SPACE_VARIABLE, `${space}px`)
   listeners.forEach((listener) => listener())
 }
 

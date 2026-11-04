@@ -367,7 +367,9 @@ export function EquipmentRequestsSection({
     >
       <h2 id="equipment-heading">Equipment requirements</h2>
       {isFlagged && <p className="flag-note">{FLAGGED_BY_SAFETY_REVIEW}</p>}
-      {hasItems && shortagesError && <ErrorToast message={shortagesError} />}
+      {hasItems && shortagesError && (
+        <ErrorToast message={shortagesError} onDismiss={() => setShortagesError(null)} />
+      )}
       {equipment.length === 0 ? (
         <p className="muted">No equipment requested.</p>
       ) : (
@@ -411,7 +413,9 @@ export function EquipmentRequestsSection({
                       onChange={(e) => setEditNotes(e.target.value)}
                     />
                   </label>
-                  {editError && <ErrorToast message={editError} />}
+                  {editError && (
+                    <ErrorToast message={editError} onDismiss={() => setEditError(null)} />
+                  )}
                   <span className="row-actions">
                     <button type="submit" disabled={isSaving}>
                       {isSaving ? 'Saving…' : 'Save'}
@@ -549,7 +553,9 @@ export function EquipmentRequestsSection({
 
       {canChange && hasWaiting && (
         <div className="stack">
-          {submitError && <ErrorToast message={submitError} />}
+          {submitError && (
+            <ErrorToast message={submitError} onDismiss={() => setSubmitError(null)} />
+          )}
           <div className="page-actions">
             <button type="button" disabled={isSubmitting} onClick={sendToTechnicalSupport}>
               {isSubmitting ? 'Sending…' : 'Submit to Technical Support'}
@@ -561,7 +567,9 @@ export function EquipmentRequestsSection({
       {canChange && (
         <form className="stack" aria-label="Add equipment" noValidate onSubmit={handleAdd}>
           <p className="eyebrow">Add equipment</p>
-          {availabilityError && <ErrorToast message={availabilityError} />}
+          {availabilityError && (
+            <ErrorToast message={availabilityError} onDismiss={() => setAvailabilityError(null)} />
+          )}
           <label>
             Equipment type
             <select
@@ -614,7 +622,7 @@ export function EquipmentRequestsSection({
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
-          {addError && <ErrorToast message={addError} />}
+          {addError && <ErrorToast message={addError} onDismiss={() => setAddError(null)} />}
           <div className="page-actions">
             <button type="submit" className="secondary" disabled={isAdding}>
               {isAdding ? 'Adding…' : 'Add item'}
@@ -629,6 +637,7 @@ export function EquipmentRequestsSection({
           confirmLabel="Remove"
           isBusy={isRemoving}
           error={removeError}
+          onErrorDismiss={() => setRemoveError(null)}
           onConfirm={confirmRemove}
           onCancel={cancelRemove}
         >
@@ -645,6 +654,7 @@ export function EquipmentRequestsSection({
           confirmLabel="Withdraw"
           isBusy={isWithdrawing}
           error={withdrawError}
+          onErrorDismiss={() => setWithdrawError(null)}
           canConfirm={canConfirmWithdrawal}
           cancelLabel={canConfirmWithdrawal ? CANCEL : CLOSE}
           onConfirm={confirmWithdraw}

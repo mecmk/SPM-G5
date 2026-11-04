@@ -57,7 +57,7 @@ function ProfileForm({ profile, onSaved }: ProfileFormProps) {
       <p className="small muted">Your email is set by ConnectSphere and cannot be changed here.</p>
       <form className="stack" aria-label="Your details" noValidate onSubmit={handleSave}>
         <AttendeeDetailsFields form={form} />
-        {saveError && <ErrorToast message={saveError} />}
+        {saveError && <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />}
         <div className="page-actions">
           <button type="submit" disabled={isSaving}>
             {isSaving ? 'Saving…' : 'Save details'}

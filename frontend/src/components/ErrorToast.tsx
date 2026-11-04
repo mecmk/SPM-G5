@@ -6,8 +6,9 @@ export interface ErrorToastProps {
   message: string
   /** The message's id, so a field can point at it with `aria-describedby`. */
   id?: string
-  /** Called when the toast's close button is pressed. A page whose check can fail twice in a row
-   *  with the same message clears its error here, so the next failure shows again. */
+  /** Called when the toast's close button is pressed. A page that holds the error in its own state
+   *  clears it here: a closed toast stays closed while its message is unchanged, so without this the
+   *  same failure a second time would show nothing. */
   onDismiss?: () => void
 }
 

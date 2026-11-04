@@ -123,7 +123,7 @@ export function UnassignedQueuePage() {
 
       {error && <ErrorToast message={error} />}
       {isLoading && <LoadingState label="Loading the unassigned queue…" />}
-      {conflict && <ErrorToast message={conflict} />}
+      {conflict && <ErrorToast message={conflict} onDismiss={() => setConflict(null)} />}
 
       {queue !== null && (
         <div className="stack">
@@ -176,6 +176,7 @@ export function UnassignedQueuePage() {
           tone="primary"
           isBusy={isSaving}
           error={assignError}
+          onErrorDismiss={() => setAssignError(null)}
           onConfirm={confirmAssign}
           onCancel={cancelAssign}
         >

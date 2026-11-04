@@ -561,6 +561,12 @@ test('13.2.1 AC2/AC3: the reject dialog requires a reason, can be cancelled, and
   await expect(dialog.getByRole('alert')).toHaveText('Enter a reason for rejecting this request.')
   await expect(dialog).toBeVisible()
 
+  // Closed with its button, the same refusal shows again on the next try.
+  await dialog.getByRole('alert').getByRole('button', { name: 'Dismiss' }).click()
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Reject' }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('Enter a reason for rejecting this request.')
+
   // AC3: Cancel makes no change - the card is still there, still pending.
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog).not.toBeVisible()

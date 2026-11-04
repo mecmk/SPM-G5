@@ -693,7 +693,7 @@ test('2.1 AC2: a date problem is said under the dates as soon as it is typed', a
   await end.fill(inFuture(30, 17))
   await expect(
     page.getByText(
-      /cannot be in the past|must be after the start date|cannot run for more than|cannot be more than 2 years/,
+      /cannot be in the past|The end must be after the start|cannot run for more than|The start can be at most 2 years away/,
     ),
   ).toHaveCount(0)
   await expect(start).not.toHaveAttribute('aria-invalid', 'true')
@@ -1660,4 +1660,17 @@ test('2.1 AC3: a problem fixed in its field closes its toast, and the other stay
   await page.getByLabel('Expected attendance').fill('60')
   await expect(attendance).toHaveCount(0)
   await expect(email).toBeVisible()
+})
+
+test('2.1 AC3: a sign, a decimal point or an exponent cannot be typed into a whole-number field', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const attendance = page.getByLabel('Expected attendance')
+
+  // Typed key by key, as a person types: only the digits get in.
+  await attendance.fill('')
+  await attendance.pressSequentially('1e-.+2')
+  await expect(attendance).toHaveValue('12')
 })

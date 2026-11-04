@@ -117,7 +117,7 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            {error && <ErrorToast message={error} />}
+            {error && <ErrorToast message={error} onDismiss={() => setError(null)} />}
             {lock && <SignInLockedAlert lock={lock} />}
             <button type="submit" className="button-block login-submit" disabled={isSubmitting}>
               {isSubmitting ? 'Signing in…' : 'Sign in'}

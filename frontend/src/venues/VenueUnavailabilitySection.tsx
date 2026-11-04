@@ -376,7 +376,9 @@ export function VenueUnavailabilitySection({
           </section>
         )}
 
-        {saveError && !isConfirming && <ErrorToast message={saveError} />}
+        {saveError && !isConfirming && (
+          <ErrorToast message={saveError} onDismiss={() => setSaveError(null)} />
+        )}
 
         <div className="cluster">
           <button type="submit" className="brand" disabled={isSaving || !canSave}>
@@ -404,6 +406,7 @@ export function VenueUnavailabilitySection({
           tone="primary"
           isBusy={isSaving}
           error={saveError}
+          onErrorDismiss={() => setSaveError(null)}
           onConfirm={save}
           onCancel={cancelConfirm}
         >
