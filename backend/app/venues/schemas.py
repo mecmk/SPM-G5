@@ -15,11 +15,13 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictInt,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
+from pydantic_core import PydanticCustomError
 
-from app.bookings.schemas import TURNAROUND_MAX_MINUTES
+from app.common.turnaround import TURNAROUND_MAX_MINUTES
 from app.venues.models import UnavailabilityReason, Venue, VenueUnavailabilityPeriod
 from app.venues.suitability import Suitability
 
@@ -126,6 +128,16 @@ class VenueAccessibilityFeatureOut(BaseModel):
 
 
 # --- venue -----------------------------------------------------------------------------
+# Story 8.3 AC13/AC14 (fixes f8.3.4, f8.3.5): what an edit sending one of these empty is told.
+CANNOT_CLEAR_MESSAGES = {
+    "operating_hours_start": "You cannot clear the venue's opening time.",
+    "operating_hours_end": "You cannot clear the venue's closing time.",
+    "setup_minutes_default": "You cannot clear the venue's setup time.",
+    "teardown_minutes_default": "You cannot clear the venue's teardown time.",
+}
+_CANNOT_CLEAR_ERROR = "cannot_be_cleared"
+
+
 def _strip(value: str | None) -> str | None:
     return value.strip() if isinstance(value, str) else value
 
@@ -226,11 +238,12 @@ class VenueUpdate(_OperatingHoursMixin):
         "teardown_minutes_default",
     )
     @classmethod
-    def _refuse_clearing(cls, value):
+    def _refuse_clearing(cls, value, info: ValidationInfo):
         """AC13/AC14 (fix f8.3.4): these may be left out of an update, but never sent empty. A venue
-        saved earlier without opening hours keeps them unrecorded until both are given."""
+        saved earlier without opening hours keeps them unrecorded until both are given. A custom
+        error, so the sentence is sent without Pydantic's "Value error, " in front (fix f8.3.5)."""
         if value is None:
-            raise ValueError("is required and cannot be cleared")
+            raise PydanticCustomError(_CANNOT_CLEAR_ERROR, CANNOT_CLEAR_MESSAGES[info.field_name])
         return value
 
     @model_validator(mode="after")

@@ -100,9 +100,8 @@ def test_unknown_characteristic_code_is_refused(venue_staff_client):
 
 @pytest.mark.story("8.3", ac=1)
 def test_operating_hours_must_be_a_valid_pair(venue_staff_client):
-    only_start = venue_payload(operating_hours_start="09:00", operating_hours_end=None)
+    # Opening hours without a closing time: test_required_operating_info.py (AC13).
     backwards = venue_payload(operating_hours_start="18:00", operating_hours_end="09:00")
-    assert venue_staff_client.post("/venues", json=only_start).status_code == 422
     assert venue_staff_client.post("/venues", json=backwards).status_code == 422
 
 

@@ -352,6 +352,26 @@ test('8.3 AC14: setup and teardown take digits only', async ({ page }) => {
   }
 })
 
+test('8.3 AC14: a paste holding more than digits is refused, not turned into another number', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  for (const label of ['Setup (minutes)', 'Teardown (minutes)']) {
+    const minutes = page.getByLabel(label)
+    await minutes.fill('30')
+    for (const pasted of ['1.5', '-10']) {
+      // What a paste in Firefox does: the value changes with no beforeinput for the guard to stop.
+      await minutes.evaluate((input: HTMLInputElement, text) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, text)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      }, pasted)
+      await expect(minutes).toHaveValue('30')
+    }
+  }
+})
+
 test('8.3 AC14: setup and teardown stop at five digits, and more than 14 days is named under the field', async ({
   page,
 }) => {
@@ -386,6 +406,26 @@ test('8.3 AC14: a setup left empty is named under Setup as soon as it is left', 
 
   await expect(setup).toHaveAttribute('aria-invalid', 'true')
   await expect(setup).toHaveAccessibleDescription('Enter the setup time in minutes, or 0 for none.')
+})
+
+test('8.3 AC15: an empty Opens or Closes is named under its field as soon as it is left', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.venueStaff)
+  await page.goto('/venues/new')
+
+  for (const [label, problem] of [
+    ['Opens', 'Enter the time the venue opens.'],
+    ['Closes', 'Enter the time the venue closes.'],
+  ]) {
+    const time = page.getByLabel(label)
+    await expect(time).not.toHaveAttribute('aria-invalid', 'true')
+    await time.focus()
+    await time.blur()
+
+    await expect(time).toHaveAttribute('aria-invalid', 'true')
+    await expect(time).toHaveAccessibleDescription(problem)
+  }
 })
 
 test('8.3 AC15: a closing time before the opening time is named under Closes straight away', async ({
