@@ -33,7 +33,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.events.models import EventStatus
+from app.events import service
+from app.events.models import Event, EventStatus
 from tests.support.factories import create_event_request, future_datetime, make_event
 from tests.support.seed import Events, Users
 
@@ -449,3 +450,17 @@ def test_a_request_not_awaiting_a_decision_is_told_so_even_without_a_venue_requi
 
     assert response.status_code == 409, response.text
     assert response.json()["detail"] == _NOT_AWAITING_A_DECISION.format(status=status)
+
+
+@pytest.mark.story("2.7", ac=17)
+def test_writing_an_empty_list_of_requirements_leaves_none_required_as_it_was(db: Session):
+    """AC17 clears a request's "No venue requirements" only when it is given a requirement. Every
+    save refuses an empty list before writing it (AC14, AC20), so only a direct call to the writer
+    can hand it one: the writer then leaves the flag alone rather than clearing it for nothing."""
+    event_id = _request_from_before_the_fix(db, status=EventStatus.DRAFT)
+    event = db.get(Event, event_id)
+
+    service._replace_venue_requirements(db, event, [])
+
+    assert event.venue_none_required is True
+    assert event.venue_requirements == []

@@ -11,11 +11,17 @@ Venue Staff have full CRUD: they can also delete a venue, as long as no booking 
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.auth.models import User
+from app.venues import service
+from app.venues.models import Venue
+from app.venues.schemas import VenueCreate, VenueUpdate
 from app.venues.service import VENUE_IN_USE_MESSAGE
 from tests.support.factories import venue_payload
+from tests.support.faults import OTHER_CONSTRAINT, fail_flush
 from tests.support.seed import Users, Venues
 
 
@@ -68,6 +74,33 @@ def test_venue_can_be_created_with_full_characteristics(venue_staff_client):
 
 
 @pytest.mark.story("8.3", ac=1)
+def test_a_characteristic_sent_twice_is_recorded_once(venue_staff_client):
+    """AC1: a code listed twice, as a request sent outside the app might, is one entry on the
+    venue - the first one sent - rather than a save failing on the table's unique key."""
+    payload = venue_payload(
+        facilities=[{"code": "WIFI", "notes": "Guest network"}, {"code": "WIFI", "notes": "Staff"}],
+        layouts=[
+            {"code": "THEATRE", "layout_capacity": 30},
+            {"code": "THEATRE", "layout_capacity": 20},
+        ],
+        accessibility_features=[
+            {"code": "LIFT_ACCESS", "notes": "Rear lift"},
+            {"code": "LIFT_ACCESS", "notes": "Front lift"},
+        ],
+    )
+
+    response = venue_staff_client.post("/venues", json=payload)
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert [(f["code"], f["notes"]) for f in body["facilities"]] == [("WIFI", "Guest network")]
+    assert [(lo["code"], lo["layout_capacity"]) for lo in body["layouts"]] == [("THEATRE", 30)]
+    assert [(a["code"], a["notes"]) for a in body["accessibility_features"]] == [
+        ("LIFT_ACCESS", "Rear lift")
+    ]
+
+
+@pytest.mark.story("8.3", ac=1)
 @pytest.mark.parametrize("missing", ["name", "location", "capacity"])
 def test_minimum_fields_are_mandatory(venue_staff_client, missing):
     payload = venue_payload()
@@ -90,9 +123,10 @@ def test_duplicate_venue_name_is_refused(venue_staff_client):
 
 
 @pytest.mark.story("8.3", ac=1)
-def test_unknown_characteristic_code_is_refused(venue_staff_client):
+@pytest.mark.parametrize("characteristic", ["facilities", "accessibility_features"])
+def test_unknown_characteristic_code_is_refused(venue_staff_client, characteristic):
     response = venue_staff_client.post(
-        "/venues", json=venue_payload(facilities=[{"code": "HOLODECK"}])
+        "/venues", json=venue_payload(**{characteristic: [{"code": "HOLODECK"}]})
     )
     assert response.status_code == 422
     assert "HOLODECK" in response.json()["detail"]
@@ -139,6 +173,34 @@ def test_characteristic_lists_are_replaced_when_supplied(venue_staff_client):
     assert response.status_code == 200
     assert [f["code"] for f in response.json()["facilities"]] == ["PROJECTOR", "WIFI"]
     assert [lo["code"] for lo in response.json()["layouts"]] == ["BOARDROOM"], "layouts untouched"
+
+
+@pytest.mark.story("8.3", ac=2)
+def test_accessibility_features_are_replaced_and_the_audit_keeps_the_old_list(
+    venue_staff_client, db: Session
+):
+    """AC2: a supplied accessibility list replaces the venue's, and the audit row records the
+    list it replaced beside the new one."""
+    response = venue_staff_client.patch(
+        f"/venues/{Venues.BOARDROOM}",
+        json={"accessibility_features": [{"code": "WHEELCHAIR_ACCESS"}, {"code": "HEARING_LOOP"}]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert {a["code"] for a in response.json()["accessibility_features"]} == {
+        "HEARING_LOOP",
+        "WHEELCHAIR_ACCESS",
+    }
+    details = db.execute(
+        text(
+            "SELECT details FROM audit_log WHERE action = 'VENUE_UPDATED' AND entity_id = :id "
+            "ORDER BY occurred_at DESC LIMIT 1"
+        ),
+        {"id": Venues.BOARDROOM},
+    ).scalar_one()
+    change = details["accessibility_features"]
+    assert change["from"] == ["LIFT_ACCESS"]
+    assert [item["code"] for item in change["to"]] == ["WHEELCHAIR_ACCESS", "HEARING_LOOP"]
 
 
 @pytest.mark.story("8.3", ac=2)
@@ -344,6 +406,56 @@ def test_delete_is_recorded_in_the_audit_log(venue_staff_client, db: Session):
     ).one()
     assert row.actor_id == Users.VENUE_STAFF.id
     assert row.details == {"name": "Boardroom 3.4"}
+
+
+# --- a database refusal the service does not know ------------------------------------------
+# The service turns the constraints it knows into a refusal of their own: the name's unique key
+# (409), a deleted layout's foreign key (story 8.6 AC11), a booking's foreign key on delete. Any
+# other is a fault, so it reaches the caller unchanged rather than dressed as one of those. No
+# real data reaches one, since the request is checked first, so ``fail_flush`` stands in for it.
+# Autoflush is off for the call, so the save's own flush is the one that fails.
+def _venue_staff(db: Session) -> User:
+    return db.get(User, Users.VENUE_STAFF.id)
+
+
+@pytest.mark.story("8.3", ac=1)
+def test_creating_a_venue_passes_on_a_database_refusal_it_does_not_know(db: Session, monkeypatch):
+    """AC1: the refusal propagates and no venue is saved."""
+    data = VenueCreate(**venue_payload(name="Refused Hall"))
+    actor = _venue_staff(db)
+    fail_flush(db, monkeypatch)
+
+    with db.no_autoflush, pytest.raises(IntegrityError, match=OTHER_CONSTRAINT):
+        service.create_venue(db, data, actor=actor)
+
+    assert db.scalar(select(func.count()).where(Venue.name == "Refused Hall")) == 0
+
+
+@pytest.mark.story("8.3", ac=2)
+def test_editing_a_venue_passes_on_a_database_refusal_it_does_not_know(db: Session, monkeypatch):
+    """AC2: the refusal propagates and the venue keeps its details."""
+    actor = _venue_staff(db)
+    fail_flush(db, monkeypatch)
+
+    with db.no_autoflush, pytest.raises(IntegrityError, match=OTHER_CONSTRAINT):
+        service.update_venue(db, Venues.BOARDROOM, VenueUpdate(capacity=20), actor=actor)
+
+    db.expire_all()
+    assert db.get(Venue, Venues.BOARDROOM).capacity == 16
+
+
+@pytest.mark.story("8.3")
+def test_deleting_a_venue_passes_on_a_database_refusal_it_does_not_know(db: Session, monkeypatch):
+    """Only a booking's foreign key means the venue is in use; any other refusal propagates, and
+    the venue stays."""
+    actor = _venue_staff(db)
+    fail_flush(db, monkeypatch)
+
+    with db.no_autoflush, pytest.raises(IntegrityError, match=OTHER_CONSTRAINT):
+        service.delete_venue(db, Venues.BOARDROOM, actor=actor)
+
+    db.expire_all()
+    assert db.get(Venue, Venues.BOARDROOM) is not None
 
 
 # --- read side, used by stories 8.1 / 8.2 ---------------------------------------------------

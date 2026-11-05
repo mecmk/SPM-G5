@@ -150,6 +150,7 @@ def test_rejecting_a_booking_does_not_change_its_event_or_other_bookings(
 
 
 @pytest.mark.story("13.2.1", ac=5)
+@pytest.mark.story("13.2", ac=5)
 def test_signed_out_visitors_cannot_reject_a_booking(client):
     response = client.post(
         f"/bookings/{Bookings.PENDING_EXHIBITION_FOYER}/reject",
@@ -159,6 +160,7 @@ def test_signed_out_visitors_cannot_reject_a_booking(client):
 
 
 @pytest.mark.story("13.2.1", ac=5)
+@pytest.mark.story("13.2", ac=5)
 @pytest.mark.parametrize(
     "user",
     [Users.ORGANISER, Users.COORDINATOR, Users.TECH_SUPPORT, Users.ATTENDEE],

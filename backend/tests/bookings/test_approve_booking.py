@@ -4,6 +4,8 @@ AC1 Approval sets the booking to confirmed (APPROVED) and records the approver a
 AC2 The confirmed period is marked unavailable on the venue's calendar.
 AC3 The outcome is visible to the requesting coordinator.
 AC4 Approval is refused where the period conflicts with an existing confirmed booking.
+AC5 Only Venue Staff can approve or reject requests; other roles are refused, through the API too.
+    Rejecting's refusals are in test_reject_booking.py.
 
 AC2 is proven at the mechanism story 14.2 already built and tested (the exclusion constraint
 keys off ``status``): once this endpoint flips a booking to APPROVED, that same constraint and
@@ -39,11 +41,31 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.bookings.models import BookingStatus
-from tests.support.factories import approval_payload, make_booking
+from app.bookings import service
+from app.bookings.models import BookingStatus, VenueBooking
+from tests.support.factories import approval_payload, make_booking, make_venue
+from tests.support.faults import OTHER_CONSTRAINT, fail_flush
 from tests.support.seed import Bookings, Events, Users, Venues
+
+DOUBLE_BOOKING_CONSTRAINT = "ex_venue_bookings_no_double_booking"
+# The constraint as migration 001 wrote it, before migration 010 made a pending request hold its
+# venue too: only APPROVED rows blocked one, so two overlapping pending requests could both wait.
+PRE_010_CONSTRAINT = (
+    f"ALTER TABLE venue_bookings ADD CONSTRAINT {DOUBLE_BOOKING_CONSTRAINT}"
+    " EXCLUDE USING gist (venue_id WITH =, tstzrange(held_from, held_until, '[)') WITH &&)"
+    " WHERE (status = 'APPROVED')"
+)
+
+
+def _days_ahead(days: int, hour: int) -> datetime:
+    """``hour`` o'clock UTC that many days from now: later than the day-long hold
+    ``approval_payload`` gives, so the hold's own rules never refuse the approval."""
+    return (datetime.now(timezone.utc) + timedelta(days=days)).replace(
+        hour=hour, minute=0, second=0, microsecond=0
+    )
 
 
 # --- AC1: approval confirms the booking and records approver + time -------------------------
@@ -72,7 +94,7 @@ def test_venue_staff_can_approve_a_pending_request(venue_staff_client, db: Sessi
     assert row.decided_at is not None
 
 
-@pytest.mark.story("13.2")
+@pytest.mark.story("13.2", ac=1)
 def test_approval_is_recorded_in_the_audit_log(venue_staff_client, db: Session):
     venue_staff_client.post(
         f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve", json=approval_payload()
@@ -224,13 +246,97 @@ def test_a_request_conflicting_with_a_confirmed_booking_never_reaches_approval(
     ]
 
 
+@pytest.mark.story("13.2", ac=4)
+@pytest.mark.story("14.2", ac=2)
+def test_an_approval_the_database_refuses_as_a_double_booking_is_409_naming_the_booking(
+    login_as, db: Session
+):
+    """The safety net behind AC4: when the database refuses the approval as a double booking,
+    Venue Staff get a 409 naming the approved booking it overlaps, and the request stays pending.
+
+    Real data cannot reach this since migration 010: a pending request already holds its slot, so
+    no approved booking can overlap it. The test restores migration 001's constraint, which held
+    approved bookings only, inside its own transaction, so two overlapping pending requests can
+    wait as they once could and the second approval meets the database's real refusal.
+
+    The request runs with autoflush off. With it on, reading the booking's event after the
+    approval is written (story 12.7 AC4's confirmed-event check) flushes the write there, outside
+    the handler, so the refusal would surface as a server error instead of this 409."""
+    connection = db.connection()
+    connection.exec_driver_sql(
+        f"ALTER TABLE venue_bookings DROP CONSTRAINT {DOUBLE_BOOKING_CONSTRAINT}"
+    )
+    connection.exec_driver_sql(PRE_010_CONSTRAINT)
+    venue = make_venue(db)
+    first = make_booking(
+        db, venue_id=venue.id, starts_at=_days_ahead(10, 1), ends_at=_days_ahead(10, 4)
+    )
+    second = make_booking(
+        db, venue_id=venue.id, starts_at=_days_ahead(10, 3), ends_at=_days_ahead(10, 6)
+    )
+    # Committed, so the service's rollback of the refused write keeps the schema and both rows.
+    db.commit()
+    staff = login_as(Users.VENUE_STAFF)
+    assert staff.post(f"/bookings/{first.id}/approve", json=approval_payload()).status_code == 200
+
+    with db.no_autoflush:
+        refused = staff.post(f"/bookings/{second.id}/approve", json=approval_payload())
+
+    assert refused.status_code == 409, refused.text
+    db.expire_all()
+    first = db.get(VenueBooking, first.id)
+    assert refused.json()["detail"] == service.BOOKING_CONFLICT_MESSAGE.format(
+        conflicting_id=first.id,
+        held_from=first.held_from.isoformat(),
+        held_until=first.held_until.isoformat(),
+    )
+    assert db.get(VenueBooking, second.id).status == BookingStatus.PENDING
+
+
+@pytest.mark.story("13.2", ac=4)
+@pytest.mark.parametrize(
+    "constraint",
+    [OTHER_CONSTRAINT, DOUBLE_BOOKING_CONSTRAINT],
+    ids=["another constraint", "double booking with no approved booking left"],
+)
+def test_a_refused_approval_that_names_no_overlapping_booking_is_raised_as_it_is(
+    db: Session, monkeypatch, constraint
+):
+    """AC4 refuses only a real conflict. A write the database refuses for another constraint,
+    or as a double booking whose approved booking is gone by the time the service looks for it,
+    is raised as the database's error rather than a 409 naming no booking, and nothing is
+    approved. Real data cannot reach either: no other constraint can refuse an approval, and
+    since migration 010 no approved booking can overlap a pending request (above). So
+    ``fail_flush`` raises the error PostgreSQL would."""
+    booking = make_booking(
+        db, venue_id=make_venue(db).id, starts_at=_days_ahead(10, 1), ends_at=_days_ahead(10, 4)
+    )
+    # Committed, so the service's rollback keeps the booking for it to read back.
+    db.commit()
+
+    # Autoflush is off, so the approval's own flush is the one that fails.
+    with db.no_autoflush:
+        fail_flush(db, monkeypatch, constraint)
+        with pytest.raises(IntegrityError) as raised:
+            service.approve_booking(
+                db,
+                booking,
+                actor_id=Users.VENUE_STAFF.id,
+                hold_expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+            )
+
+    assert constraint in str(raised.value.orig)
+    db.expire_all()
+    assert db.get(VenueBooking, booking.id).status == BookingStatus.PENDING
+
+
 # --- Permissions -------------------------------------------------------------------------
-@pytest.mark.story("13.2", ac=1)
+@pytest.mark.story("13.2", ac=5)
 def test_signed_out_visitors_cannot_approve_a_booking(client):
     assert client.post(f"/bookings/{Bookings.PENDING_SEMINAR_ROOM}/approve").status_code == 401
 
 
-@pytest.mark.story("13.2", ac=1)
+@pytest.mark.story("13.2", ac=5)
 @pytest.mark.parametrize(
     "user",
     [Users.ORGANISER, Users.COORDINATOR, Users.TECH_SUPPORT, Users.ATTENDEE],

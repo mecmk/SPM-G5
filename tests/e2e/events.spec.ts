@@ -13,7 +13,7 @@
  * f7.1.1 (AC1): an event that runs over more than one day names both dates in its heading line,
  * rather than reading as its first day.
  *
- * f7.1.2 (AC1): the organiser sees their event's approved and pending venue bookings, read-only.
+ * f7.1.2 (7.1 AC4): the organiser sees their event's approved and pending venue bookings, read-only.
  * Which bookings, and that only the event's own organiser gets them, is proven in
  * backend/tests/bookings/test_organiser_bookings.py. CL-184: a booking over two days names both
  * dates (AC4); an open hold is not shown as confirmed (AC7); there is no section on a Rejected or
@@ -84,7 +84,7 @@ test('7.1: the back link returns to wherever the event was opened from', async (
   await expect(page.getByRole('heading', { name: 'Events inbox', level: 1 })).toBeVisible()
 })
 
-test('7.1 AC1: the organiser who owns the event sees its venue, accessibility and equipment requirements', async ({
+test('7.1 AC1/AC3: the organiser who owns the event sees its venue, accessibility and equipment requirements', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.organiser2)
@@ -119,7 +119,7 @@ test('7.1 AC1: the organiser who owns the event sees its venue, accessibility an
   await expect(page.getByRole('checkbox')).toHaveCount(0)
 })
 
-test("7.1 AC1: the organiser's venue bookings render as read-only cards", async ({ page }) => {
+test("7.1 AC4: the organiser's venue bookings render as read-only cards", async ({ page }) => {
   await signIn(page, ACCOUNTS.organiser2)
   await page.goto(`/events/${EVENTS.approved}`)
 

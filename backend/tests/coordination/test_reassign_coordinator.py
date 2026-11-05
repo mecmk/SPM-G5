@@ -164,6 +164,19 @@ def test_current_coordinator_is_excluded_from_the_reassignment_list(coordinator_
 
 
 @pytest.mark.story("5.2", ac=4)
+def test_an_event_with_no_coordinator_yet_excludes_nobody(coordinator_client, db: Session):
+    """Events.DRAFT has never been assigned, so there is no current coordinator to leave out."""
+    assert coordination_service.current_assignment(db, Events.DRAFT) is None
+    everyone = {u["id"] for u in coordinator_client.get("/coordinators").json()}
+
+    response = coordinator_client.get(f"/coordinators?exclude_event_id={Events.DRAFT}")
+
+    assert response.status_code == 200, response.text
+    assert {u["id"] for u in response.json()} == everyone
+    assert {str(Users.COORDINATOR.id), str(Users.COORDINATOR_2.id)} <= everyone
+
+
+@pytest.mark.story("5.2", ac=4)
 def test_reassigning_to_an_inactive_or_non_coordinator_is_refused(login_as, db: Session):
     inactive = make_user(db, role="EVENT_COORDINATOR", is_active=False)
 

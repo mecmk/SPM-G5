@@ -905,6 +905,18 @@ def test_an_item_of_another_event_or_no_item_is_not_found(coordinator_client, db
     _assert_unchanged(db, item, ACCEPTED)
 
 
+@pytest.mark.story("17.2", ac=10)
+def test_an_event_that_does_not_exist_is_not_found(coordinator_client, db: Session):
+    item = _sent(db)
+
+    response = coordinator_client.post(
+        _withdrawal_path(uuid.uuid4(), item.id), json={"expected_status": ACCEPTED}
+    )
+
+    assert (response.status_code, response.json()["detail"]) == (404, "Event not found.")
+    _assert_unchanged(db, item, ACCEPTED)
+
+
 # --- AC11: a decision saved meanwhile, and a double-click -----------------------------------------
 @pytest.mark.story("17.2", ac=11)
 def test_an_item_accepted_since_it_was_seen_is_not_withdrawn(coordinator_client, db: Session):

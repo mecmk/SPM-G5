@@ -39,7 +39,12 @@ from app.events.models import Event, EventStatus
 from app.notifications.models import Notification
 from app.venues import service as venue_service
 from app.venues.models import Venue, VenueUnavailabilityPeriod
-from app.venues.schemas import VenueUnavailabilityCreate, VenueUnavailabilityUpdate
+from app.venues.schemas import (
+    FIELD_CANNOT_BE_EMPTY_MESSAGE,
+    NOTHING_TO_CHANGE_MESSAGE,
+    VenueUnavailabilityCreate,
+    VenueUnavailabilityUpdate,
+)
 from tests.support.factories import (
     approval_payload,
     make_booking,
@@ -707,6 +712,23 @@ def test_an_already_ended_period_cannot_be_ended_again(db, venue_staff_client):
 
 
 @pytest.mark.story("9.4", ac=6)
+def test_a_period_not_yet_started_cannot_be_ended(db, venue_staff_client):
+    """AC6: only a period in force is ended; one ten days off is removed instead. 409 with the
+    sentence saying so, and the row is exactly as it was."""
+    venue = make_venue(db)
+    starts_at, ends_at = _days_from_now(10), _days_from_now(12)
+    period = _period(db, venue.id, starts_at, ends_at)
+    db.commit()
+
+    response = venue_staff_client.patch(_url(venue.id, period.id), json={"end_now": True})
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == venue_service.PERIOD_NOT_STARTED_MESSAGE
+    stored = _periods(db, venue.id)[0]
+    assert (stored.starts_at, stored.ends_at) == (starts_at, ends_at)
+
+
+@pytest.mark.story("9.4", ac=6)
 def test_a_started_period_cannot_be_removed(db, venue_staff_client):
     """AC6: a period in force is ended, not removed, so the calendar keeps its history.
     409, and the row is left."""
@@ -998,6 +1020,30 @@ def test_the_preview_writes_nothing(db, venue_staff_client):
     assert _audit(db, "BOOKING_RELEASED", booking.id) == []
     db.expire_all()
     assert db.get(VenueBooking, booking.id).status == "PENDING"
+
+
+@pytest.mark.story("9.4", ac=2)
+def test_the_preview_of_an_unknown_venue_is_not_found(venue_staff_client):
+    """AC2: 404 with the venue's own message, as adding a period to it is."""
+    response = _preview(venue_staff_client, uuid.uuid4(), _days_from_now(10), _days_from_now(12))
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "Venue not found."
+
+
+@pytest.mark.story("9.4", ac=2)
+@pytest.mark.story("9.4", ac=5)
+@pytest.mark.parametrize("offset", [timedelta(0), timedelta(hours=-1)], ids=["equal", "before"])
+def test_the_preview_refuses_an_end_not_after_the_start(db, venue_staff_client, offset):
+    """AC5 in the preview: an end equal to or before the start is 422 with the sentence a save
+    gets, not an empty list."""
+    venue = make_venue(db)
+    starts_at = _days_from_now(10)
+
+    response = _preview(venue_staff_client, venue.id, starts_at, starts_at + offset)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == venue_service.PERIOD_END_NOT_AFTER_START_MESSAGE
 
 
 # --- AC9: who may do what --------------------------------------------------------------------
@@ -1510,6 +1556,44 @@ def test_end_now_null_is_refused(db, venue_staff_client):
 
     assert response.status_code == 422, response.text
     assert _stored_period(db, period.id).ends_at == ends_before
+
+
+@pytest.mark.story("9.4", ac=6)
+@pytest.mark.parametrize(
+    "body", [{}, {"confirmed_booking_ids": []}], ids=["empty", "only-confirmed-ids"]
+)
+def test_an_edit_with_nothing_to_change_is_refused(db, venue_staff_client, body):
+    """AC6: an edit names at least one of the start, end, reason and description, or End now.
+    The confirmed bookings (9.5 AC1) are not a change of their own. 422 saying so, and the
+    period is unchanged."""
+    venue = make_venue(db)
+    period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
+    before = (period.starts_at, period.ends_at, period.reason, period.notes)
+
+    response = venue_staff_client.patch(_url(venue.id, period.id), json=body)
+
+    assert response.status_code == 422, response.text
+    assert NOTHING_TO_CHANGE_MESSAGE in response.text
+    stored = _stored_period(db, period.id)
+    assert (stored.starts_at, stored.ends_at, stored.reason, stored.notes) == before
+
+
+@pytest.mark.story("9.4", ac=1)
+@pytest.mark.story("9.4", ac=6)
+@pytest.mark.parametrize("field", ["starts_at", "ends_at", "reason"])
+def test_an_edit_cannot_empty_the_start_end_or_reason(db, venue_staff_client, field):
+    """AC1 on edit: a period always has a start, an end and a reason, so sending one as null is
+    422 saying so - not an edit that leaves it out - and the period is unchanged."""
+    venue = make_venue(db)
+    period = _period(db, venue.id, _days_from_now(10), _days_from_now(12))
+    before = (period.starts_at, period.ends_at, period.reason)
+
+    response = venue_staff_client.patch(_url(venue.id, period.id), json={field: None})
+
+    assert response.status_code == 422, response.text
+    assert FIELD_CANNOT_BE_EMPTY_MESSAGE in response.text
+    stored = _stored_period(db, period.id)
+    assert (stored.starts_at, stored.ends_at, stored.reason) == before
 
 
 # A fixed now and the latest end worked out by hand: two calendar years on, on Singapore's clock

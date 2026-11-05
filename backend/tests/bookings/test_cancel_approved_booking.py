@@ -52,7 +52,8 @@ from sqlalchemy.orm import Session
 
 from app.auth.models import User
 from app.bookings import service as bookings_service
-from app.bookings.models import BookingStatus, VenueBooking
+from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
+from app.bookings.schemas import BookingCancellation
 from app.cancellations import service as cancellations_service
 from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus, EventStatusHistory
@@ -620,6 +621,23 @@ def test_an_unknown_booking_is_not_found(coordinator_client):
     assert _cancel(coordinator_client, uuid.uuid4()).status_code == 404
 
 
+@pytest.mark.story("12.8", ac=8)
+def test_a_booking_gone_before_it_is_locked_is_not_found(db: Session, scene: Scene):
+    """The cancel reads the booking, locks its event and then re-reads the booking under a row
+    lock. A booking gone by then is not found, as an unknown one is, rather than cancelled.
+    Real data cannot reach this, since nothing deletes a booking; the row is deleted in SQL
+    under the session's copy of it."""
+    db.execute(text("DELETE FROM venue_bookings WHERE id = :id"), {"id": scene.extra.id})
+
+    with pytest.raises(bookings_service.BookingNotFound):
+        bookings_service.cancel_booking(
+            db,
+            scene.extra.id,
+            BookingCancellation(reason=REASON),
+            actor=db.get(User, Users.COORDINATOR.id),
+        )
+
+
 # --- AC9: the database keeps the reason with the cause ----------------------------------------
 @pytest.mark.story("12.8", ac=9)
 def test_a_coordinator_cancellation_always_records_its_reason(db: Session, scene: Scene):
@@ -635,6 +653,38 @@ def test_a_coordinator_cancellation_always_records_its_reason(db: Session, scene
     assert "ck_venue_bookings_coordinator_cancel_reason" in str(raised.value.orig)
     with db.begin_nested():
         db.execute(text(sql), {**params, "reason": REASON})
+
+
+_AT = {"at": datetime(2026, 10, 1, tzinfo=UTC)}
+
+
+@pytest.mark.story("12.8", ac=9)
+@pytest.mark.parametrize(
+    ("cause", "given", "refusal"),
+    [
+        (ReleaseCause.REPLACED, {}, "takes a replacement for REPLACED"),
+        (ReleaseCause.COORDINATOR_CANCELLED, {"reason": REASON}, "needs the time"),
+        (ReleaseCause.VENUE_UNAVAILABLE, {"because": "it closed", **_AT}, "takes a closure"),
+        (ReleaseCause.COORDINATOR_CANCELLED, _AT, "needs the reason"),
+        (ReleaseCause.EVENT_CANCELLED, _AT, "needs the clause"),
+    ],
+    ids=["no replacement", "no time", "no closure", "no reason", "no clause"],
+)
+def test_the_shared_release_path_refuses_a_release_missing_what_its_cause_records(
+    db: Session, scene: Scene, cause, given, refusal
+):
+    """AC9: every path releases through the one ``release_booking`` with its own cause, which
+    says what the release records - a replacement for REPLACED, a closure for VENUE_UNAVAILABLE,
+    the reason for a coordinator's cancellation or a safety release, the clause Venue Staff's
+    notice ends with for any other cause, and the time of every release a replacement does not
+    make. A call missing it is a programming error (``ValueError``), and the booking is left
+    approved. No request reaches these guards, since each caller passes what its cause takes."""
+    chloe = db.get(User, Users.COORDINATOR.id)
+
+    with pytest.raises(ValueError, match=refusal):
+        bookings_service.release_booking(db, scene.first, actor=chloe, cause=cause, **given)
+
+    assert _fresh(db, scene.first).status == BookingStatus.APPROVED
 
 
 # --- AC7/AC9: two writers on one booking ------------------------------------------------------

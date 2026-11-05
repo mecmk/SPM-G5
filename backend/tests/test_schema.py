@@ -324,7 +324,7 @@ def test_reseeding_puts_every_closed_row_back(db: Session, table, closing, colum
 
 
 @pytest.mark.story("1", ac=3)
-@pytest.mark.story("12.5", ac=10)
+@pytest.mark.story("12.5", ac=9)
 def test_reseeding_leaves_a_booking_closed_once_a_newer_one_holds_its_requirement(db: Session):
     """A seeded booking was withdrawn and its requirement requested again (12.5). Making the seeded
     one live again would give the requirement two requests, which

@@ -82,6 +82,51 @@ def test_a_venue_saved_without_hours_can_still_change_other_details(venue_staff_
     assert response.json()["operating_hours_start"] is None
 
 
+@pytest.mark.story("8.3", ac=13)
+@pytest.mark.parametrize(
+    "hours",
+    [{"operating_hours_start": "09:00"}, {"operating_hours_end": "18:00"}],
+    ids=["only-opens", "only-closes"],
+)
+def test_a_venue_saved_without_hours_is_not_given_only_one(venue_staff_client, hours):
+    """AC13: a venue saved without hours keeps them unrecorded until both are given. One sent
+    alone is checked against the venue as it would become, which would be half set, so it is
+    refused and the venue keeps neither."""
+    response = venue_staff_client.patch(f"/venues/{Venues.EXHIBITION_FOYER}", json=hours)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "operating_hours_start and operating_hours_end must be given together"
+    )
+    after = venue_staff_client.get(f"/venues/{Venues.EXHIBITION_FOYER}").json()
+    assert (after["operating_hours_start"], after["operating_hours_end"]) == (None, None)
+
+
+@pytest.mark.story("8.3", ac=13)
+@pytest.mark.parametrize(
+    "hours",
+    [
+        {"operating_hours_end": "08:00"},
+        {"operating_hours_start": "19:00"},
+        {"operating_hours_start": "18:00", "operating_hours_end": "09:00"},
+    ],
+    ids=["closes-at-opening", "opens-after-closing", "pair-reversed"],
+)
+def test_an_edit_cannot_close_the_venue_at_or_before_it_opens(venue_staff_client, hours):
+    """AC13: closing comes after opening. Boardroom 3.4 opens at 08:00 and closes at 18:00: a
+    time sent alone is checked against the one already saved, a pair as it is sent. The venue
+    keeps its hours."""
+    response = venue_staff_client.patch(f"/venues/{Venues.BOARDROOM}", json=hours)
+
+    assert response.status_code == 422
+    assert "operating_hours_end must be after operating_hours_start" in response.text
+    after = venue_staff_client.get(f"/venues/{Venues.BOARDROOM}").json()
+    assert (after["operating_hours_start"], after["operating_hours_end"]) == (
+        "08:00:00",
+        "18:00:00",
+    )
+
+
 # --- AC14: setup and teardown required ---------------------------------------------------
 @pytest.mark.story("8.3", ac=14)
 def test_setup_and_teardown_start_at_zero(venue_staff_client):

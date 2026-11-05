@@ -84,6 +84,7 @@ Open `http://localhost:5173`.
 # Backend — test command, lint/format check command(s)
 cd backend
 uv run pytest
+uv run pytest --cov          # also fails below 100% line and branch coverage, as CI does
 uv run ruff check .
 uv run ruff format --check .
 

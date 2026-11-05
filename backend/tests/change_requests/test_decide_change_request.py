@@ -865,6 +865,29 @@ def test_rejection_needs_a_non_blank_reason(coordinator_client, db: Session, rea
     _assert_nothing_sent_or_logged(db, request)
 
 
+@pytest.mark.story("19.2", ac=4)
+def test_a_rejection_the_service_refuses_as_invalid_is_a_422_naming_why(
+    coordinator_client, db: Session, monkeypatch
+):
+    """The endpoint answers a rejection the service refuses as invalid with 422 and the service's
+    sentence, as it answers an approval, and nothing is decided. ``ChangeRequestRejectionIn``
+    refuses a blank reason before the service runs, and the service refuses no value of its own
+    today, so it is made to refuse."""
+
+    def refuse(*args, **kwargs):
+        raise change_requests_service.InvalidEventRequest("This reason cannot be used.")
+
+    monkeypatch.setattr(change_requests_service, "reject_change_request", refuse)
+    request = make_change_request(db, event=_planning_event(db))
+
+    response = _reject(coordinator_client, request)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "This reason cannot be used."
+    _assert_undecided(db, request)
+    _assert_nothing_sent_or_logged(db, request)
+
+
 # --- AC5: only the arrangements a change affects are released --------------------------------
 
 
@@ -1273,6 +1296,27 @@ def test_approving_new_dates_moves_the_event_and_its_requirements(login_as, db: 
         new_start + timedelta(hours=2),
         new_start + timedelta(hours=4),
     )
+
+
+@pytest.mark.story("19.2", ac=2)
+def test_approving_new_dates_leaves_a_requirement_without_times_without_them(login_as, db: Session):
+    """A requirement with no times of its own is needed for the whole event, whenever that is (2.7
+    AC2), so new dates give it none to move: it keeps none."""
+    event = _planning_event(db)
+    make_venue_requirement(db, event.id, name="Main hall", capacity=50)
+    new_start, new_end = event.starts_at + timedelta(days=1), event.ends_at + timedelta(days=1)
+    request = _raise(
+        login_as,
+        db,
+        event,
+        "schedule",
+        {"starts_at": new_start.isoformat(), "ends_at": new_end.isoformat()},
+    )
+
+    response = _approve(login_as(Users.COORDINATOR), request)
+
+    assert response.status_code == 200, response.text
+    assert _requirements(db, event.id)["Main hall"][2:] == (None, None)
 
 
 @pytest.mark.story("19.2", ac=2)

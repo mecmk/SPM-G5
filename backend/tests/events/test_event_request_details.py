@@ -1039,6 +1039,29 @@ def test_an_equipment_line_of_another_request_cannot_be_claimed(organiser_client
 
 
 @pytest.mark.story("2.1", ac=7)
+def test_one_equipment_line_cannot_be_sent_twice_in_one_save(organiser_client):
+    """An edited line is matched by its id, so two lines sent with the same id - even of
+    different types - are refused, and the request keeps its equipment."""
+    created = create_event_request(organiser_client, equipment=[_equipment("LAPTOP", 1)])
+    line_id = created["equipment"][0]["id"]
+
+    response = organiser_client.patch(
+        f"/events/{created['id']}",
+        json={
+            "equipment": [
+                _equipment("LAPTOP", 2, id=line_id),
+                _equipment("WIRELESS_MIC", 2, id=line_id),
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert "each option can be chosen only once" in _detail(response)
+    after = organiser_client.get(f"/events/{created['id']}").json()
+    assert after["equipment"] == created["equipment"]
+
+
+@pytest.mark.story("2.1", ac=7)
 def test_facilities_and_accessibility_needs_can_be_replaced_or_cleared(organiser_client):
     created = create_event_request(
         organiser_client,

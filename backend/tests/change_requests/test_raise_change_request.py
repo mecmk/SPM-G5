@@ -92,6 +92,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import Engine, delete, select, text
@@ -117,6 +118,7 @@ from tests.support.factories import (
     make_venue,
     make_venue_requirement,
 )
+from tests.support.faults import OTHER_CONSTRAINT, fail_flush
 from tests.support.seed import Events, Users
 
 _REASON = "The keynote speaker can only attend a day later."
@@ -1054,6 +1056,43 @@ def test_unknown_field_is_refused(organiser_client, db: Session, field):
 
 
 @pytest.mark.story("19.1", ac=4)
+def test_one_venue_requirement_cannot_be_proposed_twice(organiser_client, db: Session):
+    """A kept requirement is matched by its id (2.7 AC3), so a proposal sending one id for two
+    requirements is refused, as the request form's own save refuses it."""
+    event = _planning_event(db)
+    hall_id = str(make_venue_requirement(db, event.id, name="Hall", capacity=100))
+
+    response = _raise(
+        organiser_client,
+        event.id,
+        "venue_requirements",
+        [
+            {"id": hall_id, "name": "Hall", "capacity": 80},
+            {"id": hall_id, "name": "Breakout", "capacity": 20},
+        ],
+    )
+
+    assert response.status_code == 422, response.text
+    assert "Each option can be chosen only once." in response.text
+    assert _change_requests(db, event.id) == []
+
+
+@pytest.mark.story("19.1", ac=3)
+def test_a_field_the_service_does_not_know_is_an_error_not_a_silent_value(db: Session):
+    """Each field is read and checked by a rule of its own. The request schema admits only the four
+    fields those rules cover, so the fallbacks are reached only by a direct call: a field (or body)
+    with no rule is a programming error raised loudly, never a value stored unchecked."""
+    event = _planning_event(db)
+
+    with pytest.raises(TypeError, match="unhandled change request field: name"):
+        change_requests_service._current_value(event, "name")
+    with pytest.raises(TypeError, match="unhandled change request field: schedule"):
+        change_requests_service._current_and_proposed(
+            db, event, SimpleNamespace(field="schedule", proposed=None)
+        )
+
+
+@pytest.mark.story("19.1", ac=4)
 @pytest.mark.parametrize(
     ("field", "proposed"),
     [
@@ -1119,6 +1158,31 @@ def test_database_refuses_two_pending_requests_for_one_field(db: Session):
     with pytest.raises(IntegrityError):
         with db.begin_nested():
             _insert_change_request(db, event.id, field="expected_attendance")
+
+
+@pytest.mark.story("19.1", ac=6)
+def test_a_constraint_other_than_the_pending_field_index_is_not_reported_as_a_duplicate(
+    organiser_client, db: Session, monkeypatch
+):
+    """Only the one-pending-request-per-field index becomes AC6's 409; any other constraint that
+    refuses the request is raised as the error it is, and nothing is saved. The proposal's own
+    checks refuse first every value a constraint could, so the request's insert is made to fail on
+    a constraint no service names, once the proposal has been checked."""
+    event = _planning_event(db)
+    check_proposal = change_requests_service._current_and_proposed
+
+    def check_then_fail(*args, **kwargs):
+        checked = check_proposal(*args, **kwargs)
+        fail_flush(db, monkeypatch)
+        return checked
+
+    monkeypatch.setattr(change_requests_service, "_current_and_proposed", check_then_fail)
+
+    with pytest.raises(IntegrityError) as raised:
+        _raise(organiser_client, event.id, "expected_attendance", 150)
+
+    assert OTHER_CONSTRAINT in str(raised.value.orig)
+    assert _change_requests(db, event.id) == []
 
 
 @pytest.mark.story("19.1", ac=5)

@@ -5,13 +5,10 @@ requirement, and when. Organisers do not hold ``bookings:read`` - ``/bookings/fo
 no ownership and returns Venue Staff's reasons and the hold's history - so this is its own
 endpoint, behind ``bookings:read_own``, that answers only for the caller's own event.
 
-AC1 The organiser sees each approved or pending booking of their event (Q91, CL-183 (3): a
+AC4 The organiser sees each approved or pending booking of their event (Q91, CL-183 (3): a
     pending one shows a venue is being sought), with its venue name, location, requirement,
-    start and end, its setup and teardown, and when it was requested (f21.2.1). Closed bookings
-    - rejected, withdrawn, cancelled, expired - hold nothing, so they are left out. Only those
+    start and end, its setup and teardown, and when it was requested (f21.2.1). Only those
     fields are returned.
-AC2 Another organiser's event, or one that does not exist, is not found; every other role is
-    refused, and an organiser is still refused ``/bookings/for-event``.
 AC5 Rejected, withdrawn, cancelled and expired bookings are not shown to the organiser, except
     the cancelled ones AC10 names. (f7.1.2, CL-183; 9.5, CL-194; f7.1.3, CL-210)
 AC7 An approved booking whose hold is still open (12.7 AC1) is not shown as confirmed: it says the
@@ -25,10 +22,13 @@ AC10 (f7.1.3, CL-210) A booking the safety review released (21.3), the coordinat
     (12.8) or a venue closure cancelled (9.5) is returned too, Cancelled, with its cause and why:
     the finding's required change or the coordinator's reason, or the closure's reason but not
     its description. Who released it is not returned.
+AC6 Another organiser's event, or one that does not exist, is not found; every other role is
+    refused, and an organiser is still refused ``/bookings/for-event``.
 AC11 A request a venue closure rejected stays hidden, and so does every other cancelled booking:
     replaced (12.6), released by an approved change (19.2), or released with its event (6.2).
 
-AC4, AC8, AC9 and AC10 are how the page shows these bookings: tests/e2e/events.spec.ts.
+The backlog numbers these as 7.1's own ACs since CL-183; f7.1.2 first called AC4 and AC6 its
+AC1 and AC2. How the page shows the bookings (AC4, AC8, AC9, AC10) is tests/e2e/events.spec.ts.
 
 Conflict cases do not apply: the endpoint only reads.
 
@@ -137,8 +137,8 @@ def _ids(response) -> set[str]:
     return {entry["id"] for entry in response.json()}
 
 
-# --- AC1: the organiser sees their event's approved and pending bookings ---------------------
-@pytest.mark.story("7.1", ac=1)
+# --- AC4, AC5: the organiser sees their event's approved and pending bookings ----------------
+@pytest.mark.story("7.1", ac=4)
 def test_the_organiser_sees_an_approved_booking_with_its_venue_requirement_and_times(
     organiser_client, db: Session
 ):
@@ -160,7 +160,7 @@ def test_the_organiser_sees_an_approved_booking_with_its_venue_requirement_and_t
     assert entry["status"] == BookingStatus.APPROVED
 
 
-@pytest.mark.story("7.1", ac=1)
+@pytest.mark.story("7.1", ac=4)
 def test_a_pending_booking_is_shown_beside_an_approved_one(organiser_client, db: Session):
     event = _event(db)
     approved = _booking(db, event, requirement="Plenary hall")
@@ -173,7 +173,7 @@ def test_a_pending_booking_is_shown_beside_an_approved_one(organiser_client, db:
     assert by_id[str(pending.id)]["status"] == BookingStatus.PENDING
 
 
-@pytest.mark.story("7.1", ac=1)
+@pytest.mark.story("7.1", ac=5)
 @pytest.mark.parametrize(
     ("status", "extra"),
     [
@@ -191,7 +191,7 @@ def test_a_closed_booking_is_left_out(organiser_client, db: Session, status, ext
     assert _ids(organiser_client.get(_path(event.id))) == {str(live.id)}
 
 
-@pytest.mark.story("7.1", ac=1)
+@pytest.mark.story("7.1", ac=4)
 def test_an_additional_venue_has_no_requirement_name(organiser_client, db: Session):
     event = _event(db)
     _booking(db, event, requirement=None)
@@ -201,7 +201,7 @@ def test_an_additional_venue_has_no_requirement_name(organiser_client, db: Sessi
     assert entry["venue_requirement_name"] is None
 
 
-@pytest.mark.story("7.1", ac=1)
+@pytest.mark.story("7.1", ac=4)
 def test_an_event_with_no_bookings_has_an_empty_list(organiser_client, db: Session):
     event = _event(db)
 
@@ -211,7 +211,7 @@ def test_an_event_with_no_bookings_has_an_empty_list(organiser_client, db: Sessi
     assert response.json() == []
 
 
-@pytest.mark.story("7.1", ac=1)
+@pytest.mark.story("7.1", ac=5)
 def test_a_hold_that_has_lapsed_is_not_shown_as_approved(organiser_client, db: Session):
     """Story 12.7 AC3: every booking endpoint expires lapsed holds before it answers, so a hold
     that lapsed an hour ago is EXPIRED by the time the list is read, and so left out."""
@@ -221,7 +221,7 @@ def test_a_hold_that_has_lapsed_is_not_shown_as_approved(organiser_client, db: S
     assert _ids(organiser_client.get(_path(event.id))) == set()
 
 
-@pytest.mark.story("7.1", ac=1)
+@pytest.mark.story("7.1", ac=4)
 def test_only_the_organisers_fields_are_returned(organiser_client, db: Session):
     """Venue Staff's reasons, the coordinator's suitability override and the hold's history are
     internal: none of them reaches the organiser."""
@@ -233,7 +233,7 @@ def test_only_the_organisers_fields_are_returned(organiser_client, db: Session):
     assert set(entry) == _SAFE_FIELDS
 
 
-@pytest.mark.story("7.1", ac=1)
+@pytest.mark.story("7.1", ac=4)
 def test_a_booking_carries_its_venues_first_picture(organiser_client, db: Session):
     """The card shows the same picture as the venue's catalogue card, or none if it has none."""
     event = _event(db)
@@ -401,8 +401,8 @@ def test_a_request_a_closure_rejected_stays_hidden(organiser_client, db: Session
     assert _ids(organiser_client.get(_path(event.id))) == {str(live.id)}
 
 
-# --- AC2: only the event's own organiser -----------------------------------------------------
-@pytest.mark.story("7.1", ac=2)
+# --- AC6: only the event's own organiser -----------------------------------------------------
+@pytest.mark.story("7.1", ac=6)
 def test_another_organisers_event_is_not_found(organiser_client, db: Session):
     """Events.APPROVED is Omar's, with an approved and a pending booking."""
     response = organiser_client.get(_path(Events.APPROVED))
@@ -411,7 +411,7 @@ def test_another_organisers_event_is_not_found(organiser_client, db: Session):
     assert response.json() == {"detail": EVENT_NOT_FOUND_MESSAGE}
 
 
-@pytest.mark.story("7.1", ac=2)
+@pytest.mark.story("7.1", ac=4)
 def test_its_own_organiser_sees_a_seeded_events_bookings(login_as):
     client = login_as(Users.ORGANISER_2)
 
@@ -420,7 +420,7 @@ def test_its_own_organiser_sees_a_seeded_events_bookings(login_as):
     assert {str(Bookings.APPROVED_GRAND_HALL), str(Bookings.PENDING_SEMINAR_ROOM)} <= ids
 
 
-@pytest.mark.story("7.1", ac=2)
+@pytest.mark.story("7.1", ac=6)
 def test_an_unknown_event_is_not_found(organiser_client):
     response = organiser_client.get(_path(uuid.uuid4()))
 
@@ -428,7 +428,7 @@ def test_an_unknown_event_is_not_found(organiser_client):
     assert response.json() == {"detail": EVENT_NOT_FOUND_MESSAGE}
 
 
-@pytest.mark.story("7.1", ac=2)
+@pytest.mark.story("7.1", ac=6)
 def test_signed_out_visitors_are_refused(client, db: Session):
     event = _event(db)
 
@@ -437,7 +437,7 @@ def test_signed_out_visitors_are_refused(client, db: Session):
     assert response.status_code == 401
 
 
-@pytest.mark.story("7.1", ac=2)
+@pytest.mark.story("7.1", ac=6)
 @pytest.mark.parametrize(
     "user",
     [user for user in Users.ONE_PER_ROLE if user.role != "EVENT_ORGANISER"],
@@ -453,7 +453,7 @@ def test_other_roles_are_refused(login_as, db: Session, user):
     assert response.status_code == 403
 
 
-@pytest.mark.story("7.1", ac=2)
+@pytest.mark.story("7.1", ac=6)
 def test_an_organiser_is_still_refused_every_events_bookings(organiser_client, db: Session):
     """``/bookings/for-event`` checks no ownership, so organisers must never hold
     ``bookings:read``."""

@@ -140,10 +140,10 @@ def _blank_to_none(value: str | None) -> str | None:
 class _OperatingHoursMixin(BaseModel):
     @model_validator(mode="after")
     def _check_operating_hours(self):
+        """Fix f8.3.4 (story 8.3 AC13): a new venue must give both times, so only their order is
+        checked; ``VenueUpdate`` replaces this check, and the service checks the merged pair."""
         start = getattr(self, "operating_hours_start", None)
         end = getattr(self, "operating_hours_end", None)
-        if (start is None) != (end is None):
-            raise ValueError("operating_hours_start and operating_hours_end must be given together")
         if start is not None and end is not None and end <= start:
             raise ValueError("operating_hours_end must be after operating_hours_start")
         return self

@@ -616,6 +616,44 @@ def test_a_closure_moved_earlier_clear_of_its_old_dates_lists_only_its_new_dates
 
 
 @pytest.mark.story("9.5", ac=1)
+def test_the_preview_of_an_edit_to_an_unknown_period_is_not_found(db, venue_staff_client):
+    """AC1 (D22): the slices an edit adds are measured against the period being edited, so one
+    that does not exist, or belongs to another venue, is 404 rather than a preview of nothing."""
+    venue, other = make_venue(db), make_venue(db)
+    elsewhere = _period(db, other.id, _day(5), _day(8))
+
+    for period_id in (uuid.uuid4(), elsewhere.id):
+        response = _preview(
+            venue_staff_client, venue.id, _day(2), _day(12), period_id=str(period_id)
+        )
+        assert response.status_code == 404, response.text
+        assert response.json()["detail"] == "Unavailability period not found."
+
+
+@pytest.mark.story("9.5", ac=1)
+def test_extending_a_closure_without_the_confirmation_is_refused_and_nothing_is_written(
+    db, venue_staff_client
+):
+    """AC1: extending a closure shows the same confirmation for each booking it newly covers, and
+    the API holds the same line as for a new closure - an edit that reaches a booking it did not
+    confirm is a 409 carrying the fresh list. The period keeps its end and the request stays
+    pending."""
+    venue = make_venue(db)
+    period = _period(db, venue.id, _day(2), _day(5))
+    beyond = _live(db, venue.id, _day(8))
+    db.commit()
+
+    refused = _edit(venue_staff_client, venue.id, period.id, ends_at=_day(10).isoformat())
+
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["message"] == venue_service.CLOSURE_NEEDS_CONFIRMATION_MESSAGE
+    assert [entry["booking_id"] for entry in detail["bookings"]] == [str(beyond.id)]
+    assert _periods(db, venue.id)[0].ends_at == _day(5)
+    assert _stored(db, beyond.id).status == "PENDING"
+
+
+@pytest.mark.story("9.5", ac=1)
 def test_a_booking_already_under_way_is_previewed_and_ended(db, venue_staff_client):
     """AC1: its held period began an hour ago and ends in two, and it is still to come."""
     venue = make_venue(db)
@@ -2363,3 +2401,35 @@ def test_the_same_save_sent_twice_makes_two_closures_and_ends_nothing_more(db, v
     assert _closure(db, booking.id) == recorded
     assert len(_audit(db, "BOOKING_RELEASED", booking.id)) == 1
     assert told_before == 2 and len(_told(db, event.id)) == told_before
+
+
+@pytest.mark.story("9.5", ac=10)
+def test_a_booking_that_stopped_holding_after_it_was_read_is_left_as_it_is(db):
+    """AC10: a booking whose hold expired first is left as it is. ``end_bookings_for_closure``
+    is handed an approved booking whose hold lapsed in the database after it was read, beside
+    one that still holds. The release finds nothing to release: the lapsed booking stays expired
+    with no release or closure recorded and no audit entry, and the event's notice names only
+    the booking that was cancelled.
+
+    Real data cannot reach this through the save: it locks and re-reads every booking it ends
+    (``_lock_covered_bookings``), so one handed over as approved still holds its venue. The
+    expiry is written in SQL under the session's copy of the booking."""
+    venue = make_venue(db)
+    event = _event_for(db)
+    holding = _pending_of(db, event, venue.id, _day(3), status="APPROVED")
+    lapsed = _pending_of(db, event, venue.id, _day(4), status="APPROVED", hold_expires_at=_day(2))
+    period = _period(db, venue.id, _day(2), _day(7))
+    db.execute(
+        text("UPDATE venue_bookings SET status = 'EXPIRED' WHERE id = :id"), {"id": lapsed.id}
+    )
+
+    booking_service.end_bookings_for_closure(
+        db, venue, period, [holding, lapsed], actor=_staff(db), now=datetime.now(UTC)
+    )
+
+    assert _stored(db, holding.id).status == "CANCELLED"
+    stale = _stored(db, lapsed.id)
+    assert (stale.status, stale.release_cause, stale.closure_reason) == ("EXPIRED", None, None)
+    assert _audit(db, "BOOKING_RELEASED", lapsed.id) == []
+    [notice] = [each for each in _told(db, event.id) if each.recipient_id == Users.COORDINATOR.id]
+    assert notice.message.count("was cancelled") == 1
