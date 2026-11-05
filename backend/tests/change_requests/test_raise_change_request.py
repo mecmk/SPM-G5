@@ -58,8 +58,8 @@ Decisions recorded for fix f19.1.1 (CL-149, and the review of #125):
   event to Planning for a new safety check (AC11; the warning is an e2e case).
 * Change requests close 24 hours before the event's set-up time: the earliest set-up start
   (``held_from``) among its bookings that hold a venue, Pending or Approved, or its start time if
-  that is earlier or it has none. That covers an event already under way or over, which nothing
-  marks Completed yet (Q57). (Team decision on the review of #125.)
+  that is earlier or it has none. That covers an event already under way, or over but not yet
+  marked Completed by the API's timer (fix f21.2.2). (Team decision on the review of #125.)
 
 Minimum attendance (fix f19.1.2; Q80 to Q82, CL-172, replacing CL-143's refusal on raising; CL-179)
 AC14 The change form shows, beneath the new attendance, the lowest allowed and the venue
@@ -1490,8 +1490,8 @@ def _event_status(db: Session, event_id: uuid.UUID) -> str:
 
 
 def _ended_event(db: Session, *, status: str) -> Event:
-    """Olivia's event that ended yesterday, its status left as it was: nothing marks an ended event
-    Completed yet (Q57)."""
+    """Olivia's event that ended yesterday, its status left as it was: these tests run no
+    completion timer (fix f21.2.2), and one ended in Planning is never completed."""
     starts_at = datetime.now(UTC) - timedelta(days=1, hours=8)
     return _planning_event(
         db, status=status, starts_at=starts_at, ends_at=starts_at + timedelta(hours=8)
@@ -1754,9 +1754,9 @@ def test_only_a_booking_that_holds_a_venue_sets_the_set_up_time(
 @pytest.mark.story("19.1", ac=12)
 @pytest.mark.parametrize("status", [EventStatus.PLANNING, EventStatus.CONFIRMED])
 def test_change_request_refused_once_the_event_has_ended(organiser_client, db: Session, status):
-    """AC12's "not for Completed events", while nothing marks an ended event Completed (Q57): an
-    event that is over is long past its set-up, so it takes none, whatever its status still says.
-    The seed's Autumn Book Swap, Confirmed and over since 3 Oct, is such an event."""
+    """AC12's "not for Completed events", before the completion timer marks an ended Confirmed
+    event Completed (fix f21.2.2), and for one that ended in Planning, which it never does: an
+    event that is over is long past its set-up, so it takes none, whatever its status still says."""
     event = _ended_event(db, status=status)
 
     response = _raise(organiser_client, event.id, "expected_attendance", 150)

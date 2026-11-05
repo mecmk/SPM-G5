@@ -91,6 +91,7 @@ _RULES: tuple[tuple[Permission, TargetKind, frozenset[NotificationType]], ...] =
                 _T.SAFETY_CHANGES_REQUESTED,
                 _T.EVENT_CONFIRMED,
                 _T.EVENT_RETURNED_TO_PLANNING,
+                _T.EVENT_COMPLETED,  # f21.2.2
             }
         ),
     ),
@@ -115,6 +116,7 @@ _RULES: tuple[tuple[Permission, TargetKind, frozenset[NotificationType]], ...] =
                 _T.EVENT_CANCELLED,
                 _T.EQUIPMENT_SHORT,
                 _T.EQUIPMENT_DECIDED,
+                _T.EVENT_COMPLETED,  # f21.2.2
             }
         ),
     ),
