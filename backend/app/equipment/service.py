@@ -2353,7 +2353,9 @@ _SINGAPORE = timezone(timedelta(hours=8))
 HOLDS_START_BEFORE_TODAY_MESSAGE = "The start date cannot be before today."
 HOLDS_END_BEFORE_START_MESSAGE = "The end date cannot be before the start date."
 HOLDS_END_BEFORE_TODAY_MESSAGE = "The end date cannot be before today."
-# AC1/AC2/AC5: the items that hold units. The writes release a hold as its item leaves them.
+# AC1/AC2/AC5 with fix f17.3.2: the items the schedule lists - those sent to Technical Support. A
+# not-yet-sent item's hold still takes units, so availability counts it, but it is not listed. The
+# writes release a hold as its item leaves these.
 _HOLDING_ITEM_STATUSES = frozenset(HeldItemStatus)
 
 

@@ -489,10 +489,11 @@ class EquipmentShortageOut(BaseModel):
 # Story 17.3: the equipment holds schedule
 # =============================================================================================
 class HeldItemStatus(StrEnum):
-    """Story 17.3 AC1/AC2: the statuses of an item that holds units - not yet sent to Technical
-    Support (15.1 AC2), Pending or Accepted. An item in any other holds nothing (AC5)."""
+    """Story 17.3 AC1/AC2 with fix f17.3.2: the statuses of an item the schedule lists - Pending or
+    Accepted. An item not yet sent (REQUESTED) is not Technical Support's yet (16.1 AC7), so it is
+    left out, though its hold still takes units (15.1 AC2). An item in any other holds nothing
+    (AC5)."""
 
-    REQUESTED = EquipmentRequestStatus.REQUESTED
     PENDING = EquipmentRequestStatus.PENDING
     ACCEPTED = EquipmentRequestStatus.ACCEPTED
 
