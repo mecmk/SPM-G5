@@ -13,12 +13,17 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentItemStatus, string> = {
   UNAVAILABLE: 'Unavailable',
   CANCELLED: 'Released',
   WITHDRAWN: 'Withdrawn',
+  OUT_OF_SERVICE: 'Out of service',
 }
 
 /** Story 19.2 AC5, 17.2 AC3: an item kept only for Technical Support's record - cancelled after it
- *  was sent, or withdrawn by the coordinator - and no longer the event's. Mirrors the backend's
- *  `KEPT_FOR_RECORD` (backend/app/events/service.py). */
-export const KEPT_FOR_RECORD_STATUSES: readonly EquipmentItemStatus[] = ['CANCELLED', 'WITHDRAWN']
+ *  was sent, withdrawn by the coordinator, or closed as out of service (fix f16.2.4) - and no
+ *  longer the event's. Mirrors the backend's `KEPT_FOR_RECORD` (backend/app/events/service.py). */
+export const KEPT_FOR_RECORD_STATUSES: readonly EquipmentItemStatus[] = [
+  'CANCELLED',
+  'WITHDRAWN',
+  'OUT_OF_SERVICE',
+]
 
 /** Story 17.2 AC3, 15.1 AC6 (fix f15.1.1): items a correction leaves alone - those kept only for
  *  the record, and a declined one, which the event page lists as history and which does not count.
@@ -48,28 +53,16 @@ export function withdrawnWhenAndBy(withdrawnAt: string, withdrawnByName: string 
 
 /** Story 16.2 AC4: the mark on an event's item that units out of service leave short, as its
  *  coordinator reads it on the event's page. Fix f16.2.2 (16.2 AC9): the holds schedule marks
- *  the hold the same way. */
+ *  the hold the same way. Fix f16.2.4 (16.2 AC11): it says how many can still be supplied, and
+ *  no longer tells anyone to withdraw or remove the item - one short of every unit is closed
+ *  instead (AC10), so a short item has some left (but for one left so before that fix). */
 export function describeItemShort(unitsShort: number, quantity: number): string {
-  return `Short: ${unitsShort} of ${quantity} out of service`
+  return `Short: ${unitsShort} of ${quantity} out of service, so only ${quantity - unitsShort} can be supplied`
 }
 
-/** Fix f16.2.2 (16.2 AC8): what to do about a short item - withdraw one sent to Technical Support
- *  (17.2), or remove one never sent. */
-const SHORT_WITHDRAW_ADVICE =
-  "Technical Support can't supply these until the units are back; withdraw it if you need another type."
-const SHORT_REMOVE_ADVICE =
-  "Technical Support can't supply these until the units are back; remove it if you need another type."
-
-/** Fix f16.2.2 (16.2 AC8): a short item's mark on its event's page, with what to do about it.
- *  Fix f16.2.3: for the viewer who can change the equipment; anyone else reads describeItemShort. */
-export function describeItemShortWithAdvice(
-  unitsShort: number,
-  quantity: number,
-  isSent: boolean,
-): string {
-  const advice = isSent ? SHORT_WITHDRAW_ADVICE : SHORT_REMOVE_ADVICE
-  return `${describeItemShort(unitsShort, quantity)}. ${advice}`
-}
+/** Fix f16.2.4 (16.2 AC10): what an item closed as out of service says on its event's page. */
+export const OUT_OF_SERVICE_SENTENCE =
+  'Every unit held was taken out of service, so this item was closed and nothing is held for it. Request another type if you still need one.'
 
 /** Fix f16.2.2 (16.2 AC8/AC9): an accepted item left short reads Accepted, not Accepted
  *  (reserved), since its units can't all be supplied. Its status, the decision, stays Accepted:

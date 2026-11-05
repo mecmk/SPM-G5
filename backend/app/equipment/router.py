@@ -287,11 +287,14 @@ def list_event_shortages(
     event_id: uuid.UUID, db: DbSession, viewer: Annotated[CurrentUser, CanRead]
 ) -> list[EquipmentShortageOut]:
     """Story 16.2 AC4: the event's items that units out of service leave short, and by how many,
-    for its equipment list. Any internal role reading the event may read it."""
+    for its equipment list. Fix f16.2.4 (AC13): only its coordinator, the Leads and Technical
+    Support; anyone else reading the event is refused (403)."""
     try:
         return service.list_event_shortages(db, event_id, viewer=viewer, now=datetime.now(UTC))
     except service.EventNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, EVENT_NOT_FOUND_MESSAGE) from None
+    except service.ShortagesNotYours as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from None
 
 
 def _out_of_service_refusal(exc: Exception) -> HTTPException:

@@ -419,10 +419,14 @@ def make_equipment_item(
     item has on a submitted event, for the event's period; an item that was declined, cancelled,
     withdrawn or flagged unavailable holds nothing, so pass ``is_held=False`` for those. A
     withdrawn one is stamped as withdrawn now by Users.COORDINATOR unless told otherwise (story
-    17.2 AC3, ck_event_equipment_requests_withdrawal)."""
+    17.2 AC3, ck_event_equipment_requests_withdrawal), and one closed as out of service as closed
+    now from Pending (fix f16.2.4, ck_event_equipment_requests_out_of_service)."""
     if status == "WITHDRAWN":
         overrides.setdefault("withdrawn_at", datetime.now(UTC))
         overrides.setdefault("withdrawn_by_id", Users.COORDINATOR.id)
+    if status == "OUT_OF_SERVICE":
+        overrides.setdefault("out_of_service_at", datetime.now(UTC))
+        overrides.setdefault("out_of_service_from", "PENDING")
     item = EventEquipmentRequest(
         event_id=event.id,
         equipment_type_id=equipment_type.id,

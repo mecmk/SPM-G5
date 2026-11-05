@@ -47,7 +47,14 @@ QUEUE_PATH = "/equipment-requests"
 TOKEN = "Quokka"
 SEARCH_MAX_LENGTH = 100
 PENDING, ACCEPTED, DECLINED = "PENDING", "ACCEPTED", "DECLINED"
-NO_COUNTS = {"pending": 0, "accepted": 0, "declined": 0, "cancelled": 0, "withdrawn": 0}
+NO_COUNTS = {
+    "pending": 0,
+    "accepted": 0,
+    "declined": 0,
+    "cancelled": 0,
+    "withdrawn": 0,
+    "out_of_service": 0,  # fix f16.2.4 (16.2 AC12)
+}
 
 SGT = timezone(timedelta(hours=8))
 

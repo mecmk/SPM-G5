@@ -136,6 +136,8 @@ class EquipmentRequestStatus:
         "CANCELLED"  # its event was cancelled (6.2), or a change removed it once sent (19.2)
     )
     WITHDRAWN = "WITHDRAWN"  # the coordinator withdrew it once sent (17.2)
+    # Fix f16.2.4: a record of units out of service left it none of its units (16.2 AC10)
+    OUT_OF_SERVICE = "OUT_OF_SERVICE"
 
 
 class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -174,6 +176,11 @@ class EventEquipmentRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     withdrawn_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
+    # Fix f16.2.4 (16.2 AC10): when a record of units out of service closed the item, and the
+    # status it was closed from; both set exactly when it is OUT_OF_SERVICE
+    # (ck_event_equipment_requests_out_of_service).
+    out_of_service_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    out_of_service_from: Mapped[str | None] = mapped_column(Text)
 
     # Story 17.1 AC1: the event, whose period an item holding nothing is for.
     event: Mapped[Event] = relationship(back_populates="equipment_requests")

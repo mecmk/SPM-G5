@@ -1983,6 +1983,7 @@ td.num {
 .badge-draft,
 .badge-released,
 .badge-withdrawn,
+.badge-out_of_service,
 .badge-expired,
 .badge-neutral {
   color: var(--neutral);

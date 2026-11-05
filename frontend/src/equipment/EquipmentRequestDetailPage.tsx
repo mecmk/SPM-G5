@@ -20,6 +20,7 @@ import {
 import {
   CANCELLED_AT_LABEL,
   NOT_RECORDED,
+  OUT_OF_SERVICE_AT_LABEL,
   WITHDRAWN_AT_LABEL,
   formatDateTime,
   formatSchedule,
@@ -164,6 +165,13 @@ export function EquipmentRequestDetailPage() {
               <span className="fact-label">{WITHDRAWN_AT_LABEL}</span>
               <br />
               {withdrawnWhenAndBy(entry.withdrawn_at, entry.withdrawn_by_name)}
+            </p>
+          )}
+          {entry.out_of_service_at !== null && (
+            <p className="subtle-block">
+              <span className="fact-label">{OUT_OF_SERVICE_AT_LABEL}</span>
+              <br />
+              {formatDateTime(entry.out_of_service_at)}
             </p>
           )}
 

@@ -21,12 +21,19 @@ import { ERROR_REGISTRY } from '../errors/registry'
 import {
   HOLDING_STATUSES,
   HOLD_LENGTH_SENTENCE,
+  OUT_OF_SERVICE_SENTENCE,
   describeItemShort,
-  describeItemShortWithAdvice,
   equipmentStatusLabel,
   withdrawnWhenAndBy,
 } from '../shared/equipmentStatus'
-import { CANCEL, CLOSE, NOT_RECORDED, formatDateTime, formatSchedule } from '../shared/format'
+import {
+  CANCEL,
+  CLOSE,
+  NOT_RECORDED,
+  OUT_OF_SERVICE_AT_LABEL,
+  formatDateTime,
+  formatSchedule,
+} from '../shared/format'
 import { FLAGGED_BY_SAFETY_REVIEW } from '../shared/safetyReview'
 import { ErrorToast } from '../components/ErrorToast'
 import { refuseNonDigits } from '../shared/inputGuards'
@@ -99,8 +106,9 @@ export interface EquipmentRequestsSectionProps {
   isAwaitingDecision: boolean
   /** Story 21.2 AC4: the latest safety review says the equipment must change. */
   isFlagged: boolean
-  /** Story 16.2 AC4: the viewer reads equipment (an internal role), so the items units out of
-   *  service leave short are marked. */
+  /** Story 16.2 AC4 with fix f16.2.4 (16.2 AC13): the viewer is the event's coordinator, an Event
+   *  Coordinator Lead or Technical Support, so the items units out of service leave short are
+   *  marked, and a closed one says why. Anyone else sees only each item's status. */
   canSeeShortages: boolean
   /** Reloads the event after a change, so every item shows its new status. */
   onChanged: () => Promise<void>
@@ -121,10 +129,11 @@ export interface EquipmentRequestsSectionProps {
  * highlighted and says so.
  * Story 16.2 AC4: an item that Technical Support's units out of service leave short says by how
  * many, for whoever reads equipment - its coordinator first - worked out by the server each time
- * the event is loaded, so the mark goes once enough units are back. Fix f16.2.2 (16.2 AC8): the
- * mark says what to do - withdraw a sent item, remove an unsent one - and an accepted item left
- * short reads Accepted, not Accepted (reserved). Fix f16.2.3: only to a viewer who can change the
- * equipment, who has the Withdraw or Remove button; everyone else reads the mark alone.
+ * the event is loaded, so the mark goes once enough units are back. Fix f16.2.2 (16.2 AC8): an
+ * accepted item left short reads Accepted, not Accepted (reserved). Fix f16.2.4: the mark says how
+ * many can still be supplied, with no advice to withdraw or remove it (AC11); an item closed as
+ * out of service says so, and when (AC10); only the event's coordinator, the Leads and Technical
+ * Support read either (AC13).
  * Story 17.1 AC1: each item names the period it is for - what its hold covers, or its event's
  * while it holds nothing (the server decides). AC4: a released item says it holds nothing if it
  * was held until then, and keeps a decline's reason. AC6: the list is the event as loaded, so a
@@ -494,14 +503,18 @@ export function EquipmentRequestsSection({
                     <>
                       <br />
                       <span className="small item-short">
-                        {canChange
-                          ? describeItemShortWithAdvice(
-                              shortByItem.get(item.id)!,
-                              item.quantity,
-                              WITHDRAWABLE_STATUSES.includes(item.status),
-                            )
-                          : describeItemShort(shortByItem.get(item.id)!, item.quantity)}
+                        {describeItemShort(shortByItem.get(item.id)!, item.quantity)}
                       </span>
+                    </>
+                  )}
+                  {canSeeShortages && item.out_of_service_at !== null && (
+                    <>
+                      <br />
+                      <span className="item-timing">
+                        {OUT_OF_SERVICE_AT_LABEL} {formatDateTime(item.out_of_service_at)}
+                      </span>
+                      <br />
+                      <span className="small item-short">{OUT_OF_SERVICE_SENTENCE}</span>
                     </>
                   )}
                   {wasHeldUntilReleased(item) && (

@@ -216,6 +216,8 @@ def test_coordinator_records_an_item_which_waits_to_be_sent(coordinator_client, 
         # Story 17.2 AC3: never withdrawn.
         "withdrawn_at": None,
         "withdrawn_by_name": None,
+        # Fix f16.2.4 (16.2 AC10): never closed as out of service.
+        "out_of_service_at": None,
     }
     assert _lines(coordinator_client, event.id) == [body]
 
