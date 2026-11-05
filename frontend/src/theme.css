@@ -449,6 +449,22 @@ label textarea:focus,
   outline-offset: 1px;
 }
 
+/* A select draws its own arrow, inside the box, rather than the browser's, which sits on the box's
+   edge. It is also set on a select in a disabled section, whose own rule would clear it. */
+label select,
+fieldset:disabled label select {
+  appearance: none;
+  padding-right: 2.25rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.125rem) 50%,
+    calc(100% - 0.8125rem) 50%;
+  background-size: 0.3125rem 0.3125rem;
+  background-repeat: no-repeat;
+}
+
 /* ---------- buttons: one solid primary; outlined, ghost and danger beside it ---------- */
 
 button,
