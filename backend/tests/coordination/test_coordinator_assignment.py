@@ -1,13 +1,26 @@
 """Story 5.1 - be: assign coordinator to event.
 
-AC1 A submitted event can be assigned to exactly one coordinator at a time.
-AC2 Only users holding the Event Coordinator role can be selected.
-AC3 The assignment is recorded with who assigned it and when.
-AC4 The assigned coordinator's name is visible on the event.
+The criteria this file tests, as they stand since stories 5.4 and 5.6:
 
-Since story 5.6 (Q16) only the Event Coordinator Lead writes an assignment: 5.4 gave the Lead the
-first one, and 5.6 the reassignments, which name the coordinator the Lead saw
-(``expected_coordinator_id``). The writes here are therefore the Lead's.
+AC1  A submitted event has exactly one coordinator at a time; assigning by hand replaces the
+     current one.
+AC2  Only active Event Coordinators can be assigned.
+AC3  Each assignment records who made it and when.
+AC4  The assigned coordinator's name is visible on the event. The event page's tile is proven in
+     tests/e2e/coordinator-assignment.spec.ts.
+AC6  When coordinators are added or deactivated, the one added can be assigned and the one
+     deactivated no longer can.
+AC10 A hand reassignment changes only its own event: no other event's coordinator moves, and the
+     next submission still waits unassigned.
+AC11 Only Event Coordinators are ever assigned: every other role, the Lead's included, is refused.
+AC13 Assigning by hand is refused (403) for roles that do not review events.
+
+Story 5.4 AC9 switched off 5.1's automatic, round-robin assignment and replaced 5.1 AC1, AC2 and
+AC13: since story 5.6 (Q16) only the Event Coordinator Lead writes an assignment - 5.4 gave the Lead
+the first one, and 5.6 the reassignments, which name the coordinator the Lead saw
+(``expected_coordinator_id``). The writes here are therefore the Lead's, and AC13's refusal now
+covers every role but the Lead's (5.4 AC7). What submission does about a coordinator (AC5, AC7-AC9,
+AC12, AC14, AC15) is in test_auto_assign_coordinator.py.
 """
 
 from __future__ import annotations
@@ -19,7 +32,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.events.models import EventStatus
-from tests.support.factories import make_event, make_user
+from tests.support.factories import create_submittable_event_request, make_event, make_user
 from tests.support.seed import Events, Users
 
 
@@ -309,6 +322,50 @@ def test_assignment_is_written_to_the_audit_log(login_as, db: Session):
     assert entry.details["coordinator_id"] == str(Users.COORDINATOR_2.id)
 
 
+# --- AC6: coordinators added or deactivated -----------------------------------------------
+@pytest.mark.story("5.1", ac=6)
+def test_a_coordinator_added_later_is_offered_and_can_be_assigned(login_as, db: Session):
+    added = make_user(db, role="EVENT_COORDINATOR", full_name="Cara Coordinator")
+    lead = login_as(Users.LEAD)
+
+    offered = lead.get("/coordinators")
+    response = lead.put(
+        f"/events/{Events.SUBMITTED}/coordinator",
+        json={
+            "coordinator_id": str(added.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+
+    assert str(added.id) in {u["id"] for u in offered.json()}
+    assert response.status_code == 200, response.text
+    assert _assigned_coordinator_id(db, Events.SUBMITTED) == added.id
+
+
+@pytest.mark.story("5.1", ac=6)
+def test_a_coordinator_deactivated_later_is_no_longer_offered_or_assignable(login_as, db: Session):
+    """Carl was active and offered; once deactivated he is skipped, and Chloe still is offered."""
+    lead = login_as(Users.LEAD)
+    assert str(Users.COORDINATOR_2.id) in {u["id"] for u in lead.get("/coordinators").json()}
+    db.execute(
+        text("UPDATE users SET is_active = FALSE WHERE id = :u"), {"u": Users.COORDINATOR_2.id}
+    )
+    before = _open_assignments(db, Events.SUBMITTED)
+
+    offered = {u["id"] for u in lead.get("/coordinators").json()}
+    response = lead.put(
+        f"/events/{Events.SUBMITTED}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+
+    assert offered == {str(Users.COORDINATOR.id)}
+    assert response.status_code == 422, response.text
+    assert _open_assignments(db, Events.SUBMITTED) == before
+
+
 # --- AC4: the coordinator's name is visible on the event -----------------------------------
 @pytest.mark.story("5.1", ac=4)
 def test_assigned_coordinator_name_is_returned_on_assignment(login_as):
@@ -392,7 +449,8 @@ def test_the_coordinator_of_an_unknown_event_is_not_found(login_as):
     assert response.json()["detail"] == "Event not found."
 
 
-# --- Access control (story 1.2 AC4 applied to this endpoint) -------------------------------
+# --- AC13: access control (story 1.2 AC4 applied to this endpoint) -------------------------
+@pytest.mark.story("5.1", ac=13)
 @pytest.mark.story("5.4", ac=7)
 @pytest.mark.parametrize(
     "user",
@@ -424,3 +482,58 @@ def test_signing_in_is_required_to_assign(client):
     )
 
     assert response.status_code == 401, response.text
+
+
+# --- AC10: a hand reassignment changes only its own event ----------------------------------
+@pytest.mark.story("5.1", ac=10)
+def test_a_reassignment_moves_no_other_event_and_the_next_submission_waits(login_as, db: Session):
+    pointers = text("SELECT id, assigned_coordinator_id FROM events WHERE id <> :e ORDER BY id")
+    others_before = db.execute(pointers, {"e": Events.APPROVED}).all()
+
+    reassigned = login_as(Users.LEAD).put(
+        f"/events/{Events.APPROVED}/coordinator",
+        json={
+            "coordinator_id": str(Users.COORDINATOR_2.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+    organiser = login_as(Users.ORGANISER)
+    draft = create_submittable_event_request(organiser)
+    submitted = organiser.post(f"/events/{draft['id']}/submit")
+
+    assert reassigned.status_code == 200, reassigned.text
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["assigned_coordinator_id"] is None
+    others_after = [
+        row
+        for row in db.execute(pointers, {"e": Events.APPROVED}).all()
+        if str(row.id) != draft["id"]
+    ]
+    assert others_after == others_before
+
+
+# --- AC11: only Event Coordinators are ever assigned ---------------------------------------
+@pytest.mark.story("5.1", ac=11)
+@pytest.mark.parametrize(
+    "user",
+    # Every role but the coordinator's, so a role added later is refused here without editing it.
+    [user for user in Users.ONE_PER_ROLE if user.role != "EVENT_COORDINATOR"],
+    ids=lambda u: u.role,
+)
+def test_no_role_but_the_event_coordinator_is_ever_assigned(login_as, db: Session, user):
+    """The Lead, who assigns, cannot be given the event either."""
+    lead = login_as(Users.LEAD)
+    before = _open_assignments(db, Events.SUBMITTED)
+
+    offered = {u["id"] for u in lead.get("/coordinators").json()}
+    response = lead.put(
+        f"/events/{Events.SUBMITTED}/coordinator",
+        json={
+            "coordinator_id": str(user.id),
+            "expected_coordinator_id": str(Users.COORDINATOR.id),
+        },
+    )
+
+    assert str(user.id) not in offered
+    assert response.status_code == 422, response.text
+    assert _open_assignments(db, Events.SUBMITTED) == before
