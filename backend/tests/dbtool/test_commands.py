@@ -27,7 +27,7 @@ import pytest
 
 from app.dbtool import connection, migrate
 from app.dbtool.__main__ import REQUIRED_SEEDED_TABLES, SEED_ACCOUNTS, SEED_PASSWORD, main
-from tests.dbtool.conftest import quiet
+from tests.dbtool.conftest import PROTECTED_DATABASES, quiet
 
 REMOTE_URL = "postgresql+psycopg://connectsphere:secret@db.example.com:5432/connectsphere"
 UNREACHABLE_URL = "postgresql+psycopg://connectsphere:connectsphere@127.0.0.1:1/connectsphere"
@@ -278,6 +278,27 @@ def test_reset_and_drop_refuse_a_remote_database_before_connecting(monkeypatch, 
 def test_only_this_machine_and_the_compose_service_count_as_local(url, is_local):
     """The hosts reset and drop accept without --force."""
     assert connection.is_local(url) is is_local
+
+
+@pytest.mark.story("1")
+@pytest.mark.parametrize("options", [[], ["--test"]], ids=["DATABASE_URL", "test-database"])
+def test_a_command_given_no_url_cannot_reach_the_development_or_test_database(monkeypatch, options):
+    """Without --url the tool falls back to DATABASE_URL, or with --test to the database the
+    rest of the suite shares. Neither is the scratch database, so a test here that forgot --url
+    must fail to connect rather than rebuild a database someone else is using."""
+    tried = []
+
+    def record(conninfo, **_kwargs):
+        tried.append(connection.database_name(conninfo))
+        raise psycopg.OperationalError("this test never connects")
+
+    monkeypatch.setattr(psycopg, "connect", record)
+
+    with pytest.raises(psycopg.OperationalError):
+        main([*options, "status"])
+
+    assert tried
+    assert not set(tried) & PROTECTED_DATABASES
 
 
 @pytest.mark.story("1")

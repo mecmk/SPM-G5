@@ -7,6 +7,17 @@ migrated and one migrated and seeded, built once so that each test starts from a
 without re-running every migration. All three are dropped before the first test and after the
 last. The data dictionary and ERD the tool generates go to a temporary folder, never to
 ``docs/database/``.
+
+No test here can reach the development database or the shared test database, even if the
+scratch setup fails:
+
+- every scratch name ends in ``_dbtool``, and the session stops before any drop if one of them
+  matches either database's name;
+- the scratch fixtures have no fallback, so if the server is down or a template can't be built,
+  the tests that need them error and nothing else runs against a database;
+- the tool's own defaults (``DATABASE_URL``, and the test database for ``--test``) point at a
+  port nothing listens on for the length of each test, so a test that forgets ``--url`` fails to
+  connect.
 """
 
 from __future__ import annotations
@@ -24,6 +35,11 @@ from tests.conftest import TEST_DATABASE_URL
 SCRATCH_DATABASE = f"{connection.database_name(TEST_DATABASE_URL)}_dbtool"
 MIGRATED_TEMPLATE = f"{SCRATCH_DATABASE}_migrated"
 SEEDED_TEMPLATE = f"{SCRATCH_DATABASE}_seeded"
+PROTECTED_DATABASES = {
+    connection.database_name(settings.database_url),
+    connection.database_name(TEST_DATABASE_URL),
+}
+NO_DEFAULT_URL = "postgresql+psycopg://connectsphere:connectsphere@127.0.0.1:1/pass_a_url"
 
 
 def quiet(*_args, **_kwargs) -> None:
@@ -49,11 +65,7 @@ def _copy(template_url: str, url: str) -> None:
 @pytest.fixture(scope="session")
 def scratch_url() -> Iterator[str]:
     """The URL of the scratch database, which does not exist when the first test starts."""
-    protected = {
-        connection.database_name(settings.database_url),
-        connection.database_name(TEST_DATABASE_URL),
-    }
-    if protected & {SCRATCH_DATABASE, MIGRATED_TEMPLATE, SEEDED_TEMPLATE}:
+    if PROTECTED_DATABASES & {SCRATCH_DATABASE, MIGRATED_TEMPLATE, SEEDED_TEMPLATE}:
         pytest.exit("refusing to let the dbtool tests rebuild the development or test database")
     scratch = [_url(SCRATCH_DATABASE), _url(MIGRATED_TEMPLATE), _url(SEEDED_TEMPLATE)]
     connection.wait_for_server(scratch[0], timeout_seconds=10)
@@ -108,6 +120,13 @@ def seeded_url(scratch_url: str, seeded_template: str) -> str:
     """The scratch database migrated and seeded, as `npm run db:ready` leaves it."""
     _copy(seeded_template, scratch_url)
     return scratch_url
+
+
+@pytest.fixture(autouse=True)
+def no_default_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the tool's fallbacks for a missing --url at a port nothing listens on."""
+    monkeypatch.setattr(settings, "database_url", NO_DEFAULT_URL)
+    monkeypatch.setattr(settings, "test_database_url", NO_DEFAULT_URL)
 
 
 @pytest.fixture(autouse=True)
