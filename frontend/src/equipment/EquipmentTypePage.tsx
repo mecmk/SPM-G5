@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import {
   fetchEquipmentType,
@@ -11,6 +11,7 @@ import { EQUIPMENT_CATALOGUE_PATH, EQUIPMENT_CATALOGUE_TITLE } from '../routes'
 import { useLoaded } from '../shared/useLoaded'
 import { OutOfServiceForm } from './OutOfServiceForm'
 import { OutOfServiceRecords } from './OutOfServiceRecords'
+import { useReloadAtNextChange } from './useReloadAtNextChange'
 import { ErrorToast } from '../components/ErrorToast'
 
 /** The type as last loaded, and when, which labels each record In force or Scheduled. */
@@ -30,7 +31,8 @@ function typeLoader(typeId: string): () => Promise<LoadedType> {
  * its stock, the units out of service now and where it is kept; its current records, each with
  * Edit and End; and the Out of service form (AC1, AC3, AC5), each the page's full width. After
  * each change the type is loaded again, so the figures and the list show what the server now
- * has, and a record ended or removed takes its edit with it (AC3: an ended record is not edited).
+ * has, and, fix f16.2.5, as a record starts or ends, so the figures change at its time without a
+ * refresh. A record ended or removed takes its edit with it (AC3: an ended record is not edited).
  * A back link returns to the catalogue. Keyed by the type in the address, so moving to another
  * type starts afresh.
  */
@@ -45,9 +47,8 @@ function EquipmentTypeView({ typeId }: { typeId: string }) {
   const page = loaded?.page ?? null
   const [editing, setEditing] = useState<OutOfServiceRecord | null>(null)
 
-  function loadAgain() {
-    setLoad(() => typeLoader(typeId))
-  }
+  const loadAgain = useCallback(() => setLoad(() => typeLoader(typeId)), [typeId])
+  useReloadAtNextChange(page?.records ?? null, loaded?.loadedAt ?? 0, loadAgain)
 
   function handleSaved() {
     setEditing(null)
