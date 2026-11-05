@@ -17,6 +17,7 @@ dev = [
     "pytest>=8.3",
     "httpx>=0.27",
     "ruff>=0.7",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.pytest.ini_options]
@@ -25,6 +26,16 @@ markers = [
     "story(id, ac=None): backlog story (and optional acceptance-criterion number) the test verifies",
 ]
 filterwarnings = ["ignore::DeprecationWarning:starlette.testclient", "ignore::DeprecationWarning:fastapi.testclient"]
+
+# Coverage (npm run test:coverage, docs/testing/README.md): every line and branch of app/.
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = true
 
 [tool.ruff]
 line-length = 100

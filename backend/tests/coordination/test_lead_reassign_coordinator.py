@@ -235,6 +235,7 @@ def test_reassigning_an_unknown_event_is_not_found(login_as):
 
 
 @pytest.mark.story("5.6", ac=1)
+@pytest.mark.story("6.1", ac=3)
 def test_a_reassigned_event_moves_to_the_new_coordinators_list(login_as, db: Session):
     """6.1: the event leaves Chloe's own list and joins Carl's on their next read."""
     event = _assigned_event(db, Users.COORDINATOR.id, status=EventStatus.PLANNING)

@@ -14,16 +14,18 @@
  * AC5  Then Find a venue is greyed and reads "All required venues booked"; it opens the catalogue
  *      with no requirement selected, for an additional venue, which the booking list names so.
  * AC6  An event with one requirement goes straight to its page: booking-requests.spec.ts's
- *      '12.1 AC1/AC3' send.
- * AC7  An event marked "No venue requirements" keeps Find a venue's normal look.
- * AC8  A requirement whose request is withdrawn needs a venue again. Decided 11 Oct 2026: a
+ *      '12.1 AC1/AC3/12.5 AC6' send.
+ * AC7  A requirement whose request is withdrawn needs a venue again. Decided 11 Oct 2026: a
  *      requirement's pending request is withdrawn from the catalogue too, where no other venue
  *      reads "No other venues match these filters.", or switched to another venue in one step.
- * AC9  A venue requested for one requirement drops out for another whose times overlap.
- * AC11 A requirement that has a request offers no other - not in the catalogue, nor on a venue's
+ * AC8  A venue requested for one requirement drops out for another whose times overlap.
+ * AC10 A requirement that has a request offers no other - not in the catalogue, nor on a venue's
  *      record - and a request step whose address names another event's requirement offers none.
  *      A pending request offers "Switch to this venue" instead; a booked one offers nothing. The
  *      server's own refusals are backend cases.
+ *
+ * The backlog removed the old AC7 ("No venue requirements" keeps Find a venue's normal look) and
+ * renumbered the rest. Its test stays, as '12.5:', since a legacy event can still be marked so.
  *
  * The rules - one request per requirement, refusals, the race, independence, suitability per
  * requirement - are backend cases: backend/tests/bookings/test_request_per_requirement.py.
@@ -90,7 +92,7 @@ function notice(page: Page, text: string) {
   return page.getByRole('status').filter({ hasText: text })
 }
 
-test('12.5 AC1/AC2/AC3/AC9/AC4/AC5/AC8: a venue is requested for each requirement in turn', async ({
+test('12.5 AC1/AC2/AC3/AC8/AC4/AC5/AC7: a venue is requested for each requirement in turn', async ({
   page,
 }) => {
   test.setTimeout(120_000)
@@ -208,7 +210,7 @@ test('12.5 AC5: an additional venue is requested beside the booked requirement',
   await expect(bookingList(page)).toContainText('Grand Hall')
 })
 
-test('12.5 AC11: a requirement that has a venue offers no other, in the catalogue or a venue record', async ({
+test('12.5 AC10: a requirement that has a venue offers no other, in the catalogue or a venue record', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -234,7 +236,7 @@ test('12.5 AC11: a requirement that has a venue offers no other, in the catalogu
   await expect(page.getByRole('link', { name: SWITCH_TO })).toHaveCount(0)
 })
 
-test('12.5 AC8/AC11: a requested venue is withdrawn or switched from the catalogue', async ({
+test('12.5 AC7/AC10: a requested venue is withdrawn or switched from the catalogue', async ({
   page,
 }) => {
   test.setTimeout(120_000)
@@ -311,7 +313,7 @@ test('12.5 AC8/AC11: a requested venue is withdrawn or switched from the catalog
   await expect(bookingList(page)).toContainText('Withdrawn')
 })
 
-test("12.5 AC11: a request step naming another event's requirement offers no request", async ({
+test("12.5 AC10: a request step naming another event's requirement offers no request", async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -324,7 +326,7 @@ test("12.5 AC11: a request step naming another event's requirement offers no req
   await expect(page.getByRole('button', { name: 'Send request' })).toHaveCount(0)
 })
 
-test('12.5 AC7: an event marked "No venue requirements" keeps Find a venue as it is', async ({
+test('12.5: an event marked "No venue requirements" keeps Find a venue as it is', async ({
   page,
 }) => {
   // Only an event approved before f2.7.4 can still be marked "No venue requirements" (2.7 AC19),

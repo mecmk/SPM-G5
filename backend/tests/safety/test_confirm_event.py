@@ -132,6 +132,7 @@ def test_renaming_the_venue_after_approval_does_not_block_confirm(
 
 
 @pytest.mark.story("21.2", ac=14)
+@pytest.mark.story("2.7", ac=19)
 def test_a_lapsed_hold_not_yet_swept_blocks_confirm(coordinator_client, db: Session, approved):
     """Story 12.7 AC4: from its expiry the hold has expired, and the event can no longer be
     confirmed with it - though the timer has not run yet."""
@@ -149,6 +150,7 @@ def test_a_lapsed_hold_not_yet_swept_blocks_confirm(coordinator_client, db: Sess
 
 
 @pytest.mark.story("21.2", ac=14)
+@pytest.mark.story("2.7", ac=19)
 def test_lost_booking_blocks_confirm_and_is_named(coordinator_client, db: Session, approved):
     approved.booking.status = BookingStatus.EXPIRED
     db.flush()

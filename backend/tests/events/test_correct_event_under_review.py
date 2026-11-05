@@ -695,6 +695,95 @@ def test_a_picture_saved_against_a_stale_copy_is_refused(coordinator_client, upl
     assert _read(coordinator_client, Events.SUBMITTED)["cover_image_url"] == SEEDED_PICTURE
 
 
+@pytest.mark.story("7.2", ac=4)
+def test_an_empty_picture_is_refused_and_changes_nothing(coordinator_client, upload_dir):
+    """2.1 AC14's checks apply to the coordinator's upload: a file with nothing in it is refused
+    before the event is read."""
+    event = _read(coordinator_client, Events.SUBMITTED)
+
+    response = _upload_picture(coordinator_client, event, b"")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Choose a picture to upload."
+    assert _read(coordinator_client, Events.SUBMITTED)["cover_image_url"] == SEEDED_PICTURE
+    assert list(upload_dir.rglob("*.*")) == []
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_picture_over_5_mb_is_refused_and_changes_nothing(coordinator_client, upload_dir):
+    """2.1 AC14: one byte over 5 MB is too large, under review as on the organiser's draft."""
+    event = _read(coordinator_client, Events.SUBMITTED)
+    too_large = _PNG.ljust(service.MAX_COVER_IMAGE_BYTES + 1, b"\x00")
+
+    response = _upload_picture(coordinator_client, event, too_large)
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == service.COVER_IMAGE_TOO_LARGE_MESSAGE
+    assert _read(coordinator_client, Events.SUBMITTED)["cover_image_url"] == SEEDED_PICTURE
+    assert list(upload_dir.rglob("*.*")) == []
+
+
+@pytest.mark.story("7.2", ac=8)
+def test_changing_the_picture_of_a_missing_event_is_not_found(coordinator_client, upload_dir):
+    missing = {"id": str(uuid.uuid4()), "updated_at": datetime.now(UTC).isoformat()}
+
+    uploaded = _upload_picture(coordinator_client, missing)
+    removed = _remove_picture(coordinator_client, missing)
+
+    assert (uploaded.status_code, removed.status_code) == (404, 404)
+    assert uploaded.json()["detail"] == removed.json()["detail"] == "Event not found."
+    assert list(upload_dir.rglob("*.*")) == []
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_removing_a_picture_the_event_does_not_have_writes_nothing(
+    coordinator_client, db: Session, upload_dir
+):
+    """Taking off a picture that is already gone is a no-op: no second correction is recorded for
+    the change history (7.4)."""
+    event = _read(coordinator_client, Events.SUBMITTED)
+    first = _remove_picture(coordinator_client, event)
+    assert first.status_code == 200, first.text
+
+    again = _remove_picture(coordinator_client, first.json())
+
+    assert again.status_code == 200, again.text
+    assert again.json()["cover_image_url"] is None
+    corrections = db.execute(
+        text(
+            "SELECT count(*) FROM audit_log"
+            " WHERE action = 'EVENT_DETAILS_CORRECTED' AND entity_id = :id"
+        ),
+        {"id": Events.SUBMITTED},
+    ).scalar_one()
+    assert corrections == 1
+
+
+@pytest.mark.story("7.2", ac=4)
+def test_a_picture_whose_save_fails_is_not_left_on_disk(
+    coordinator_client, db: Session, upload_dir, monkeypatch
+):
+    """The file is written before its address is stored, so a save that fails after that point
+    deletes the file again and reports the failure: no picture is left that no event points at.
+    Nothing in real data makes that save fail, so the change-history write is made to."""
+
+    def fail_to_record(*args, **kwargs):
+        raise RuntimeError("change history unavailable")
+
+    monkeypatch.setattr(service, "record_changes", fail_to_record)
+    event = _read(coordinator_client, Events.SUBMITTED)
+
+    with pytest.raises(RuntimeError, match="change history unavailable"):
+        _upload_picture(coordinator_client, event)
+
+    assert list(upload_dir.rglob("*.*")) == []
+    db.rollback()
+    stored = db.execute(
+        text("SELECT cover_image_url FROM events WHERE id = :id"), {"id": Events.SUBMITTED}
+    ).scalar_one()
+    assert stored == SEEDED_PICTURE
+
+
 # --- AC12 (f7.2.4, replacing AC5): details lock at confirmation; internal notes do not ---------
 @pytest.mark.story("7.2", ac=12)
 def test_details_are_read_only_once_the_event_is_confirmed(coordinator_client):
@@ -1816,3 +1905,27 @@ def test_a_booking_requested_after_the_form_opened_is_still_respected(login_as, 
     assert booking.venue.name in response.json()["detail"]
     assert _read(client, event.id)["venue_requirements"] == opened["venue_requirements"]
     assert _booking_row(db, booking.id) == before
+
+
+@pytest.mark.story("7.2", ac=16)
+def test_a_conflict_met_after_the_correction_is_applied_rolls_it_back(
+    coordinator_client, monkeypatch
+):
+    """A refusal after the claim leaves the event as it was, a conflict (409) as much as an invalid
+    value (422). Every conflict real data meets is raised before the edit is applied, or turned
+    into a 422 (stock taken meanwhile, AC7), so the last check - the bookings' fit - is made to
+    raise one once the new name has been set on the event."""
+
+    def conflict(*args, **kwargs):
+        raise service.EventStateConflict("Another save changed this event.")
+
+    monkeypatch.setattr(service, "_check_bookings_still_fit", conflict)
+    event = _read(coordinator_client, Events.SUBMITTED)
+
+    response = _correct(coordinator_client, event, name="Renamed, then refused")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Another save changed this event."
+    after = _read(coordinator_client, Events.SUBMITTED)
+    assert after["name"] == event["name"]
+    assert after["updated_at"] == event["updated_at"]

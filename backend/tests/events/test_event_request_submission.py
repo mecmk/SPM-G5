@@ -25,6 +25,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.common.audit import AuditLog
+from app.events import service
 from tests.support.factories import create_event_request, create_submittable_event_request
 from tests.support.seed import Events, Users
 
@@ -306,6 +307,45 @@ def test_a_submitted_request_cannot_be_submitted_again(organiser_client, db: Ses
     assert second.status_code == 409
     assert "already been submitted" in second.text.lower()
     assert _state(db, created["id"])[1] == datetime.fromisoformat(first["submitted_at"])
+
+
+@pytest.mark.story("2.1", ac=12)
+def test_a_submission_racing_another_is_refused_and_writes_nothing(
+    organiser_client, db: Session, monkeypatch
+):
+    """The move to Under Review is conditional on the request still being a draft, so of two
+    submissions racing past the draft check only the first lands; the second is refused as already
+    submitted and writes no history or audit entry of its own. Two transactions cannot race on the
+    test's one connection, so the other submission is committed just before this one holds the
+    equipment, after its draft check."""
+    created = create_submittable_event_request(organiser_client)
+    other_submitted_at = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=1)
+    hold_equipment = service._hold_equipment
+
+    def submitted_meanwhile_then_hold(session, event, *args, **kwargs):
+        session.execute(
+            text("UPDATE events SET status = 'UNDER_REVIEW', submitted_at = :at WHERE id = :id"),
+            {"at": other_submitted_at, "id": event.id},
+        )
+        session.commit()
+        hold_equipment(session, event, *args, **kwargs)
+
+    monkeypatch.setattr(service, "_hold_equipment", submitted_meanwhile_then_hold)
+
+    response = _submit(organiser_client, created["id"])
+
+    assert response.status_code == 409
+    assert "already been submitted" in response.text.lower()
+    assert _state(db, created["id"]) == ("UNDER_REVIEW", other_submitted_at)
+    actions = db.scalars(
+        select(AuditLog.action).where(AuditLog.entity_id == uuid.UUID(created["id"]))
+    ).all()
+    assert actions == ["EVENT_CREATED"]
+    history = db.execute(
+        text("SELECT to_status FROM event_status_history WHERE event_id = :id"),
+        {"id": created["id"]},
+    ).scalars()
+    assert list(history) == ["DRAFT"]
 
 
 @pytest.mark.story("2.1", ac=12)

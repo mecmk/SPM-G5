@@ -20,7 +20,7 @@ tests/e2e/event-request.spec.ts. Submitting in general is test_event_request_sub
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -101,6 +101,26 @@ def test_registration_required_can_be_saved_yes_without_a_closing_date_on_a_draf
     body = response.json()
     assert body["registration_required"] is True
     assert body["registration_closes_at"] is None
+
+
+@pytest.mark.story("2.1", ac=17)
+def test_a_closing_date_on_a_draft_without_dates_is_kept_until_a_start_is_set(organiser_client):
+    """A draft need not have its dates yet. Its closing date is still checked for the past, but
+    "no later than the proposed start" waits until there is one."""
+    closes_at = future_datetime(days=10)
+
+    response = _create(
+        organiser_client,
+        starts_at=None,
+        ends_at=None,
+        registration_required=True,
+        registration_closes_at=closes_at.isoformat(),
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["starts_at"] is None
+    assert datetime.fromisoformat(body["registration_closes_at"]) == closes_at
 
 
 @pytest.mark.story("2.1", ac=17)

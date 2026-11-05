@@ -57,6 +57,7 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -75,6 +76,7 @@ from tests.support.factories import (
     make_venue_requirement,
     venue_payload,
 )
+from tests.support.faults import OTHER_CONSTRAINT, fail_flush
 from tests.support.seed import SafetyReviews, Users, Venues
 
 STANDARD_LAYOUTS = [
@@ -907,14 +909,17 @@ def test_a_layout_code_that_never_existed_is_refused_as_unknown(venue_staff_clie
 
 
 @pytest.mark.story("8.6", ac=11)
+@pytest.mark.parametrize("save", ["create", "update"])
 def test_a_layout_deleted_between_the_venue_saves_check_and_its_write_is_refused(
-    engine, monkeypatch
+    engine, monkeypatch, save
 ):
     """The save has checked the venue's layouts when another Venue Staff member's delete of one
     lands. The database's foreign key then stops the write, and the save is refused the same
-    way, naming the layout, rather than failing."""
+    way, naming the layout, rather than failing. A new venue is not created; an edited one keeps
+    its layouts."""
     tag = uuid.uuid4().hex[:8].upper()
     code = f"RACE_{tag}"
+    new_name = f"Race New Venue {tag}"
     with Session(engine) as session:
         session.add(RoomLayout(code=code, name=f"Race layout {tag}", description=_DESCRIPTION))
         venue_id = make_venue(session, name=f"Race Venue {tag}").id
@@ -933,9 +938,16 @@ def test_a_layout_deleted_between_the_venue_saves_check_and_its_write_is_refused
     def save_venue() -> str:
         with Session(engine) as session:
             actor = session.get(User, Users.VENUE_STAFF.id)
-            change = venue_schemas.VenueUpdate(layouts=[venue_schemas.VenueLayoutIn(code=code)])
+            layouts = [venue_schemas.VenueLayoutIn(code=code)]
             try:
-                service.update_venue(session, venue_id, change, actor=actor)
+                if save == "create":
+                    data = venue_schemas.VenueCreate(
+                        **venue_payload(name=new_name, layouts=layouts)
+                    )
+                    service.create_venue(session, data, actor=actor)
+                else:
+                    change = venue_schemas.VenueUpdate(layouts=layouts)
+                    service.update_venue(session, venue_id, change, actor=actor)
             except service.RoomLayoutGone as refusal:
                 return str(refusal)
             return "saved"
@@ -957,8 +969,11 @@ def test_a_layout_deleted_between_the_venue_saves_check_and_its_write_is_refused
         )
         with Session(engine) as session:
             assert session.get(Venue, venue_id).layouts == []
+            assert session.scalar(select(func.count()).where(Venue.name == new_name)) == 0
     finally:
-        _clean_up(engine, codes=[code], venue_ids=[venue_id])
+        with Session(engine) as session:
+            created = list(session.scalars(select(Venue.id).where(Venue.name == new_name)))
+        _clean_up(engine, codes=[code], venue_ids=[venue_id, *created])
 
 
 @pytest.mark.story("8.6", ac=12)
@@ -1104,3 +1119,60 @@ def test_a_rename_in_progress_does_not_hold_up_a_venue_saved_with_the_layout(eng
             assert session.get(RoomLayout, code).name == f"Renamed {tag}"
     finally:
         _clean_up(engine, codes=[code], venue_ids=[venue_id])
+
+
+# --- a database refusal the service does not know --------------------------------------------
+# A layout's save turns the constraints it knows into a refusal of their own: the name index
+# (AC6, AC10), the primary key when a code is taken meanwhile (AC2, the next code is tried) and
+# the foreign keys of its uses (AC8). Any other is a fault, so it reaches the caller unchanged.
+# No real data reaches one, so ``fail_flush`` stands in for it. Autoflush is off for the call,
+# so the save's own flush is the one that fails.
+def _venue_staff(db: Session) -> User:
+    return db.get(User, Users.VENUE_STAFF.id)
+
+
+@pytest.mark.story("8.6", ac=2)
+def test_adding_a_layout_passes_on_a_database_refusal_it_does_not_know(db, monkeypatch):
+    """AC2: not taken for a code already in use, so no other code is tried; the refusal
+    propagates and no layout is added. The savepoint the insert runs in flushes once as it
+    opens, which is let through."""
+    data = venue_schemas.RoomLayoutCreate(name="Cabaret", description=_DESCRIPTION)
+    actor = _venue_staff(db)
+    fail_flush(db, monkeypatch, after=1)
+
+    with db.no_autoflush, pytest.raises(IntegrityError, match=OTHER_CONSTRAINT):
+        service.create_room_layout(db, data, actor=actor)
+
+    assert db.scalar(select(func.count()).where(RoomLayout.name == "Cabaret")) == 0
+
+
+@pytest.mark.story("8.6", ac=3)
+def test_changing_a_layout_passes_on_a_database_refusal_it_does_not_know(db, monkeypatch):
+    """AC3: not taken for a name in use; the refusal propagates and the layout keeps its name."""
+    change = venue_schemas.RoomLayoutUpdate(name="Lecture theatre")
+    actor = _venue_staff(db)
+    fail_flush(db, monkeypatch)
+
+    with db.no_autoflush, pytest.raises(IntegrityError, match=OTHER_CONSTRAINT):
+        service.update_room_layout(db, "THEATRE", change, actor=actor)
+
+    db.expire_all()
+    assert db.get(RoomLayout, "THEATRE").name == "Theatre"
+
+
+@pytest.mark.story("8.6", ac=8)
+def test_deleting_a_layout_passes_on_a_database_refusal_it_does_not_know(db, monkeypatch):
+    """AC8: only the foreign key of a venue, venue requirement or booking request means the
+    layout is in use; any other refusal propagates, and the layout stays, its code not kept as
+    deleted."""
+    db.add(RoomLayout(code="CABARET", name="Cabaret", description=_DESCRIPTION))
+    db.commit()
+    actor = _venue_staff(db)
+    fail_flush(db, monkeypatch)
+
+    with db.no_autoflush, pytest.raises(IntegrityError, match=OTHER_CONSTRAINT):
+        service.delete_room_layout(db, "CABARET", actor=actor)
+
+    db.expire_all()
+    assert db.get(RoomLayout, "CABARET") is not None
+    assert db.get(DeletedRoomLayout, "CABARET") is None

@@ -385,6 +385,31 @@ def test_the_list_holds_the_newest_50(login_as, db: Session):
     assert listed[-1]["title"] == "Notice 1"  # Notice 0, the oldest, is left out
 
 
+@pytest.mark.story("20.1", ac=2)
+def test_a_notification_sent_on_its_own_is_committed_at_once(db: Session):
+    """Every action today sends its notifications inside its own transaction (``commit=False``);
+    by default ``notify`` is a write of its own and commits it, so a rollback that follows cannot
+    take it back and the recipient's list holds it straight away."""
+    chloe = db.get(User, Users.COORDINATOR.id)
+
+    sent = notify(
+        db,
+        recipient=chloe,
+        actor=None,
+        notification_type=NotificationType.EVENT_APPROVED,
+        title="Sent on its own",
+        message="Committed as it is written.",
+    )
+    db.rollback()
+
+    assert sent is not None
+    titles = db.execute(
+        text("SELECT title FROM notifications WHERE recipient_id = :id AND title = :title"),
+        {"id": chloe.id, "title": "Sent on its own"},
+    ).scalars()
+    assert list(titles) == ["Sent on its own"]
+
+
 # --- AC3: nobody is notified of their own action ---------------------------------------------
 @pytest.mark.story("20.1", ac=3)
 def test_nobody_is_notified_of_their_own_action(db: Session):

@@ -70,6 +70,7 @@ from app.auth.models import User
 from app.common.audit import AuditLog
 from app.coordination.models import EventCoordinatorAssignment
 from app.equipment import schemas, service
+from app.events import service as events_service
 from app.events.models import (
     EquipmentReservation,
     EquipmentType,
@@ -690,6 +691,30 @@ def test_a_second_decision_is_refused_with_the_current_status(client, db, first,
     assert response.status_code == 409
     assert response.json()["detail"] == message
     assert _status(db, item) == first
+
+
+@pytest.mark.story("16.1", ac=9)
+def test_a_request_removed_while_the_decision_waited_is_not_found(tech_client, db, monkeypatch):
+    """The decision finds the request's event, waits for its lock, then reads the request again.
+    The coordinator can remove an item not yet sent (15.1 AC2) while it waits; the wait cannot be
+    staged on one session, so the removal is made as the lock is taken, and the decision is
+    refused as not found rather than read from a row that is gone."""
+    item = _pending(db, status="REQUESTED", is_held=False)
+    item_id, event_id = item.id, item.event_id
+    real_lock_event = events_service.lock_event
+
+    def removed_while_waiting(session: Session, locked_id: uuid.UUID) -> Event | None:
+        session.execute(delete(EventEquipmentRequest).where(EventEquipmentRequest.id == item_id))
+        return real_lock_event(session, locked_id)
+
+    monkeypatch.setattr(events_service, "lock_event", removed_while_waiting)
+
+    response = _accept(tech_client, item_id)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == NOT_FOUND_MESSAGE
+    assert db.get(EventEquipmentRequest, item_id) is None
+    assert _notices(db, event_id) == []
 
 
 # --- one request's own page, where it can be decided too ----------------------------------------

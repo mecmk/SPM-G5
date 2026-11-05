@@ -375,7 +375,7 @@ test('12.1 AC2/AC15: a two-day event keeps both dates from Find a venue to the r
   )
 })
 
-test('12.1 AC1/AC3: a coordinator raises a venue booking request for their approved event', async ({
+test('12.1 AC1/AC3/12.5 AC6: a coordinator raises a venue booking request for their approved event', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)
@@ -954,7 +954,7 @@ test("12.1 AC21: Switch to this venue starts at the new venue's times, not the r
   await expect(turnaroundGroup(turnaround, 'Teardown')).toContainText(venueDefault('45 min'))
 })
 
-test('12.2 AC1/AC2/AC4: a coordinator withdraws a pending request from the event page', async ({
+test('12.2 AC1/AC2/AC4/AC5: a coordinator withdraws a pending request from the event page', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)

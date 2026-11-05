@@ -107,6 +107,32 @@ def test_reject_event_refuses_a_blank_reason_even_bypassing_the_schema(db: Sessi
 
 
 @pytest.mark.story("4.5", ac=1)
+def test_the_services_own_refusal_of_a_reason_is_a_422_naming_it(
+    coordinator_client, db: Session, monkeypatch
+):
+    """Should a reason the schema let through reach the service's own check (above) and be
+    refused, the endpoint answers 422 with the service's sentence, and nothing is rejected.
+    ``EventRejection`` strips and refuses the same blanks first, so no request can reach that
+    check through the API: the service is made to refuse."""
+
+    def refuse(*args, **kwargs):
+        raise service.MissingDecisionReason()
+
+    monkeypatch.setattr(service, "reject_event", refuse)
+
+    response = coordinator_client.post(
+        f"/events/{Events.SUBMITTED}/reject", json={"reason": "Reaches the service."}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == str(service.MissingDecisionReason())
+    status = db.execute(
+        text("SELECT status FROM events WHERE id = :id"), {"id": Events.SUBMITTED}
+    ).scalar_one()
+    assert status == EventStatus.UNDER_REVIEW
+
+
+@pytest.mark.story("4.5", ac=1)
 def test_rejection_with_a_reason_succeeds_and_strips_it(coordinator_client, db: Session):
     response = coordinator_client.post(
         f"/events/{Events.SUBMITTED}/reject",

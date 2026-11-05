@@ -18,8 +18,11 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.events import service
 from app.events.models import EventStatus
 from tests.support.factories import (
     create_event_request,
@@ -27,6 +30,7 @@ from tests.support.factories import (
     future_datetime,
     make_event,
 )
+from tests.support.faults import OTHER_CONSTRAINT, fail_flush
 from tests.support.seed import Users
 
 
@@ -278,3 +282,37 @@ def test_a_live_requests_name_and_dates_cannot_be_reused(organiser_client, db: S
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.story("2.1", ac=20)
+@pytest.mark.parametrize(
+    ("via", "write"),
+    [("create", "_replace_equipment"), ("edit", "_apply_request_edit")],
+    ids=["create", "edit"],
+)
+def test_a_constraint_other_than_the_duplicate_guard_is_not_reported_as_a_duplicate(
+    organiser_client, db: Session, monkeypatch, via, write
+):
+    """Only AC20's index (and 2.7 AC9's requirement-name index) becomes a refusal; any other
+    constraint that refuses the save is raised as the error it is, never reported as a duplicate
+    request, and nothing is saved. The service's own checks refuse first every value a constraint
+    could, so the save's flush is made to fail on a constraint no service names, once the request
+    has been built."""
+    created = create_event_request(organiser_client, name="Q1 Kick-off") if via == "edit" else None
+    build = getattr(service, write)
+
+    def build_then_fail(*args, **kwargs):
+        build(*args, **kwargs)
+        fail_flush(db, monkeypatch)
+
+    monkeypatch.setattr(service, write, build_then_fail)
+
+    with pytest.raises(IntegrityError) as raised:
+        if via == "create":
+            _create(organiser_client, name="Q2 Kick-off")
+        else:
+            organiser_client.patch(f"/events/{created['id']}", json={"name": "Q2 Kick-off"})
+
+    assert OTHER_CONSTRAINT in str(raised.value.orig)
+    saved = db.execute(text("SELECT count(*) FROM events WHERE name = 'Q2 Kick-off'")).scalar_one()
+    assert saved == 0

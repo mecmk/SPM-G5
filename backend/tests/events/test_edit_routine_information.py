@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.events import service
 from app.events.models import EventStatus
 from tests.support.factories import make_event
 from tests.support.seed import Events, Users
@@ -230,6 +231,40 @@ def test_a_closed_event_refuses_with_409_even_for_an_unassigned_coordinator(logi
     response = _patch(login_as(Users.COORDINATOR_2), event.id, internal_notes="Too late.")
 
     assert response.status_code == 409
+
+
+@pytest.mark.story("7.2", ac=3)
+def test_an_edit_racing_the_event_closing_is_refused_naming_the_new_status(
+    coordinator_client, db: Session, monkeypatch
+):
+    """The write itself is conditional on the event not being closed, so an edit that found it open
+    but reaches the write after it was completed is refused, naming the status it is now, and saves
+    nothing. Two transactions cannot race on the test's one connection, so the event is completed,
+    and committed, just after the edit takes its row lock."""
+    event = make_event(db, assigned_coordinator_id=Users.COORDINATOR.id)
+    db.commit()
+    lock_event = service.lock_event
+
+    def lock_then_complete(session, event_id):
+        locked = lock_event(session, event_id)
+        session.execute(
+            text("UPDATE events SET status = 'COMPLETED' WHERE id = :id"), {"id": event_id}
+        )
+        session.commit()
+        return locked
+
+    monkeypatch.setattr(service, "lock_event", lock_then_complete)
+
+    response = _patch(coordinator_client, event.id, internal_notes="Too late.")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == service.ROUTINE_EDIT_CLOSED_MESSAGE.format(
+        status=EventStatus.COMPLETED
+    )
+    stored = db.execute(
+        text("SELECT internal_notes FROM events WHERE id = :id"), {"id": event.id}
+    ).scalar_one()
+    assert stored is None
 
 
 # --- failure behaviour --------------------------------------------------------------------

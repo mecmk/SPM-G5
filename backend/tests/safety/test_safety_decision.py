@@ -37,6 +37,7 @@ import uuid
 
 import pytest
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.bookings.models import BookingStatus
@@ -51,6 +52,7 @@ from app.notifications.models import Notification
 from app.safety.models import EventSafetyReview, SafetyReviewOutcome
 from app.safety.service import STATUS_CHANGED_MESSAGE
 from tests.support.factories import make_secured_event
+from tests.support.faults import OTHER_CONSTRAINT, fail_write_of
 from tests.support.seed import Users, Venues
 
 APPROVE = {"outcome": SafetyReviewOutcome.APPROVED, "findings": []}
@@ -368,6 +370,24 @@ def test_invalid_findings_are_refused(safety_client, db: Session, awaiting, payl
     response = _decide(safety_client, awaiting.event.id, payload)
 
     assert response.status_code == 422, response.text
+    assert _reviews(db, awaiting.event.id) == []
+    assert _status(db, awaiting.event) == EventStatus.AWAITING_SAFETY_CHECK
+
+
+@pytest.mark.story("21.2", ac=10)
+def test_a_database_refusal_other_than_an_unknown_factor_is_not_reported_as_one(
+    safety_client, db: Session, awaiting, monkeypatch
+):
+    """Writing the review turns only the factor-code foreign key into "unknown factor"; any other
+    constraint is raised as it is. The request's own checks pass before the write, so no real
+    data reaches another constraint: the flush that writes the review is made to fail as
+    PostgreSQL would."""
+    db.commit()  # keep the setup when the refusal rolls the session back
+    fail_write_of(db, monkeypatch, EventSafetyReview)
+
+    with pytest.raises(IntegrityError, match=OTHER_CONSTRAINT):
+        _decide(safety_client, awaiting.event.id, CHANGES)
+
     assert _reviews(db, awaiting.event.id) == []
     assert _status(db, awaiting.event) == EventStatus.AWAITING_SAFETY_CHECK
 

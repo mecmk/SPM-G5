@@ -6,7 +6,7 @@ shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement bef
 normal pending request once its original closes (9.5 AC8, CL-194).
 
 The tests that remain cover 12.6 AC3 and AC8 (an approved change that unfits an original that
-has a replacement raised before 9.5, pending or approved) and 12.5 AC11.
+has a replacement raised before 9.5, pending or approved) and 12.5 AC10.
 
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
@@ -77,14 +77,14 @@ to the event's pending and approved bookings alike) judges the two together:
 
 * a change that unfits a flagged original unfits its pending replacement as well, so both are
   released by 19.2 - the original with no "Replaced by", since no replacement approved took its
-  place - and the requirement needs a venue again (AC8, 12.5 AC11);
+  place - and the requirement needs a venue again (AC8, 12.5 AC10);
 * an attendance rise past what they were booked for unfits neither (fix f19.2.1), so both stay;
 * a release of the original alone (here through ``release_booking`` itself - the fit rule never
   separates the two, but a rejection or the sweep can close one meanwhile) leaves the pending
   replacement covering the requirement, a normal request refused beside it, and its approval
-  working, with nothing left to release (AC3, 12.5 AC11).
+  working, with nothing left to release (AC3, 12.5 AC10).
 
-Two cases are tagged 12.5 AC11, the one-request-per-requirement rule they prove, with the carve-out
+Two cases are tagged 12.5 AC10, the one-request-per-requirement rule they prove, with the carve-out
 of 12.6 AC10 in play; the rest are 12.6's. The release's own rules are test_replacement_approval.py
 (12.6) and test_decide_change_request.py (19.2); the database's guards are
 test_replacement_schema.py.
@@ -245,7 +245,7 @@ def _raise_requirement_layout(login_as, db: Session, scene, layout_code: str) ->
     return db.get(EventChangeRequest, uuid.UUID(response.json()["id"]))
 
 
-@pytest.mark.story("12.5", ac=11)
+@pytest.mark.story("12.5", ac=10)
 def test_a_requirement_needs_a_venue_again_once_the_change_released_both(login_as, db):
     """The requirement is laid out another way, so 19.2 releases the original and the replacement
     asked for it. With neither left the requirement is uncovered, and a normal request for a venue
@@ -270,7 +270,7 @@ def test_a_requirement_needs_a_venue_again_once_the_change_released_both(login_a
     assert again.status_code == 201, again.text
 
 
-@pytest.mark.story("12.5", ac=11)
+@pytest.mark.story("12.5", ac=10)
 def test_an_original_released_alone_leaves_its_pending_replacement_covering_the_requirement(
     login_as, db
 ):
