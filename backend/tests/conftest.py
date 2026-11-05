@@ -43,6 +43,10 @@ TEST_DATABASE_URL = settings.resolved_test_database_url
 # would be the development database's, not a test's transaction - so no test starts it.
 # tests/bookings/test_hold_expiry.py turns it on for its own timer test, with the sweep replaced.
 settings.hold_sweep_interval_seconds = 0
+# Fix f21.2.2: the timer that completes ended events, likewise.
+# tests/events/test_complete_ended_events.py turns it on for its own timer tests, with the pass
+# replaced.
+settings.event_completion_interval_seconds = 0
 
 
 # ---------------------------------------------------------------------------------------

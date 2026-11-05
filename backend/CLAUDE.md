@@ -51,6 +51,7 @@ setting to its upper-case name.
 | `UPLOAD_DIR` | `backend/uploads` | Where event cover pictures (story 2.1 AC14) and venue pictures (story 8.3 AC5) are written, served from `/uploads/events/` and `/uploads/venues/`. Git-ignored; tests and the e2e runner use a temporary folder |
 | `HOLD_EXPIRY_REMINDER_HOURS` | `24` | How long before an approved booking's hold expires its event's coordinator is warned (story 12.7 AC2). Venue Staff set each expiry as they approve; there is no default. Assumed until the customer gives a lead time |
 | `HOLD_SWEEP_INTERVAL_SECONDS` | `60` | How often the running API expires lapsed holds and sends due warnings. `0` turns the timer off; the backend tests do, since its own session would reach the development database. Every booking endpoint, the venue search and the calendar also sweep before answering |
+| `EVENT_COMPLETION_INTERVAL_SECONDS` | `60` | How often the running API marks each Confirmed event whose end has passed Completed and tells its organiser and coordinator (fix f21.2.2). The first pass runs as the API starts. `0` turns the timer off; the backend tests do, for the same reason |
 
 ## Domain
 

@@ -165,9 +165,23 @@ test('19.1 AC12: change requests are offered until 24 hours before set-up, sayin
   await expect(page.getByRole('button', { name: 'Request a change' })).toBeVisible()
   await expect(changeRequests(page).getByText(CLOSE_NOTE)).toBeVisible()
 
-  // ...his Autumn Book Swap, still Confirmed but over since 3 Oct (Q57), is long past its set-up:
-  // none are offered, and it says why.
-  await page.goto(`/events/${EVENTS.bookSwap}`)
+  // ...and once the server says they have closed, none are offered, and it says why. No seeded
+  // Confirmed event is within 24 hours of its set-up on every run's date (an ended one is
+  // Completed since f21.2.2), so the closed window is the server's answer, stubbed.
+  await page.route(
+    (url) => url.pathname === `/events/${EVENTS.confirmed}/change-request-window`,
+    (route) => {
+      const request = route.request()
+      if (request.resourceType() !== 'fetch') return route.fallback()
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ closes_at: '2026-10-01T01:00:00Z', is_open: false }),
+        headers: corsHeaders(request),
+      })
+    },
+  )
+  await page.reload()
   await expect(changeRequests(page).getByText(CLOSED_NOTE)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Request a change' })).toHaveCount(0)
 })
