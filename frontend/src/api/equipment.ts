@@ -441,9 +441,10 @@ export function listEventShortages(eventId: string): Promise<EquipmentShortage[]
 // Story 17.3: the equipment holds schedule
 // =============================================================================================
 
-/** Story 17.3 AC1/AC2: the statuses of an item that holds units - not yet sent, Pending or
- *  Accepted. Mirrors `HeldItemStatus`. */
-export type HeldItemStatus = 'REQUESTED' | 'PENDING' | 'ACCEPTED'
+/** Story 17.3 AC1/AC2 with fix f17.3.2: the statuses of an item the schedule lists - Pending or
+ *  Accepted. One not yet sent is not yet Technical Support's, so it is left out. Mirrors
+ *  `HeldItemStatus`. */
+export type HeldItemStatus = 'PENDING' | 'ACCEPTED'
 
 /** Mirrors `EquipmentHoldOut`: story 17.3 AC1, one hold - its event, the units it still holds, the
  *  dates it runs from and to, and its item's status. AC4: `item_id` opens a sent hold's request.
