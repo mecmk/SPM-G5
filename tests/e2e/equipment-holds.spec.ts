@@ -1,9 +1,8 @@
 /**
  * Story 17.3 - fe/be: view the equipment holds schedule as Technical Support.
  * AC1 the Equipment holds page groups every current hold by equipment type; under each type, each
- *     hold shows its event, quantity, from and to, and whether it is not yet sent, Pending or
- *     Accepted. Every type's grouping and the soonest-first order are backend cases.
- * AC2 a hold on an item not yet sent is listed (the seeded presentation laptops).
+ *     hold shows its event, quantity, from and to, and whether it is Pending or Accepted. Every type's grouping and the soonest-first order are backend cases.
+ * AC2 (f17.3.2) a hold on an item not yet sent is not listed (the seeded presentation laptops).
  * AC3 filtered by type and by either end of a date range, just the filters set kept in the page
  *     address; a range starting before today, an end before the start or before today, a
  *     five-digit year, a date left half typed and an address date no picker can hold (a time, or a
@@ -12,8 +11,7 @@
  *     they load, and a refusal with no sentence of its own (stubbed) names the filters. The range's
  *     own edges, Singapore days and the server's refusals are backend cases.
  * AC4 a sent hold opens its equipment request page, whose back link returns to the schedule as it
- *     was filtered, or unfiltered; a hold not yet sent has no page to open, and the schedule offers
- *     no Accept or Decline. The request page opened by its address leads back to the queue, and
+ *     was filtered, or unfiltered, and the schedule offers no Accept or Decline. The request page opened by its address leads back to the queue, and
  *     opened from the queue it still does: proved by equipment-queue.spec.ts's "15.2 AC1: View
  *     details opens the request…".
  * AC5 is a backend case: e2e cannot make time pass, and which items hold nothing is the server's
@@ -30,8 +28,9 @@
  *
  * Every flow reads the seeded Bayfront Product Showcase (backend/db/seed/020_sample_data.sql) on
  * 9 April 2031, which no other spec changes: three wireless microphones accepted, a speaker set
- * pending, two presentation laptops not yet sent, and a video camera declined. Other specs hold
- * equipment as this one runs, so rows are found by event name, never by how many a type has.
+ * pending, two presentation laptops not yet sent (so not listed), and a video camera declined.
+ * Other specs hold equipment as this one runs, so rows are found by event name, never by how many
+ * a type has.
  */
 import { expect, test, type Page } from '@playwright/test'
 import {
@@ -167,14 +166,9 @@ test('17.3 AC1/AC2: Technical Support opens the schedule and sees the showcase h
     'Pending',
     'View request →',
   ])
-  await expect(showcaseRow(page, 'Presentation laptop').getByRole('cell')).toHaveText([
-    SHOWCASE,
-    '2',
-    SHOWCASE_FROM,
-    SHOWCASE_TO,
-    'Not yet sent',
-    '',
-  ])
+  // AC2: the laptops are not yet sent, so they hold units but are not Technical Support's to see.
+  await expect(group(page, 'Presentation laptop')).toBeVisible()
+  await expect(showcaseRow(page, 'Presentation laptop')).toHaveCount(0)
   // AC5: Technical Support declined the camera, so it holds nothing.
   await expect(group(page, 'Video camera')).toBeVisible()
   await expect(showcaseRow(page, 'Video camera')).toHaveCount(0)
@@ -292,7 +286,7 @@ test('17.3 AC3: filtering by type and by either end of a range keeps just those 
   await expect(page).toHaveURL(new RegExp(`${HOLDS_PATH}$`))
   await expect(form.getByLabel('From date')).toHaveValue('')
   await expect(roadshowMics(page)).toHaveCount(1)
-  await expect(showcaseRow(page, 'Presentation laptop')).toBeVisible()
+  await expect(showcaseRow(page, 'Portable speaker set')).toBeVisible()
 })
 
 test('17.3 AC3: a range reaching before today is refused before anything is sent', async ({
@@ -414,7 +408,7 @@ test('17.3 AC3: a type in the address the server refuses stays in the type box, 
   await expect(roadshowMics(page)).toHaveCount(1)
 })
 
-test('17.3 AC4: a sent hold opens its request, which leads back to the schedule as filtered; one not yet sent has no page', async ({
+test('17.3 AC4: a hold opens its request, which leads back to the schedule as filtered', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.techSupport)
@@ -435,8 +429,6 @@ test('17.3 AC4: a sent hold opens its request, which leads back to the schedule 
   await openHolds(page, filtered)
 
   await expect(page.getByRole('button', { name: /^(Accept|Decline)$/ })).toHaveCount(0)
-  await expect(showcaseRow(page, 'Presentation laptop')).toContainText('Not yet sent')
-  await expect(showcaseRow(page, 'Presentation laptop').getByRole('link')).toHaveCount(0)
 
   await showcaseRow(page, 'Wireless microphone').getByRole('link', { name: 'View request' }).click()
   await expect(page).toHaveURL(/\/equipment\/requests\/[^/]+$/)

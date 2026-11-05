@@ -250,13 +250,13 @@ def test_each_hold_keeps_its_event_and_its_items_status():
     hold = _hold(mics)
 
     schedule = service.group_holds(
-        [_row(mics, hold, event_name="Harbour Expo", item_status="REQUESTED")],
+        [_row(mics, hold, event_name="Harbour Expo", item_status="PENDING")],
         type_code=None,
         units_short=NONE_SHORT,
     )
 
     (held,) = schedule.groups[0].holds
-    assert (held.hold, held.event_name, held.item_status) == (hold, "Harbour Expo", "REQUESTED")
+    assert (held.hold, held.event_name, held.item_status) == (hold, "Harbour Expo", "PENDING")
 
 
 @pytest.mark.story("17.3", ac=1)
