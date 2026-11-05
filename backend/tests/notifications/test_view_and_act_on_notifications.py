@@ -316,6 +316,7 @@ TARGET_CASES = [
             _T.SAFETY_CHANGES_REQUESTED,
             _T.EVENT_CONFIRMED,
             _T.EVENT_RETURNED_TO_PLANNING,
+            _T.EVENT_COMPLETED,
         )
     ),
     *(
@@ -333,6 +334,7 @@ TARGET_CASES = [
             _T.BOOKING_VENUE_UNAVAILABLE,
             _T.SAFETY_APPROVED,
             _T.SAFETY_CHANGES_REQUESTED,
+            _T.EVENT_COMPLETED,
         )
     ),
     *(

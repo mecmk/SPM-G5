@@ -97,6 +97,8 @@ class NotificationType(StrEnum):
     SAFETY_APPROVED = "SAFETY_APPROVED"  # 21.2: the coordinator and the organiser
     SAFETY_CHANGES_REQUESTED = "SAFETY_CHANGES_REQUESTED"  # 21.2: the coordinator and organiser
     EVENT_CONFIRMED = "EVENT_CONFIRMED"  # 21.2: the organiser and Safety Officers
+    # f21.2.2 (21.2 AC29): the organiser and the coordinator, from the system - the event has ended
+    EVENT_COMPLETED = "EVENT_COMPLETED"
     # 6.2: the event's coordinator, or every Event Coordinator Lead when it has none
     EVENT_CANCELLED = "EVENT_CANCELLED"
     REGISTRATION_CANCELLED = "REGISTRATION_CANCELLED"  # 6.2: each registered attendee

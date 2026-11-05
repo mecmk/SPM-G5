@@ -63,7 +63,7 @@ C4Container
 
     System_Boundary(connectsphere, "ConnectSphere") {
         Container(spa, "Single-page application", "React 19, TypeScript, Vite", "Role-aware screens, one area per feature. A section is listed only once a story delivers its page")
-        Container(api, "API application", "Python 3.12, FastAPI, Uvicorn", "REST endpoints, session authentication, role checks and business rules, plus a timer that expires lapsed venue holds. Publishes OpenAPI docs at /docs")
+        Container(api, "API application", "Python 3.12, FastAPI, Uvicorn", "REST endpoints, session authentication, role checks and business rules, plus timers that expire lapsed venue holds and mark ended events Completed. Publishes OpenAPI docs at /docs")
         ContainerDb(db, "Database", "PostgreSQL 16", "Users and sessions, events, venues, bookings, equipment, registrations, notifications and the audit log")
         Container(dbtool, "Schema and seed tool", "Python CLI, app.dbtool", "Applies SQL migrations, loads reference and sample data, regenerates the data dictionary and ERD")
     }
@@ -141,7 +141,7 @@ C4Component
 
     Container_Boundary(api, "API application") {
         Component(shared, "Shared services", "app/auth, app/common, app/db.py", "Sign-in and access control, the audit log writer, the phone number rule, the database session")
-        Component(events, "Event request service", "app/events, epics 2, 3, 6, 7", "Drafts, submission, event details and requirements, status transitions, routine edits")
+        Component(events, "Event request service", "app/events, epics 2, 3, 6, 7", "Drafts, submission, event details and requirements, status transitions, routine edits. A Confirmed event becomes Completed once it has ended, on the API's timer")
         Component(review, "Review and assignment service", "app/events and app/coordination, epics 4, 5", "Review queue, clarification conversation, approve or reject. The Lead's unassigned queue and first assignment, the Lead's overview of every active event and each coordinator's workload, and the Lead's reassignment of an event to another coordinator")
         Component(availability, "Venue availability service", "app/venues, epics 9, 10, 11", "Calendar, search and filter, suitability against capacity, facilities and layout. Venue Staff's closures: a saved closure, once Venue Staff confirm the bookings listed, rejects the venue's pending requests it covers and cancels its approved bookings, returns their Confirmed events to planning and tells their people")
         Component(bookings, "Venue booking service", "app/bookings, epics 12, 13, 14", "Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period. An approved booking's hold until its event is confirmed: the expiry Venue Staff set as they approve and their changes to it, and the sweep that warns coordinators and expires lapsed holds, run on the API's timer and before any answer a lapsed hold would change. The database completes the holds when an event becomes Confirmed")

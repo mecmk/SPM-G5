@@ -198,8 +198,9 @@ REPLACED_BY_REASON = "Replaced by {venue}"
 # the approved replacement replaces - and does not, when there was nothing to release (AC3).
 ORIGINAL_RELEASED_SENTENCE = "The booking of {venue} it replaces was released."
 # Story 19.1 AC12 (team decision on the review of #125), story 12.8 AC4: an event's plans stop
-# changing this long before its set-up time - which also covers an event under way or over, that
-# nothing marks Completed (Q57). Kept here because the set-up time is read from the bookings.
+# changing this long before its set-up time - which also covers an event under way, or one over
+# that the completion timer has not marked Completed yet (fix f21.2.2). Kept here because the
+# set-up time is read from the bookings.
 CHANGES_CUTOFF = timedelta(hours=24)
 
 # Story 12.8 AC3: Venue Staff's notice of a booking its coordinator cancelled.
