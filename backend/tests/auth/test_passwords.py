@@ -34,3 +34,13 @@ def test_verify_rejects_malformed_hashes(garbage):
 def test_empty_password_cannot_be_hashed():
     with pytest.raises(ValueError):
         hash_password("")
+
+
+@pytest.mark.story("1.1", ac=3)
+def test_verify_refuses_a_hash_stored_under_another_algorithm():
+    """The stored string names its algorithm so the scheme can change later; until one is
+    supported, a hash naming another is refused, even with a digest that matches the password."""
+    algorithm, *rest = hash_password("correct horse").split("$")
+
+    assert algorithm == "scrypt"
+    assert not verify_password("correct horse", "$".join(["argon2", *rest]))

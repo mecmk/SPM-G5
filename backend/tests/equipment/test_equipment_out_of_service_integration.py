@@ -1970,6 +1970,31 @@ def test_an_item_left_short_of_all_but_one_unit_keeps_its_status_and_its_hold(
 
 
 @pytest.mark.story("16.2", ac=10)
+def test_a_hold_whose_item_is_past_closing_is_reported_short_not_closed(tech_client, db: Session):
+    """Only a not-yet-sent, Pending or Accepted item is closed. A declined, withdrawn or cancelled
+    item releases its hold in the same step, so real data never leaves one holding units; the
+    hold is placed on a declined item directly to prove the save leaves that item as it is and
+    tells the coordinator the hold is short, as for any other hold it cannot close."""
+    kit = make_equipment_type(db, total_quantity=2, name="Mobile kit")
+    event = _event(db)
+    hold = _held(db, event, kit, 2, status="DECLINED")
+
+    response = tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+
+    assert response.status_code == 201
+    item = _item(db, hold)
+    assert (item.status, item.out_of_service_at, item.out_of_service_from) == (
+        "DECLINED",
+        None,
+        None,
+    )
+    db.refresh(hold)
+    assert hold.status == "RESERVED"
+    [notice] = _short_notices(db, event)
+    assert notice.message == service.short_message(name="Mobile kit", short=2, held=2)
+
+
+@pytest.mark.story("16.2", ac=10)
 def test_the_coordinator_is_told_the_item_was_closed_not_that_it_is_short(tech_client, db: Session):
     kit = make_equipment_type(db, total_quantity=2, name="Mobile kit")
     event = _event(db, name="Harbour Lights")

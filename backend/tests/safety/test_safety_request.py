@@ -134,6 +134,7 @@ def test_event_with_no_equipment_can_be_submitted(coordinator_client, db: Sessio
 
 
 @pytest.mark.story("21.2", ac=11)
+@pytest.mark.story("2.7", ac=19)
 def test_event_with_no_approved_booking_is_refused(coordinator_client, db: Session):
     secured = make_secured_event(db)
     db.execute(

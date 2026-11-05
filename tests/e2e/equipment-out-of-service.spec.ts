@@ -323,7 +323,7 @@ test.describe('records units out of service', () => {
     ).toBeVisible()
   })
 
-  test('16.2 AC2 (f16.2.5): a scheduled record takes effect on the catalogue and the type page as its start arrives, with no refresh', async ({
+  test('16.2 AC2: a scheduled record takes effect on the catalogue and the type page as its start arrives, with no refresh', async ({
     page,
   }) => {
     test.setTimeout(150_000)

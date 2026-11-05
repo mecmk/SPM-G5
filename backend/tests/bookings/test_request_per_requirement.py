@@ -3,23 +3,24 @@
 AC1  A request names the venue requirement it is for and carries that requirement's own times,
      number of people, layout and facilities; the event's booking list names it.
 AC5  A request that names no requirement is an additional venue, carrying the event's own period
-     and attendance (and AC7: so is every request for an event with "No venue requirements").
-AC8  A requirement whose request is withdrawn or rejected takes a new one.
-AC9  A venue requested for one requirement is held for that requirement's period, so it can serve
+     and attendance (so is every request for an event with "No venue requirements", the old AC7
+     the backlog has since removed).
+AC7  A requirement whose request is withdrawn or rejected takes a new one.
+AC8  A venue requested for one requirement is held for that requirement's period, so it can serve
      another requirement only when their periods do not overlap.
-AC10 Only the event's assigned coordinator requests; one pending or approved request per
+AC9  Only the event's assigned coordinator requests; one pending or approved request per
      requirement, plus any number of additional venues.
-AC11 A second request for a requirement that has one, and a request naming another event's
+AC10 A second request for a requirement that has one, and a request naming another event's
      requirement, are refused.
-AC12 Of two requests for one requirement sent at the same moment, only the first is written; the
+AC11 Of two requests for one requirement sent at the same moment, only the first is written; the
      second is refused, naming the venue requested for it.
-AC13 Withdrawing or rejecting one booking never changes the event's others.
-AC14 Each requirement's request is judged for suitability, and keeps its justification, on its own.
+AC12 Withdrawing or rejecting one booking never changes the event's others.
+AC13 Each requirement's request is judged for suitability, and keeps its justification, on its own.
 
 Decided 11 Oct 2026, beyond the ACs' wording: a requirement's pending request can be switched to
 another venue in one step (``POST /bookings/{id}/switch``). The old request is withdrawn and the
 new one written together, so a new venue that cannot take the request leaves the old one as it
-was (AC11: still one request per requirement).
+was (AC10: still one request per requirement).
 
 Also migration 017, which links the bookings made before this story to the requirement they were
 made for, and the audit entry (DoD: each request records its requirement). The page flows are
@@ -35,11 +36,12 @@ import threading
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
 import pytest
 from sqlalchemy import delete, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth.models import User
@@ -50,12 +52,20 @@ from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus, VenueRequirement
 from app.notifications.models import Notification
 from app.venues import service as venue_service
-from app.venues.models import Venue
-from tests.support.factories import make_booking, make_event, make_venue, make_venue_requirement
+from app.venues.models import Venue, VenueStatus
+from tests.support.factories import (
+    make_booking,
+    make_event,
+    make_unavailability,
+    make_venue,
+    make_venue_requirement,
+)
+from tests.support.faults import OTHER_CONSTRAINT, fail_write_of
 from tests.support.seed import Users
 
 SGT = timezone(timedelta(hours=8))
 BOOKINGS_PATH = "/bookings"
+ONE_PER_REQUIREMENT_INDEX = "uq_venue_bookings_one_per_requirement"
 MIGRATION_017 = (
     Path(__file__).resolve().parents[2] / "db" / "migrations" / "017_booking_venue_requirement.sql"
 )
@@ -208,7 +218,7 @@ def test_the_events_booking_list_names_each_bookings_requirement(coordinator_cli
     assert by_venue[extra.name]["venue_requirement_name"] is None
 
 
-# --- AC5/AC7: no requirement named = an additional venue ---------------------------------------
+# --- AC5: no requirement named = an additional venue -------------------------------------------
 @pytest.mark.story("12.5", ac=5)
 @pytest.mark.story("12.5", ac=7)
 @pytest.mark.parametrize("has_requirements", [True, False], ids=["requirements", "none-required"])
@@ -233,8 +243,8 @@ def test_a_request_naming_no_requirement_is_an_additional_venue(
     assert additional["requirement_notes"] is None
 
 
-# --- AC10: one per requirement, plus any number of additional venues --------------------------
-@pytest.mark.story("12.5", ac=10)
+# --- AC9: one per requirement, plus any number of additional venues --------------------------
+@pytest.mark.story("12.5", ac=9)
 def test_an_event_holds_a_request_per_requirement_and_several_additional_venues(
     coordinator_client, db
 ):
@@ -248,7 +258,7 @@ def test_an_event_holds_a_request_per_requirement_and_several_additional_venues(
     assert linked == Counter([plenary_id, breakout_id, None, None])
 
 
-@pytest.mark.story("12.5", ac=10)
+@pytest.mark.story("12.5", ac=9)
 def test_an_unassigned_coordinator_is_refused_before_any_requirement_check(login_as, db):
     """Carl is not the event's coordinator: refused as before, whether the requirement he names
     is the event's or not, so the refusal says nothing about the event's requirements."""
@@ -262,8 +272,8 @@ def test_an_unassigned_coordinator_is_refused_before_any_requirement_check(login
         assert response.json()["detail"] == service.NOT_ASSIGNED_COORDINATOR_MESSAGE
 
 
-# --- AC11: refusals -----------------------------------------------------------------------------
-@pytest.mark.story("12.5", ac=11)
+# --- AC10: refusals ------------------------------------------------------------------------------
+@pytest.mark.story("12.5", ac=10)
 @pytest.mark.parametrize("whose", ["another event's", "no event's"])
 def test_a_requirement_that_is_not_the_events_is_refused(coordinator_client, db, whose):
     event = _event(db)
@@ -280,7 +290,7 @@ def test_a_requirement_that_is_not_the_events_is_refused(coordinator_client, db,
     assert _bookings_of(db, event) == []
 
 
-@pytest.mark.story("12.5", ac=11)
+@pytest.mark.story("12.5", ac=10)
 @pytest.mark.parametrize(
     ("status", "state"),
     [(BookingStatus.PENDING, "requested"), (BookingStatus.APPROVED, "booked")],
@@ -311,8 +321,8 @@ def test_a_second_request_for_a_covered_requirement_is_refused_naming_its_venue(
     assert len(_bookings_of(db, event)) == 1
 
 
-# --- AC8: withdrawn or rejected = needs a venue again ------------------------------------------
-@pytest.mark.story("12.5", ac=8)
+# --- AC7: withdrawn or rejected = needs a venue again ------------------------------------------
+@pytest.mark.story("12.5", ac=7)
 @pytest.mark.parametrize(
     "status", [BookingStatus.WITHDRAWN, BookingStatus.REJECTED], ids=["withdrawn", "rejected"]
 )
@@ -334,8 +344,8 @@ def test_a_requirement_whose_request_was_released_takes_a_new_one(coordinator_cl
     assert again["venue_requirement_id"] == str(plenary_id)
 
 
-# --- AC9: one venue, two requirements ------------------------------------------------------------
-@pytest.mark.story("12.5", ac=9)
+# --- AC8: one venue, two requirements -------------------------------------------------------------
+@pytest.mark.story("12.5", ac=8)
 def test_one_venue_serves_two_requirements_whose_periods_do_not_overlap(coordinator_client, db):
     """The breakout starts when the plenary ends: periods that only touch are no clash (12.1
     AC6), so the same venue takes both. A third requirement overlapping the plenary is refused,
@@ -362,8 +372,8 @@ def test_one_venue_serves_two_requirements_whose_periods_do_not_overlap(coordina
     assert refused.json()["detail"].startswith(f"{venue.name} is already held by a pending request")
 
 
-# --- AC12: two tabs at once ----------------------------------------------------------------------
-@pytest.mark.story("12.5", ac=12)
+# --- AC11: two tabs at once -----------------------------------------------------------------------
+@pytest.mark.story("12.5", ac=11)
 def test_simultaneous_requests_for_one_requirement_write_one(engine):
     """Real concurrent transactions, so this test commits and cleans up after itself. Two
     requests for one requirement at the same moment, for two different venues: exactly one is
@@ -418,8 +428,8 @@ def test_simultaneous_requests_for_one_requirement_write_one(engine):
             session.commit()
 
 
-# --- AC13: each booking on its own -----------------------------------------------------------
-@pytest.mark.story("12.5", ac=13)
+# --- AC12: each booking on its own ------------------------------------------------------------
+@pytest.mark.story("12.5", ac=12)
 def test_withdrawing_or_rejecting_one_booking_leaves_the_others(login_as, db):
     """The role fixtures share one client, so each role signs in for its own step."""
     coordinator_client = login_as(Users.COORDINATOR)
@@ -443,8 +453,8 @@ def test_withdrawing_or_rejecting_one_booking_leaves_the_others(login_as, db):
     }
 
 
-# --- AC14: suitability per requirement -----------------------------------------------------
-@pytest.mark.story("12.5", ac=14)
+# --- AC13: suitability per requirement ------------------------------------------------------
+@pytest.mark.story("12.5", ac=13)
 def test_each_requirement_is_judged_and_keeps_its_justification_on_its_own(coordinator_client, db):
     """A room for 50 is too small for the plenary (150) but suits the breakout (30): the
     plenary's request needs a justification and keeps it; the breakout's needs none."""
@@ -484,7 +494,7 @@ def test_each_requirement_is_judged_and_keeps_its_justification_on_its_own(coord
     assert breakout["suitability_override_reason"] is None
 
 
-@pytest.mark.story("12.5", ac=14)
+@pytest.mark.story("12.5", ac=13)
 def test_the_suitability_read_judges_the_named_requirement_or_the_attendance_alone(
     coordinator_client, db
 ):
@@ -592,7 +602,7 @@ def test_migration_017_links_each_events_earlier_booking_to_its_first_requiremen
 
 
 # --- Switching a pending request to another venue (decided 11 Oct 2026) -------------------------
-@pytest.mark.story("12.5", ac=11)
+@pytest.mark.story("12.5", ac=10)
 def test_switching_a_pending_request_withdraws_it_and_requests_the_new_venue(
     coordinator_client, db
 ):
@@ -615,7 +625,7 @@ def test_switching_a_pending_request_withdraws_it_and_requests_the_new_venue(
     _created(_request(coordinator_client, other, first, _plenary(db, other)))
 
 
-@pytest.mark.story("12.5", ac=11)
+@pytest.mark.story("12.5", ac=10)
 @pytest.mark.parametrize("why", ["held", "unsuitable"])
 def test_a_switch_the_new_venue_cannot_take_changes_nothing(coordinator_client, db, why):
     """Held for another event (409), or not suiting the requirement with no justification (422):
@@ -648,7 +658,7 @@ def test_a_switch_the_new_venue_cannot_take_changes_nothing(coordinator_client, 
     assert remaining == [(old["id"], BookingStatus.PENDING)]
 
 
-@pytest.mark.story("12.5", ac=11)
+@pytest.mark.story("12.5", ac=10)
 @pytest.mark.parametrize(
     "status", [BookingStatus.APPROVED, BookingStatus.WITHDRAWN], ids=["approved", "withdrawn"]
 )
@@ -674,7 +684,7 @@ def test_only_a_pending_request_can_be_switched(coordinator_client, db, status):
     assert [booking.status for booking in _bookings_of(db, event)] == [status]
 
 
-@pytest.mark.story("12.5", ac=10)
+@pytest.mark.story("12.5", ac=9)
 def test_only_the_assigned_coordinator_switches_and_an_unknown_request_is_not_found(login_as, db):
     """Carl is not the event's coordinator and Venue Staff do not request venues: both are
     refused (403) and the request stays as it was. A request that does not exist is 404."""
@@ -695,7 +705,7 @@ def test_only_the_assigned_coordinator_switches_and_an_unknown_request_is_not_fo
     assert remaining == [(old["id"], BookingStatus.PENDING)]
 
 
-@pytest.mark.story("12.5", ac=10)
+@pytest.mark.story("12.5", ac=9)
 def test_an_unassigned_coordinator_is_refused_before_the_requests_status_is_read(login_as, db):
     """Who is asking is checked before anything about the request, as for a withdrawal: Carl,
     not the event's coordinator, is refused (403) for an approved request rather than told it
@@ -720,7 +730,181 @@ def test_an_unassigned_coordinator_is_refused_before_the_requests_status_is_read
     assert [booking.status for booking in _bookings_of(db, event)] == [BookingStatus.APPROVED]
 
 
-@pytest.mark.story("12.5", ac=12)
+@pytest.mark.story("12.5", ac=10)
+@pytest.mark.parametrize("why", ["missing", "withdrawn", "closed", "outside its hours"])
+def test_a_switch_is_refused_for_a_venue_no_new_request_could_name(coordinator_client, db, why):
+    """The new venue is checked as a new request's is (12.1 AC1, AC14): one that does not exist
+    is 404, and one withdrawn from the catalogue, closed for part of the period, or shut at the
+    requirement's hours is 409. The old request stays pending and nothing new is written."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    old = _created(_request(coordinator_client, event, _roomy(db), plenary_id))
+    if why == "missing":
+        venue_id, status, detail = uuid.uuid4(), 404, "Venue not found."
+    elif why == "withdrawn":
+        venue_id = _roomy(db, status=VenueStatus.WITHDRAWN).id
+        status, detail = 409, service.VENUE_NOT_BOOKABLE_MESSAGE
+    elif why == "closed":
+        target = _roomy(db)
+        make_unavailability(db, venue_id=target.id, starts_at=_at(10, 12), ends_at=_at(10, 14))
+        venue_id, status = target.id, 409
+        detail = f"{target.name} is closed for maintenance on Thu 10 Dec 2026 from 12:00 to 14:00."
+    else:
+        target = _roomy(db, hours=(time(10, 0), time(16, 0)))
+        venue_id, status = target.id, 409
+        detail = service.VENUE_CLOSED_MESSAGE.format(
+            venue=target.name,
+            opens=time(10, 0),
+            closes=time(16, 0),
+            period="from 09:00 to 17:00",
+        )
+
+    response = coordinator_client.post(
+        f"{BOOKINGS_PATH}/{old['id']}/switch", json={"venue_id": str(venue_id)}
+    )
+
+    assert response.status_code == status, response.text
+    assert response.json()["detail"] == detail
+    remaining = [(str(booking.id), booking.status) for booking in _bookings_of(db, event)]
+    assert remaining == [(old["id"], BookingStatus.PENDING)]
+
+
+@pytest.mark.story("12.5", ac=10)
+def test_a_switch_is_refused_once_its_event_takes_no_new_requests(coordinator_client, db):
+    """A switch writes a new request, so it is refused (409) as one is (12.1 AC1) once the event
+    is neither Planning nor Confirmed - here Awaiting Safety Check with an additional venue still
+    pending - and the pending request stays as it was."""
+    event = _event(db)
+    pending = make_booking(
+        db, event_id=event.id, venue_id=_roomy(db).id, starts_at=_at(10, 9), ends_at=_at(11, 17)
+    )
+    event.status = EventStatus.AWAITING_SAFETY_CHECK
+    db.flush()
+
+    response = _switch(coordinator_client, pending.id, _roomy(db))
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == service.EVENT_NOT_BOOKABLE_MESSAGE.format(
+        status=EventStatus.AWAITING_SAFETY_CHECK
+    )
+    assert [(booking.id, booking.status) for booking in _bookings_of(db, event)] == [
+        (pending.id, BookingStatus.PENDING)
+    ]
+
+
+def _small_room(db: Session) -> Venue:
+    """A free theatre for 50: too small for the Plenary's 150, so it does not suit it."""
+    return make_venue(
+        db,
+        name=f"Small Room {uuid.uuid4().hex[:8]}",
+        capacity=50,
+        layouts={"THEATRE": None},
+        facilities=("PROJECTOR",),
+    )
+
+
+@pytest.mark.story("12.5", ac=13)
+@pytest.mark.story("11.1", ac=7)
+@pytest.mark.parametrize("justification", ["", "   "], ids=["empty", "whitespace only"])
+def test_a_switch_to_an_unsuitable_venue_with_an_empty_justification_is_refused(
+    coordinator_client, db, justification
+):
+    """11.1 AC7 on a switch: an empty or whitespace-only justification is no justification, so a
+    venue that does not suit the requirement is refused (422) and the old request stays."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    old = _created(_request(coordinator_client, event, _roomy(db), plenary_id))
+
+    response = _switch(
+        coordinator_client, old["id"], _small_room(db), suitability_override_reason=justification
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == service.JUSTIFICATION_REQUIRED_MESSAGE
+    remaining = [(str(booking.id), booking.status) for booking in _bookings_of(db, event)]
+    assert remaining == [(old["id"], BookingStatus.PENDING)]
+
+
+@pytest.mark.story("12.5", ac=13)
+@pytest.mark.story("11.1", ac=2)
+def test_a_switch_to_an_unsuitable_venue_keeps_its_justification_trimmed(coordinator_client, db):
+    """11.1 AC2 on a switch: with a justification, a venue that does not suit is requested and
+    the justification is stored without its surrounding spaces."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    old = _created(_request(coordinator_client, event, _roomy(db), plenary_id))
+
+    new = _created(
+        _switch(
+            coordinator_client,
+            old["id"],
+            _small_room(db),
+            suitability_override_reason="  The only room left that week.  ",
+        )
+    )
+
+    assert new["suitability_override_reason"] == "The only room left that week."
+
+
+# --- AC11: the one-per-requirement index, when the check before it is passed -------------------
+@pytest.mark.story("12.5", ac=11)
+def test_a_switch_the_index_refuses_is_409_naming_the_requirements_request(
+    coordinator_client, db, monkeypatch
+):
+    """When ``uq_venue_bookings_one_per_requirement`` refuses the switch's new request, the
+    switch is undone and refused (409) naming the request the requirement still has: the
+    switched one, whose withdrawal was rolled back with it.
+
+    Real data cannot reach this: the switched request is locked (with its event) until the
+    switch commits, so no other request for the requirement can be written meanwhile, and the
+    switch's own check has already let it through. ``fail_write_of`` raises the error PostgreSQL
+    would on the new request's write."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    first, second = _roomy(db), _roomy(db)
+    old = _created(_request(coordinator_client, event, first, plenary_id))
+    fail_write_of(db, monkeypatch, VenueBooking, ONE_PER_REQUIREMENT_INDEX)
+
+    response = _switch(coordinator_client, old["id"], second)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == service.REQUIREMENT_ALREADY_REQUESTED_MESSAGE.format(
+        requirement="Plenary", state="requested", venue=first.name
+    )
+    remaining = [(str(booking.id), booking.status) for booking in _bookings_of(db, event)]
+    assert remaining == [(old["id"], BookingStatus.PENDING)]
+
+
+@pytest.mark.story("12.5", ac=11)
+@pytest.mark.parametrize(
+    "constraint",
+    [ONE_PER_REQUIREMENT_INDEX, OTHER_CONSTRAINT],
+    ids=["index with no request found", "another constraint"],
+)
+def test_a_refused_request_that_names_no_covering_request_is_raised_as_it_is(
+    coordinator_client, db, monkeypatch, constraint
+):
+    """AC11 names the request that won. A write the index refuses when the requirement has no
+    pending or approved request left to name, or one another constraint refuses, is raised as
+    the database's error rather than a 409 naming nothing, and nothing is written. Real data
+    cannot reach either: the event lock serializes requests for one requirement, so the check
+    before the write always sees the winner, and no other constraint can refuse a request that
+    passed the service's checks. ``fail_write_of`` raises the error PostgreSQL would."""
+    event = _event(db)
+    plenary_id = _plenary(db, event)
+    venue = _roomy(db)
+    # Committed, so the service's rollback of the refused write keeps the event to request for.
+    db.commit()
+    fail_write_of(db, monkeypatch, VenueBooking, constraint)
+
+    with pytest.raises(IntegrityError) as raised:
+        _request(coordinator_client, event, venue, plenary_id)
+
+    assert constraint in str(raised.value.orig)
+    assert _bookings_of(db, event) == []
+
+
+@pytest.mark.story("12.5", ac=11)
 def test_two_switches_of_one_request_at_once_make_one(engine):
     """Real concurrent transactions, so this test commits and cleans up after itself. Two tabs
     switch the same request to two different venues at the same moment: one switch is made, and
@@ -788,7 +972,7 @@ def test_two_switches_of_one_request_at_once_make_one(engine):
             session.commit()
 
 
-@pytest.mark.story("12.5", ac=11)
+@pytest.mark.story("12.5", ac=10)
 def test_a_switch_is_audited_and_venue_staff_are_told(coordinator_client, db):
     """Both halves are recorded as their own actions are: the withdrawal (12.2) and the new
     request (12.1), which names the request it replaces. Venue Staff are told of each."""

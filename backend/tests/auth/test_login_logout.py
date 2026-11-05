@@ -10,12 +10,13 @@ AC5 After logout the session is invalidated.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.auth import service
 from app.auth.models import User, UserSession
 from app.auth.router import INVALID_CREDENTIALS_MESSAGE
+from app.common.audit import AuditLog
 from app.config import settings
 from tests.support.factories import make_user
 from tests.support.seed import SEED_PASSWORD, Users
@@ -129,6 +130,14 @@ def test_login_response_is_the_same_user_record_as_me(client):
 
 
 # --- AC5 -------------------------------------------------------------------------------
+def _logout_audit_count(db: Session) -> int:
+    return db.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.action == "LOGOUT", AuditLog.actor_id == Users.VENUE_STAFF.id)
+    )
+
+
 @pytest.mark.story("1.1", ac=5)
 def test_logout_invalidates_the_session_server_side(client, db: Session):
     client.login(Users.VENUE_STAFF)
@@ -149,6 +158,32 @@ def test_logout_invalidates_the_session_server_side(client, db: Session):
 @pytest.mark.story("1.1", ac=5)
 def test_logout_without_a_session_is_harmless(client):
     assert client.logout().status_code == 204
+
+
+@pytest.mark.story("1.1", ac=5)
+@pytest.mark.parametrize("cookie", ["revoked", "unknown"])
+def test_logging_out_a_dead_session_changes_nothing_and_audits_nothing(
+    client, db: Session, cookie: str
+):
+    """A browser can send back a cookie whose session is already revoked, or one the server never
+    issued: logging out still answers 204, revokes nothing new and writes no second LOGOUT."""
+    client.login(Users.VENUE_STAFF)
+    token = client.cookies[COOKIE]
+    assert client.logout().status_code == 204
+    revoked = db.scalar(
+        select(UserSession).where(UserSession.token_hash == service.hash_token(token))
+    )
+    revoked_at = revoked.revoked_at
+    logouts = _logout_audit_count(db)
+    sent = token if cookie == "revoked" else "never-issued"
+
+    client.cookies.set(COOKIE, sent)
+    response = client.logout()
+
+    assert response.status_code == 204
+    db.refresh(revoked)
+    assert revoked.revoked_at == revoked_at
+    assert _logout_audit_count(db) == logouts
 
 
 @pytest.mark.story("1.1", ac=5)

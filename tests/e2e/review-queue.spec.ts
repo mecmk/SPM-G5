@@ -104,7 +104,7 @@ test('4.1: an organiser cannot open the events inbox', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Not permitted' })).toBeVisible()
 })
 
-test("6.1: every tab shows the coordinator's events in that status, and each card names its status", async ({
+test("6.1 AC5: every tab shows the coordinator's events in that status, and each card names its status", async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.coordinator)

@@ -101,6 +101,7 @@ _BACK_WITH_TECHNICAL_SUPPORT = (
     "Held again for the new dates, and back with Technical Support as Pending, to decide for the "
     "new dates."
 )
+_HELD_AGAIN_AS_REQUESTED = "Held again, and back to Requested for you to send to Technical Support."
 # AC2: what the approval does to a booking it keeps, which is listed only for a warning.
 _KEPT_WITH_WARNING = (
     "Stays as it is: a warning never cancels a booking, and Venue Staff are not told of the "
@@ -990,6 +991,36 @@ def test_an_accepted_item_that_still_fits_goes_back_to_technical_support(login_a
     assert response.status_code == 200, response.text
     assert row["status_after"] == _item_status(db, item.id) == "PENDING"
     assert row["after_approval"] == _BACK_WITH_TECHNICAL_SUPPORT
+
+
+@pytest.mark.story("19.3", ac=2)
+def test_an_unavailable_item_the_new_dates_can_supply_goes_back_to_requested(login_as, db: Session):
+    """2 projectors were flagged Unavailable for the old dates, holding nothing; the new dates have
+    all 4. The approval holds them again and the item waits, Requested, for the coordinator to
+    send it to Technical Support - and the assessment says so."""
+    event = _planning_event(db)
+    projectors = make_equipment_type(db, total_quantity=4)
+    item = make_equipment_item(
+        db,
+        event=event,
+        equipment_type=projectors,
+        quantity=2,
+        status="UNAVAILABLE",
+        is_held=False,
+    )
+    starts_at = event.starts_at + timedelta(days=7)
+    request = _raise(
+        login_as, db, event, "schedule", _schedule(starts_at, starts_at + timedelta(hours=8))
+    )
+
+    impact = _impact(login_as, request)
+    row = {row["item_id"]: row for row in impact["equipment"]}[str(item.id)]
+    response = _approve(login_as, request, impact["fingerprint"])
+
+    assert response.status_code == 200, response.text
+    assert (row["current_status"], row["available"], row["shortfall"]) == ("UNAVAILABLE", 4, 0)
+    assert row["status_after"] == _item_status(db, item.id) == "REQUESTED"
+    assert row["after_approval"] == _HELD_AGAIN_AS_REQUESTED
 
 
 @pytest.mark.story("19.3", ac=2)

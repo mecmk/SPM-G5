@@ -43,6 +43,7 @@ def test_returns_every_seeded_booking_for_the_event(venue_staff_client):
 
 
 @pytest.mark.story("13.2.1", ac=4)
+@pytest.mark.story("12.2", ac=5)
 def test_a_freshly_raised_booking_appears_first(venue_staff_client, db):
     """A booking made just now sorts ahead of the seeded rows already on this event - the page
     reads the list as a history, newest first."""

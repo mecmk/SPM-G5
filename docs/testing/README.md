@@ -15,6 +15,7 @@ failure cases, so the conventions below exist to make that cheap.
 ```powershell
 npm run test:backend   # pytest
 npm run test:trace     # pytest + writes docs/testing/TRACEABILITY.md (git-ignored)
+npm run test:coverage  # pytest + line and branch coverage of backend/app; fails below 100%
 npm run test:frontend  # lint + type-check/build
 npm run test:e2e       # rebuilds connectsphere_e2e, starts its own API + app, runs Playwright, cleans up
 ```
@@ -101,6 +102,24 @@ briefing cares about (double booking, over-committed equipment, ...).
 real foreign key, the seed loads into an empty schema and is idempotent, ORM models match the
 tables, and the DB-level guards (double-booking exclusion, mandatory fields once submitted) fire.
 
+### Coverage
+
+Every line and every branch of `backend/app/` is run by at least one backend test, and CI keeps
+it that way: Backend CI runs the suite with `--cov`, and `[tool.coverage]` in
+`backend/pyproject.toml` fails the run below 100%. `npm run test:coverage` runs the same check
+locally and lists any line or branch left uncovered.
+
+A missed line is closed with a test, not an exclusion. Most are reached through the API. A few
+can only be reached when the database fails or another request wins a race, because the service's
+own checks refuse the request first: a re-raise of an `IntegrityError` the service does not
+recognise, or an `UPDATE ... WHERE status = ...` that matches nothing. Those tests make the failure
+happen with `tests/support/faults.py::fail_flush`, which makes the session's next flush raise the
+error PostgreSQL would, and say in their docstring why real data cannot reach the line.
+
+`app/dbtool/` (the `npm run db:*` tool) is measured too. Its tests in `tests/dbtool/` run it against
+a scratch database of their own and write the generated docs to a temporary folder, never to
+`docs/database/`.
+
 ## End-to-end tests
 
 One spec per story area lives in `tests/e2e/`; `npx playwright test --list` in `tests/` lists
@@ -120,7 +139,7 @@ Which command touches which database:
 
 | Command | Database |
 | --- | --- |
-| `npm run test:backend`, `npm run test:trace` | `connectsphere_test` only |
+| `npm run test:backend`, `npm run test:trace`, `npm run test:coverage` | `connectsphere_test` only, plus a scratch database `tests/dbtool/` creates and drops |
 | `npm run test:e2e` | `connectsphere_e2e` only |
 | `npm run db:up`, `npm run db:down` | none — starts or stops the PostgreSQL container |
 | `npm run db:status`, `npm run db:docs` | the development database, **read-only**. `db:docs` writes the generated data dictionary and ERD *from that schema*, so it is only as current as your dev database: run `db:reset` first if yours predates a schema change. The feature workflow's last step needs it |

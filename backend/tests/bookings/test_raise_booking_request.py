@@ -516,7 +516,7 @@ def test_a_requirement_with_no_facilities_or_notes_states_none(coordinator_clien
 
 
 @pytest.mark.story("2.7", ac=13)
-@pytest.mark.story("12.5", ac=7)
+@pytest.mark.story("12.5")
 def test_an_event_without_venue_requirements_books_its_own_period_and_attendance(
     coordinator_client, db: Session
 ):

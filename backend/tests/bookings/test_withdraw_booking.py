@@ -139,6 +139,7 @@ def test_a_failed_withdrawal_leaves_the_booking_and_hold_unchanged(
 
 
 @pytest.mark.story("12.2", ac=2)
+@pytest.mark.story("12.2", ac=5)
 def test_withdrawing_releases_the_hold_and_a_new_request_can_be_raised(
     coordinator_client, db: Session
 ):

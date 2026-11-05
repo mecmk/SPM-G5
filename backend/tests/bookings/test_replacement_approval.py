@@ -84,7 +84,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import event, func, select
+from sqlalchemy import event, func, select, text
 from sqlalchemy.orm import Session
 
 from app.bookings import service
@@ -490,6 +490,54 @@ def test_approving_a_replacement_whose_original_is_already_closed_approves_alone
         for each in notifications_of(db, colleague.id, event_id=scene.event.id)[before:]
         if "released" in each.message
     ]
+    assert not db.scalars(
+        select(AuditLog).where(
+            AuditLog.entity_id == scene.original.id, AuditLog.action == "BOOKING_REPLACED"
+        )
+    ).all()
+
+
+@pytest.mark.story("12.6", ac=3)
+def test_an_approval_holding_a_stale_link_to_a_closed_original_releases_nothing(db):
+    """AC3: when the original no longer holds its venue nothing is released. Here the approval is
+    given a replacement read before its original lapsed, so it still names the original, though
+    the database has cleared that link (CL-194 (8)). The release finds nothing holding and the
+    replacement is approved alone: the original keeps its status, no "Replaced by" is written
+    and the approval notice says nothing of a release.
+
+    Real data cannot reach this through the endpoint: ``get_booking_for_approval`` locks the
+    original and then re-reads the replacement, so the link it hands over is the database's."""
+    scene = make_scenario(db)
+    replacement = add_pending_replacement(db, scene)
+    db.get(VenueBooking, scene.original.id)
+    # The sweep's expiry, in SQL and without expiring the session: the replacement and the
+    # original stay as they were read.
+    db.execute(
+        text("UPDATE venue_bookings SET status = 'EXPIRED' WHERE id = :id"),
+        {"id": scene.original.id},
+    )
+    assert replacement.replaces_booking_id == scene.original.id
+
+    service.approve_booking(
+        db,
+        replacement,
+        actor_id=Users.VENUE_STAFF.id,
+        hold_expires_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    db.flush()
+
+    assert _outcome_of(db, replacement.id).status == BookingStatus.APPROVED
+    original = _outcome_of(db, scene.original.id)
+    assert original.status == BookingStatus.EXPIRED
+    assert original.decision_reason is None
+    assert column(db, scene.original.id, "replaced_by_booking_id") is None
+    [approval] = [
+        each
+        for each in notifications_of(db, Users.COORDINATOR.id, event_id=scene.event.id)
+        if each.notification_type == "BOOKING_APPROVED"
+    ]
+    release_sentence = service.ORIGINAL_RELEASED_SENTENCE.format(venue=scene.original_venue.name)
+    assert release_sentence not in approval.message
     assert not db.scalars(
         select(AuditLog).where(
             AuditLog.entity_id == scene.original.id, AuditLog.action == "BOOKING_REPLACED"

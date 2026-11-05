@@ -16,7 +16,7 @@ import uuid
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta, timezone
-from itertools import chain, count
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -1175,8 +1175,10 @@ def _room_layout_codes(name: str) -> Iterator[str]:
     stem = _ROOM_LAYOUT_CODE_SEPARATORS.sub("_", plain.upper()).strip("_")
     stem = stem[:_ROOM_LAYOUT_CODE_MAX_LENGTH].rstrip("_") or _ROOM_LAYOUT_FALLBACK_CODE
     yield stem
-    for number in count(2):
+    number = 2
+    while True:
         yield f"{stem}_{number}"
+        number += 1
 
 
 def _room_layout_code_used(db: Session, code: str) -> bool:

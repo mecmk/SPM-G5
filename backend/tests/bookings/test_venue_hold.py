@@ -43,12 +43,15 @@ from app.common.audit import AuditLog
 from app.events.models import Event, EventStatus
 from app.venues.models import Venue
 from tests.support.factories import make_booking, make_event, make_venue
+from tests.support.faults import fail_write_of
+from tests.support.locks import LOCK_WAIT_SECONDS, backend_pid, wait_until_waiting
 from tests.support.seed import Events, Users, Venues
 
 SGT = timezone(timedelta(hours=8))
 MIGRATION_010 = (
     Path(__file__).resolve().parents[2] / "db" / "migrations" / "010_hold_venue_while_pending.sql"
 )
+DOUBLE_BOOKING_CONSTRAINT = "ex_venue_bookings_no_double_booking"
 # The constraint as it stood before migration 010: only APPROVED rows blocked a venue.
 PRE_010_CONSTRAINT = (
     "ALTER TABLE venue_bookings ADD CONSTRAINT ex_venue_bookings_no_double_booking"
@@ -268,6 +271,95 @@ def test_simultaneous_requests_for_one_slot_create_one_booking(engine):
             session.execute(delete(Event).where(Event.id == event_id))
             session.execute(delete(Venue).where(Venue.id == venue_id))
             session.commit()
+
+
+@pytest.mark.story("12.1", ac=12)
+@pytest.mark.story("12.1", ac=14)
+def test_a_request_that_passed_the_check_before_another_events_hold_landed_is_refused(engine):
+    """Real concurrent transactions, so this test commits and cleans up after itself. Requests
+    from two events share no event lock, so the second can pass the hold check while the first's
+    row is written but not yet committed. Its own write then waits on that row in the exclusion
+    constraint, fails once the first commits, and is refused with the same sentence the check
+    gives, naming the first event's hold. Only one booking is written."""
+    with Session(engine) as session:
+        venue = make_venue(session, name=f"Race Room {uuid.uuid4().hex[:8]}")
+        first_event = _event(session, _at(4, 9), _at(4, 12), name="First Race Event")
+        second_event = _event(session, _at(4, 9), _at(4, 12), name="Second Race Event")
+        session.commit()
+        venue_id, venue_name = venue.id, venue.name
+        event_ids = [first_event.id, second_event.id]
+    pids: dict[str, int] = {}
+
+    def second_request() -> str:
+        # One connection throughout: the request's sweep commits first, and a session on the
+        # engine would then take its write to another pooled connection than the one watched.
+        with engine.connect() as connection, Session(bind=connection) as session:
+            pids["second"] = backend_pid(session)
+            actor = session.get(User, Users.COORDINATOR.id)
+            request = BookingRequestIn(event_id=event_ids[1], venue_id=venue_id)
+            try:
+                service.create_booking_request(session, request, actor=actor)
+            except service.VenueHeld as refusal:
+                return str(refusal)
+            return "created"
+
+    try:
+        with Session(engine) as first, ThreadPoolExecutor(max_workers=1) as pool:
+            # The first event's request, written and not yet committed.
+            make_booking(
+                first,
+                venue_id=venue_id,
+                event_id=event_ids[0],
+                starts_at=_at(4, 9),
+                ends_at=_at(4, 12),
+            )
+            second = pool.submit(second_request)
+            try:
+                wait_until_waiting(engine, pids, "second")
+            finally:
+                # Always let the second request go, so a failure here cannot leave the pool
+                # waiting on a thread that waits on this session.
+                first.commit()
+            outcome = second.result(timeout=LOCK_WAIT_SECONDS)
+
+        assert outcome.startswith(
+            f"{venue_name} is already held by a pending request for First Race Event"
+        )
+        with Session(engine) as session:
+            assert _bookings_at(session, venue_id) == 1
+    finally:
+        with Session(engine) as session:
+            booking_ids = session.scalars(
+                select(VenueBooking.id).where(VenueBooking.venue_id == venue_id)
+            ).all()
+            session.execute(delete(AuditLog).where(AuditLog.entity_id.in_(booking_ids)))
+            session.execute(delete(VenueBooking).where(VenueBooking.venue_id == venue_id))
+            session.execute(delete(Event).where(Event.id.in_(event_ids)))
+            session.execute(delete(Venue).where(Venue.id == venue_id))
+            session.commit()
+
+
+@pytest.mark.story("12.1", ac=14)
+def test_a_double_booking_refusal_with_no_hold_left_to_name_is_raised_as_it_is(
+    coordinator_client, db, monkeypatch
+):
+    """AC14's refusal names the hold that won. A write the database refuses as a double booking
+    when no pending or approved booking holds the period by the time the service looks is
+    raised as the database's error rather than a 409 naming nothing, and nothing is written.
+    Real data cannot reach this: a booking that holds a venue stops holding it only by a write
+    that waits for the request's own transaction. ``fail_write_of`` raises the error PostgreSQL
+    would."""
+    venue = make_venue(db)
+    event = _event(db, _at(5, 9), _at(5, 12))
+    # Committed, so the service's rollback of the refused write keeps the event and the venue.
+    db.commit()
+    fail_write_of(db, monkeypatch, VenueBooking, DOUBLE_BOOKING_CONSTRAINT)
+
+    with pytest.raises(IntegrityError) as raised:
+        _request(coordinator_client, event.id, venue.id)
+
+    assert DOUBLE_BOOKING_CONSTRAINT in str(raised.value.orig)
+    assert _bookings_at(db, venue.id) == 0
 
 
 @pytest.mark.story("12.1", ac=14)
