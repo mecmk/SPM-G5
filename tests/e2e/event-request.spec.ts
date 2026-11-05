@@ -209,7 +209,7 @@ test('2.1 AC2: an end before the start, or a past date, is refused before anythi
   expect(createCalls).toBe(0)
 })
 
-test('2.1 AC3 (f16.2.6): turning the mouse wheel over a number box leaves the number as typed', async ({
+test('2.1 AC3: turning the mouse wheel over a number box leaves the number as typed', async ({
   page,
 }) => {
   await signIn(page, ACCOUNTS.organiser)
