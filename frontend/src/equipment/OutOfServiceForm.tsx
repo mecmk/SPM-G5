@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type FormEvent, type RefObject } from 'react'
+import { useId, useRef, useState, type FormEvent, type RefObject, type WheelEvent } from 'react'
 import { formatApiError } from '../api/client'
 import {
   OUT_OF_SERVICE_NOTES_MAX_LENGTH,
@@ -216,6 +216,13 @@ export function OutOfServiceForm({
     setUnfinished(readUnfinishedDates())
   }
 
+  /** Fix f16.2.5: scrolling the page with the pointer over a focused number box counts it up or
+   *  down, and the Units box stops at 1, so a 10 typed here was saved as 1. Leaving the box as the
+   *  wheel turns lets the page scroll and the number stay as typed. */
+  function handleUnitsWheel(event: WheelEvent<HTMLInputElement>) {
+    event.currentTarget.blur()
+  }
+
   async function save() {
     const input = inputOf(values, opened, editing)
     if (editing === null) await addOutOfService(typeId, typeName, input)
@@ -298,6 +305,7 @@ export function OutOfServiceForm({
           Units <RequiredMark />
           <input
             onBeforeInput={refuseNonDigits}
+            onWheel={handleUnitsWheel}
             ref={unitsInput}
             type="number"
             inputMode="numeric"

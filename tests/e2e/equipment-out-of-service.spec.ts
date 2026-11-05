@@ -27,7 +27,8 @@ import {
  *     refresh: out of service now, and Scheduled becoming In force.
  * AC3 The quantity is a whole number of at least 1, there is a start, each date is finished and
  *     readable, the end is after the start and the start is not in the past - checked before
- *     anything is sent; a record in force keeps its start; more units than are free over the
+ *     anything is sent; (f16.2.5) turning the mouse wheel over the Units box leaves the number as
+ *     typed, where it used to count down to 1; a record in force keeps its start; more units than are free over the
  *     period are refused by the server, and the form says so.
  * AC4 A record that leaves a hold short marks the item on its event's equipment for the
  *     coordinator.
@@ -318,6 +319,21 @@ test.describe('records units out of service', () => {
     await expect(
       form(page).getByRole('heading', { name: 'Take units out of service' }),
     ).toBeVisible()
+  })
+
+  test('16.2 AC3 (f16.2.5): scrolling the page over the Units box leaves the number as typed', async ({
+    page,
+  }) => {
+    await signIn(page, ACCOUNTS.techSupport)
+    await openType(page, SPEAKER_SET)
+    const units = form(page).getByLabel(/^Units/)
+    await units.click()
+    await units.pressSequentially('4')
+    const box = (await units.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    for (let turn = 0; turn < 6; turn++) await page.mouse.wheel(0, 100)
+
+    await expect(units).toHaveValue('4')
   })
 
   test('16.2 AC2 (f16.2.5): a scheduled record takes effect on the catalogue and the type page as its start arrives, with no refresh', async ({
