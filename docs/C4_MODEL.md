@@ -72,7 +72,7 @@ flowchart TB
 
     subgraph connectsphere["<b>ConnectSphere</b> [system]"]
         spa["<b>Single-page application</b><br/><i>[Container: React 19,<br/>TypeScript, Vite]</i><br/>Role-aware pages, one<br/>area per feature. A page<br/>is listed once a story<br/>delivers it"]:::container
-        api["<b>API application</b><br/><i>[Container: Python 3.12,<br/>FastAPI, Uvicorn]</i><br/>REST endpoints, sessions,<br/>role checks and every<br/>business rule, plus a<br/>timer that expires<br/>lapsed venue holds.<br/>OpenAPI docs at /docs"]:::container
+        api["<b>API application</b><br/><i>[Container: Python 3.12,<br/>FastAPI, Uvicorn]</i><br/>REST endpoints, sessions,<br/>role checks and every<br/>business rule, plus<br/>timers that expire<br/>lapsed venue holds and<br/>mark ended events<br/>Completed. OpenAPI<br/>docs at /docs"]:::container
         db[("<b>Database</b><br/><i>[Container: PostgreSQL 16]</i><br/>Users and sessions,<br/>events, venues, bookings,<br/>equipment, registrations,<br/>notifications, audit log")]:::container
         uploads["<b>Upload storage</b><br/><i>[Container: folder on<br/>disk, UPLOAD_DIR]</i><br/>Event cover pictures<br/>and venue pictures"]:::container
         dbtool["<b>Schema and seed tool</b><br/><i>[Container: Python CLI,<br/>app.dbtool]</i><br/>Applies SQL migrations,<br/>loads reference and<br/>sample data, regenerates<br/>the data dictionary<br/>and the ERD"]:::container
@@ -94,7 +94,7 @@ Each container in one line:
 | Container | Technology | Responsibility |
 | --- | --- | --- |
 | Single-page application | React 19, TypeScript, Vite on port 5173 | Shows each role only what its permissions allow. Holds no rules of its own |
-| API application | FastAPI on port 8000 | Every rule and every access decision. One module per feature area, plus the timer that expires lapsed venue holds |
+| API application | FastAPI on port 8000 | Every rule and every access decision. One module per feature area, plus the timers that expire lapsed venue holds and mark ended events Completed |
 | Database | PostgreSQL 16 on port 5433 | The single copy of event, venue, equipment and registration data. Enforces the rules that must never be broken |
 | Upload storage | A folder on disk, `UPLOAD_DIR` (`backend/uploads` by default) | Event cover pictures and venue pictures, written by the API and served at `/uploads/events/` and `/uploads/venues/` |
 | Schema and seed tool | `python -m app.dbtool` | Migrations, seed data, and the generated data dictionary and ERD |
@@ -128,7 +128,7 @@ flowchart TB
             events["<b>Events</b><br/><i>[app/events]</i><br/>Requests, review, status,<br/>details and edits"]:::component
             venues["<b>Venues</b><br/><i>[app/venues]</i><br/>Catalogue, search,<br/>calendar, closures,<br/>room layouts"]:::component
         end
-        timer["<b>Hold timer</b><br/><i>[asyncio task,<br/>app/main.py]</i><br/>Expires lapsed holds,<br/>warns coordinators first"]:::component
+        timer["<b>Timers</b><br/><i>[asyncio tasks,<br/>app/main.py]</i><br/>Expire lapsed holds,<br/>warning coordinators first;<br/>mark ended events Completed"]:::component
         subgraph shared["<b>Shared by every area</b>"]
             access["<b>Access control</b><br/><i>[app/auth]</i><br/>Sessions and permissions;<br/>answers 401 and 403"]:::component
             notifications["<b>Notification service</b><br/><i>[app/notifications]</i><br/>One notice per action,<br/>never to whoever acted"]:::component
@@ -149,6 +149,7 @@ flowchart TB
     bookings -->|"books venues for"| events
     bookings -->|"checks hours and<br/>closures in"| venues
     timer -->|"sweep_holds()"| bookings
+    timer -->|"complete_ended_events()"| events
     areas -->|"require_permission(),<br/>notify(), record_audit(),<br/>get_db()"| shared
     timer -->|"opens its own session"| session
     session -->|"SQL over psycopg 3"| db
@@ -170,12 +171,12 @@ What each component does:
 | Component | Package | Responsibility |
 | --- | --- | --- |
 | App entry point | `app/main.py` | Creates the FastAPI app, applies CORS, registers every feature area's routers, serves `GET /health` |
-| Hold timer | `app/main.py` | Runs `bookings/service.py::sweep_holds` every `HOLD_SWEEP_INTERVAL_SECONDS` with its own session: warns coordinators of holds about to expire, then expires the lapsed ones |
+| Timers | `app/main.py` | Each runs on its own schedule with its own session. `bookings/service.py::sweep_holds`, every `HOLD_SWEEP_INTERVAL_SECONDS`, warns coordinators of holds about to expire, then expires the lapsed ones. `events/service.py::complete_ended_events`, every `EVENT_COMPLETION_INTERVAL_SECONDS`, marks each Confirmed event that has ended Completed and tells its organiser and coordinator |
 | Safety check | `app/safety`, epic 21 | The Safety Officer's queue of events awaiting the operational safety check, and each event's safety facts: attendance, approved venues judged against their capacity in the booked layout, accessibility needs, accepted equipment, previous reviews and what changed since the latest. The coordinator's request for a review once every arrangement is secured, the officer's decision against the review factors with findings of what must change, and confirming an approved event no change request has been approved since |
 | Change requests | `app/change_requests`, epic 19 | An organiser's requested changes to an approved event, one pending per field, and their withdrawal; the assigned coordinator's queue of them and decision on each. Approving applies the change by the event's own rules, reused from `app/events`, releases only the bookings and equipment it affects, and returns an event past Planning to Planning for a new safety check. Before deciding, the coordinator sees the impact approving would have, worked out by the same rules and checked again when approving |
 | Cancellations | `app/cancellations`, epic 6 | The organiser cancelling their own event with a reason. One transaction, under the event's row lock: its pending and approved bookings and its equipment holds are released, its open equipment items, registrations and pending change requests closed and kept for the record, and who cancelled it, when and why recorded. The coordinator (or the Lead, before one is assigned), the attendees, Venue Staff and Technical Support are told |
 | Coordination | `app/coordination`, epic 5 | The Lead's unassigned queue and first assignment, the Lead's overview of every active event and each coordinator's workload, and the Lead's reassignment of an event to another coordinator |
-| Events | `app/events`, epics 2, 3, 4, 6, 7 | Drafts, submission, event details and requirements, status transitions, routine edits. The review queue, clarification conversation, approve or reject. The equipment an event request asks for, and its hold on submission. An event's registration settings |
+| Events | `app/events`, epics 2, 3, 4, 6, 7 | Drafts, submission, event details and requirements, status transitions, routine edits. A Confirmed event becomes Completed once it has ended, on the API's timer. The review queue, clarification conversation, approve or reject. The equipment an event request asks for, and its hold on submission. An event's registration settings |
 | Venue bookings | `app/bookings`, epics 12, 13, 14 | Booking requests and the venue hold, withdrawals, decisions with reasons, conflict detection over the held period. An approved booking's hold until its event is confirmed: the expiry Venue Staff set as they approve and their changes to it, and the sweep that warns coordinators and expires lapsed holds, run on the API's timer and before any answer a lapsed hold would change. The database completes the holds when an event becomes Confirmed |
 | Registrations | `app/registrations`, epic 18 | The Confirmed, Public events taking registrations, each with its booked venues, places left and state for the attendee, and registering: the opening and closing times, capacity and one registration per attendee checked while holding the event's row, with the database's one-active-registration index behind it. An attendee's own registrations, one per event, and withdrawing one until the event starts, in one conditional update with its audit entry. An event's registration list for its organiser and assigned coordinator once past draft, a page at a time, with its active count against capacity read in the same statement, each Registered attendee's phone number and dietary requirements, and the events whose list they can pick. The attendee's own profile: their name, phone number and dietary requirements, saved on My profile or with a registration, which confirms them every time and must give them the first time |
 | Equipment | `app/equipment`, epics 15, 16, 17 | The coordinator's equipment requests: recording items, holding their units, submitting them to Technical Support, and re-checking them when an event's dates change. Technical Support's queue of the requests sent to it, with what is available for each, and its decision on each: accepting keeps the hold as the reservation, declining releases it. The equipment catalogue and the units recorded out of service. Technical Support's schedule of every hold still to end, by equipment type, filtered by type and dates |

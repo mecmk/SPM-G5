@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # off (the backend tests do, since its session would be the development database's).
     hold_sweep_interval_seconds: float = 60
 
+    # --- completing ended events (fix f21.2.2, story 21.2 AC28 and AC31) ---
+    # How often the API marks each Confirmed event whose end has passed Completed, in seconds; 0
+    # turns the timer off (the backend tests do, for the same reason as the hold sweep).
+    event_completion_interval_seconds: float = 60
+
     @property
     def resolved_test_database_url(self) -> str:
         if self.test_database_url:

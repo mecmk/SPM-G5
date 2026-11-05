@@ -3,8 +3,9 @@ event review (story 4.1), requesting clarification from the organiser (story 4.2
 organiser's response (story 4.3), the approve/reject decision and the equipment a rejection
 releases (stories 4.4, 4.5, fix f4.5.1), the decision / clarification history an organiser sees
 (story 4.6), routine information edits and corrections to a request until it is confirmed (story
-7.2, fix f7.2.4), the coordinator's assigned events in any status (story 6.1), and the
-notifications a submission and a decision send (story 20.1).
+7.2, fix f7.2.4), the coordinator's assigned events in any status (story 6.1), the
+notifications a submission and a decision send (story 20.1), and a Confirmed event becoming
+Completed once it has ended (fix f21.2.2, story 21.2).
 
 Routers translate the exceptions raised here into HTTP statuses. A request belongs to the
 organiser who created it: anyone else gets ``EventNotFound``, so a request's existence is not
@@ -1597,19 +1598,19 @@ def record_transition(
     *,
     from_status: str,
     to_status: str,
-    actor: User,
+    actor: User | None,
     at: datetime,
     reason: str | None,
 ) -> None:
     """Append one row to the append-only ``event_status_history`` log. ``to_status`` is taken
     as given, never read off ``event``, so this does not depend on being called before or after
-    ``event`` itself is updated."""
+    ``event`` itself is updated. ``actor`` None is the system (fix f21.2.2's completion)."""
     db.add(
         EventStatusHistory(
             event_id=event.id,
             from_status=from_status,
             to_status=to_status,
-            changed_by_id=actor.id,
+            changed_by_id=None if actor is None else actor.id,
             changed_at=at,
             reason=reason,
         )
@@ -1662,6 +1663,82 @@ def return_event_to_planning(
         commit=False,
     )
     return True
+
+
+# Fix f21.2.2 (21.2 AC29): what the organiser and the coordinator are told once the event ends.
+_COMPLETED_TITLE = '"{name}" is completed'
+_COMPLETED_MESSAGE = "The event has ended, so it is now marked Completed."
+
+
+def _complete(db: Session, event: Event, *, now: datetime) -> None:
+    """21.2 AC28/AC29: ``event``, locked by the caller, becomes Completed at ``now``, in its
+    status history and the audit log as the system's, and its organiser and coordinator are
+    told. The caller commits."""
+    event.status = EventStatus.COMPLETED
+    event.completed_at = now
+    db.flush()
+    record_transition(
+        db,
+        event,
+        from_status=EventStatus.CONFIRMED,
+        to_status=EventStatus.COMPLETED,
+        actor=None,
+        at=now,
+        reason=None,
+    )
+    record_audit(
+        db,
+        actor=None,
+        action="EVENT_COMPLETED",
+        entity_type="event",
+        entity_id=event.id,
+        details={"ends_at": event.ends_at.isoformat()},
+        commit=False,
+    )
+    for recipient in (event.organiser, event.assigned_coordinator):
+        notify(
+            db,
+            recipient=recipient,
+            actor=None,
+            notification_type=NotificationType.EVENT_COMPLETED,
+            event_id=event.id,
+            title=_COMPLETED_TITLE.format(name=event.name),
+            message=_COMPLETED_MESSAGE,
+            related_entity_type="event",
+            related_entity_id=event.id,
+            commit=False,
+        )
+
+
+def complete_ended_events(db: Session, *, now: datetime) -> list[Event]:
+    """Fix f21.2.2 (21.2 AC28, AC30): every Confirmed event whose end is at or before ``now``
+    becomes Completed (Q57); no other status moves. AC31: an event another transaction holds
+    locked - its cancellation, or its return to Planning - is skipped, so that action decides it
+    and the next pass sees the outcome. The rows are locked first and loaded after, so the
+    organiser and coordinator told are the ones the event has now. The API runs it on a timer
+    (``app/main.py``)."""
+    ended_ids = list(
+        db.scalars(
+            select(Event.id)
+            .where(Event.status == EventStatus.CONFIRMED, Event.ends_at <= now)
+            .order_by(Event.ends_at, Event.id)
+            .with_for_update(key_share=True, skip_locked=True)
+        ).all()
+    )
+    ended = list(
+        db.scalars(
+            select(Event)
+            .where(Event.id.in_(ended_ids))
+            .order_by(Event.ends_at, Event.id)
+            .execution_options(populate_existing=True)
+        )
+        .unique()
+        .all()
+    )
+    for event in ended:
+        _complete(db, event, now=now)
+    db.commit()
+    return ended
 
 
 def notify_of_return_to_planning(
