@@ -125,9 +125,15 @@ export type OperatingProblems = Record<OperatingField, ErrorCode | null>
 /** Story 8.3 AC14: the most digits a minutes box takes - enough for 14 days' 20160. */
 export const MINUTES_MAX_DIGITS = String(TURNAROUND_MAX_MINUTES).length
 
-/** Story 8.3 AC14: what a minutes box keeps of what was typed - its digits, nothing else. */
-export function digitsOnly(value: string): string {
-  return value.replace(/\D/g, '')
+const DIGITS_OR_EMPTY = /^\d*$/
+
+/**
+ * Story 8.3 AC14 (fix f8.3.5): whether a minutes box may take `value` - digits only, or empty. A
+ * value holding anything else is refused whole, so a paste the `onBeforeInput` guard misses
+ * (Firefox) leaves the box as it was rather than becoming another number ("1.5" is not 15).
+ */
+export function isDigitsOnly(value: string): boolean {
+  return DIGITS_OR_EMPTY.test(value)
 }
 
 /**

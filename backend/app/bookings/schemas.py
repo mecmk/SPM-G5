@@ -14,6 +14,7 @@ from enum import StrEnum
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from app.bookings.models import BookingStatus, VenueBooking
+from app.common.turnaround import TURNAROUND_MAX_MINUTES
 
 
 def _booked_layout_capacity(booking: VenueBooking) -> int | None:
@@ -57,12 +58,6 @@ class BookingReferenceData(BaseModel):
 # clarification message. Keep in step by hand with SUITABILITY_OVERRIDE_REASON_MAX_LENGTH in
 # frontend/src/api/bookings.ts, which the request step's textarea uses.
 SUITABILITY_OVERRIDE_REASON_MAX_LENGTH = 2000
-
-# Story 12.1 AC5, decided for f12.1.2 (14 Oct 2026) and not in the backlog: setup and teardown are
-# each at most 14 days, the longest an event may run. Keep in step by hand with
-# TURNAROUND_MAX_MINUTES in frontend/src/api/bookings.ts, which the request step's Setup and
-# Teardown inputs use. A venue's own defaults have the same limit (story 8.3 AC14, fix f8.3.4).
-TURNAROUND_MAX_MINUTES = 14 * 24 * 60
 
 
 class BookingRequestIn(BaseModel):

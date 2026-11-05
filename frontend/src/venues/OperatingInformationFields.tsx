@@ -3,7 +3,7 @@ import { RequiredMark } from '../components/RequiredMark'
 import { ERROR_REGISTRY } from '../errors/registry'
 import { refuseNonDigits } from '../shared/inputGuards'
 import {
-  digitsOnly,
+  isDigitsOnly,
   MINUTES_MAX_DIGITS,
   type OperatingField,
   type OperatingProblems,
@@ -49,6 +49,11 @@ export function OperatingInformationFields({
     }
   }
 
+  /** Story 8.3 AC14: a minutes box takes digits only; any other change is refused (fix f8.3.5). */
+  function changeMinutes(field: 'setupMinutes' | 'teardownMinutes', value: string) {
+    if (isDigitsOnly(value)) onChange(field, value)
+  }
+
   const opens = problemOf('opensAt')
   const closes = problemOf('closesAt')
   const setup = problemOf('setupMinutes')
@@ -90,7 +95,7 @@ export function OperatingInformationFields({
             maxLength={MINUTES_MAX_DIGITS}
             required
             value={form.setupMinutes}
-            onChange={(e) => onChange('setupMinutes', digitsOnly(e.target.value))}
+            onChange={(e) => changeMinutes('setupMinutes', e.target.value)}
             {...setup.inputProps}
           />
           {setup.message}
@@ -104,7 +109,7 @@ export function OperatingInformationFields({
             maxLength={MINUTES_MAX_DIGITS}
             required
             value={form.teardownMinutes}
-            onChange={(e) => onChange('teardownMinutes', digitsOnly(e.target.value))}
+            onChange={(e) => changeMinutes('teardownMinutes', e.target.value)}
             {...teardown.inputProps}
           />
           {teardown.message}
