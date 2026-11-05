@@ -5,7 +5,6 @@ import {
   type EquipmentHoldFilters,
   type EquipmentHoldGroup,
   type EquipmentHoldType,
-  type HeldItemStatus,
 } from '../api/equipment'
 import { EmptyState } from '../components/EmptyState'
 import type { EventCardBackState } from '../components/EventCard'
@@ -31,8 +30,6 @@ import { ErrorToast } from '../components/ErrorToast'
 
 /** The type filter's value for every type. */
 const ALL_TYPES = ''
-/** AC4: an item not yet sent to Technical Support has no request page for them (16.1 AC7). */
-const NOT_YET_SENT: HeldItemStatus = 'REQUESTED'
 
 /** AC3: the filters the page address holds; blank for one not set. */
 function readFilters(params: URLSearchParams): EquipmentHoldFilters {
@@ -240,8 +237,8 @@ interface HoldGroupSectionProps {
 
 /**
  * Story 17.3 AC1 - one equipment type's holds, soonest first (the server's order): the event, the
- * quantity still held, from and to, and the item's status as the event page words it. AC4: a sent
- * hold opens its request's page; one not yet sent has nothing to open. AC6: no holds says so.
+ * quantity still held, from and to, and the item's status as the event page words it. AC4: each
+ * hold opens its request's page. AC6: no holds says so.
  */
 function HoldGroupSection({ group, isRanged, backToSchedule }: HoldGroupSectionProps) {
   const headingId = useId()
@@ -287,15 +284,13 @@ function HoldGroupSection({ group, isRanged, backToSchedule }: HoldGroupSectionP
                     )}
                   </td>
                   <td>
-                    {hold.status !== NOT_YET_SENT && (
-                      <Link
-                        to={equipmentRequestPath(hold.item_id)}
-                        state={backToSchedule}
-                        className="link"
-                      >
-                        View request →
-                      </Link>
-                    )}
+                    <Link
+                      to={equipmentRequestPath(hold.item_id)}
+                      state={backToSchedule}
+                      className="link"
+                    >
+                      View request →
+                    </Link>
                   </td>
                 </tr>
               ))}
@@ -309,13 +304,13 @@ function HoldGroupSection({ group, isRanged, backToSchedule }: HoldGroupSectionP
 
 /**
  * Story 17.3 - Technical Support's schedule of every equipment hold, grouped by equipment type.
- * AC1: every active type, by name, each with its current holds soonest first. AC2: a hold on an
- * item not yet sent is listed, saying so. AC3: filtered by type and by a range of days, the
- * filters kept in the page address, so a reload and a request page's link back keep them; a
- * range the form refuses sends nothing. AC4: read-only - a sent hold opens its request's page,
- * where any decision is made (16.1). AC5: the server lists only holds still reserved and not yet
- * ended. AC6: a type with no holds says so. AC7: App.tsx guards the route with equipment:manage,
- * and the backend refuses everyone else.
+ * AC1: every active type, by name, each with its current holds soonest first. AC2 (fix f17.3.2):
+ * an item not yet sent to Technical Support is not listed, though its hold still takes units.
+ * AC3: filtered by type and by a range of days, the filters kept in the page address, so a reload
+ * and a request page's link back keep them; a range the form refuses sends nothing. AC4:
+ * read-only - a hold opens its request's page, where any decision is made (16.1). AC5: the server
+ * lists only holds still reserved and not yet ended. AC6: a type with no holds says so. AC7:
+ * App.tsx guards the route with equipment:manage, and the backend refuses everyone else.
  * Story 16.2 AC9 (fix f16.2.2): a hold that units out of service leave short is marked as on its
  * event's page, and an accepted one reads Accepted, not Accepted (reserved).
  */

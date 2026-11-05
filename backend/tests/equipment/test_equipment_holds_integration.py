@@ -5,10 +5,11 @@ As Technical Support Staff, I want a schedule of every equipment hold, grouped b
 so that I can see at a glance which events have which equipment, from when to when.
 
 AC1 The Equipment holds page groups every current hold by equipment type. Under each type, each
-    hold shows the event name, the quantity, the dates it runs from and to, and whether it is not
-    yet sent, Pending or Accepted. Holds are listed soonest first.
-AC2 Holds on items not yet sent to Technical Support are included, since they already hold units
-    (15.1 AC2).
+    hold shows the event name, the quantity, the dates it runs from and to, and whether it is
+    Pending or Accepted. Holds are listed soonest first.
+AC2 Holds on items not yet sent to Technical Support are left out, though they already hold units
+    (15.1 AC2): the item is not Technical Support's until it is sent (16.1 AC7). (Reworded by fix
+    f17.3.2; it used to list them, saying so.)
 AC3 It can be filtered by equipment type and by date range. A hold is shown when any part of it
     falls in the range. The range can't start before today, since past holds are not listed
     (AC5).
@@ -287,25 +288,30 @@ def test_a_partly_released_hold_shows_the_units_it_still_holds(tech_client, db: 
 
 
 # =============================================================================================
-# AC2 - an item not yet sent already holds its units
+# AC2 - an item not yet sent holds its units but is not listed
 # =============================================================================================
 @pytest.mark.story("17.3", ac=2)
-def test_a_not_yet_sent_items_hold_is_listed_beside_pending_and_accepted_ones(
+def test_a_not_yet_sent_items_hold_is_left_out_beside_pending_and_accepted_ones(
     tech_client, db: Session
 ):
-    kit = make_equipment_type(db)
+    kit = make_equipment_type(db, total_quantity=10)
     at = MIDNIGHT + 9 * HOUR
-    waiting = _held(db, kit, starts_at=at, ends_at=at + HOUR, status="REQUESTED")
+    unsent = _held(db, kit, starts_at=at, ends_at=at + HOUR, status="REQUESTED")
     pending = _held(db, kit, starts_at=at + HOUR, ends_at=at + 2 * HOUR, status="PENDING")
     accepted = _held(db, kit, starts_at=at + 2 * HOUR, ends_at=at + 3 * HOUR, status="ACCEPTED")
 
     listed = _group(_schedule(tech_client), kit)
 
     assert [(hold["id"], hold["status"]) for hold in listed] == [
-        (str(waiting.id), "REQUESTED"),
         (str(pending.id), "PENDING"),
         (str(accepted.id), "ACCEPTED"),
     ]
+    # Left off the schedule, not released: the unsent hold is still reserved and still takes its
+    # units, so another event over the same hour is offered the stock less all three holds (15.1
+    # AC2). A "fix" that released unsent holds to hide them would give back the 2 it holds.
+    assert unsent.status == "RESERVED"
+    other = _event(db, starts_at=at, ends_at=at + 3 * HOUR)
+    assert service.available_for_event(db, other)[kit.id] == 10 - 3 * 2
 
 
 # =============================================================================================
@@ -491,18 +497,6 @@ def test_a_sent_holds_item_is_the_request_its_page_reads(tech_client, db: Sessio
     )
 
 
-@pytest.mark.story("17.3", ac=4)
-def test_a_not_yet_sent_holds_item_has_no_request_page(tech_client, db: Session):
-    """16.1 AC7: a request not yet sent is not Technical Support's, so its page is not found."""
-    kit = make_equipment_type(db)
-    _on_the_day(db, kit, status="REQUESTED")
-    (listed,) = _group(_schedule(tech_client), kit)
-
-    response = tech_client.get(f"/equipment-requests/{listed['item_id']}")
-
-    assert response.status_code == 404
-
-
 # =============================================================================================
 # AC5 - only holds that haven't ended, and only what is still held
 # =============================================================================================
@@ -550,7 +544,7 @@ def test_an_item_that_holds_nothing_is_not_listed_even_with_a_hold_left_behind(
 ):
     """Every write releases an item's hold as it moves to one of these (the next test proves it
     through each endpoint), so a reserved hold should never be left on one. Should one be, the
-    schedule still lists only items that hold units - not yet sent, Pending or Accepted."""
+    schedule still lists only items sent to Technical Support - Pending or Accepted."""
     kit = make_equipment_type(db)
     _on_the_day(db, kit, status=status)
 
@@ -571,10 +565,6 @@ def _withdraw(login_as, item: EventEquipmentRequest):
     )
 
 
-def _remove(login_as, item: EventEquipmentRequest):
-    return login_as(Users.COORDINATOR).delete(f"/events/{item.event_id}/equipment/{item.id}")
-
-
 def _cancel(login_as, item: EventEquipmentRequest):
     return login_as(Users.ORGANISER).post(
         f"/events/{item.event_id}/cancel", json={"reason": "The launch moved to next year."}
@@ -587,10 +577,9 @@ def _cancel(login_as, item: EventEquipmentRequest):
     [
         ("PENDING", _decline),
         ("ACCEPTED", _withdraw),
-        ("REQUESTED", _remove),
         ("ACCEPTED", _cancel),
     ],
-    ids=["declined (16.1)", "withdrawn (17.2)", "removed (15.1)", "event cancelled (6.2)"],
+    ids=["declined (16.1)", "withdrawn (17.2)", "event cancelled (6.2)"],
 )
 def test_a_hold_its_item_gives_up_leaves_the_schedule_at_once(login_as, db: Session, status, act):
     kit = make_equipment_type(db)
