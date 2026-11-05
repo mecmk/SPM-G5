@@ -307,11 +307,10 @@ function HoldGroupSection({ group, isRanged, backToSchedule }: HoldGroupSectionP
  * AC1: every active type, by name, each with its current holds soonest first. AC2 (fix f17.3.2):
  * an item not yet sent to Technical Support is not listed, though its hold still takes units.
  * AC3: filtered by type and by a range of days, the filters kept in the page address, so a reload
- * and a request page's link back keep them; a
- * range the form refuses sends nothing. AC4: read-only - a hold opens its request's page,
- * where any decision is made (16.1). AC5: the server lists only holds still reserved and not yet
- * ended. AC6: a type with no holds says so. AC7: App.tsx guards the route with equipment:manage,
- * and the backend refuses everyone else.
+ * and a request page's link back keep them; a range the form refuses sends nothing. AC4:
+ * read-only - a hold opens its request's page, where any decision is made (16.1). AC5: the server
+ * lists only holds still reserved and not yet ended. AC6: a type with no holds says so. AC7:
+ * App.tsx guards the route with equipment:manage, and the backend refuses everyone else.
  * Story 16.2 AC9 (fix f16.2.2): a hold that units out of service leave short is marked as on its
  * event's page, and an accepted one reads Accepted, not Accepted (reserved).
  */

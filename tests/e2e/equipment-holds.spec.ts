@@ -1,7 +1,8 @@
 /**
  * Story 17.3 - fe/be: view the equipment holds schedule as Technical Support.
  * AC1 the Equipment holds page groups every current hold by equipment type; under each type, each
- *     hold shows its event, quantity, from and to, and whether it is Pending or Accepted. Every type's grouping and the soonest-first order are backend cases.
+ *     hold shows its event, quantity, from and to, and whether it is Pending or Accepted. Every
+ *     type's grouping and the soonest-first order are backend cases.
  * AC2 (f17.3.2) a hold on an item not yet sent is not listed (the seeded presentation laptops).
  * AC3 filtered by type and by either end of a date range, just the filters set kept in the page
  *     address; a range starting before today, an end before the start or before today, a
@@ -10,10 +11,10 @@
  *     address the server refuses stays in the type box. Changed filters hide the old holds while
  *     they load, and a refusal with no sentence of its own (stubbed) names the filters. The range's
  *     own edges, Singapore days and the server's refusals are backend cases.
- * AC4 a sent hold opens its equipment request page, whose back link returns to the schedule as it
- *     was filtered, or unfiltered, and the schedule offers no Accept or Decline. The request page opened by its address leads back to the queue, and
- *     opened from the queue it still does: proved by equipment-queue.spec.ts's "15.2 AC1: View
- *     details opens the request…".
+ * AC4 a hold opens its equipment request page, whose back link returns to the schedule as it
+ *     was filtered, or unfiltered, and the schedule offers no Accept or Decline. The request page
+ *     opened by its address leads back to the queue, and opened from the queue it still does:
+ *     proved by equipment-queue.spec.ts's "15.2 AC1: View details opens the request…".
  * AC5 is a backend case: e2e cannot make time pass, and which items hold nothing is the server's
  *     to decide. Here the seeded declined camera is not listed.
  * AC6 a type with no holds says so: in a range, from the seeded data; with no range, or either end

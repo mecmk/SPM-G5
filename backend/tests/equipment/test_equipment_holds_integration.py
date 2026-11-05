@@ -294,9 +294,9 @@ def test_a_partly_released_hold_shows_the_units_it_still_holds(tech_client, db: 
 def test_a_not_yet_sent_items_hold_is_left_out_beside_pending_and_accepted_ones(
     tech_client, db: Session
 ):
-    kit = make_equipment_type(db)
+    kit = make_equipment_type(db, total_quantity=10)
     at = MIDNIGHT + 9 * HOUR
-    _held(db, kit, starts_at=at, ends_at=at + HOUR, status="REQUESTED")
+    unsent = _held(db, kit, starts_at=at, ends_at=at + HOUR, status="REQUESTED")
     pending = _held(db, kit, starts_at=at + HOUR, ends_at=at + 2 * HOUR, status="PENDING")
     accepted = _held(db, kit, starts_at=at + 2 * HOUR, ends_at=at + 3 * HOUR, status="ACCEPTED")
 
@@ -306,6 +306,12 @@ def test_a_not_yet_sent_items_hold_is_left_out_beside_pending_and_accepted_ones(
         (str(pending.id), "PENDING"),
         (str(accepted.id), "ACCEPTED"),
     ]
+    # Left off the schedule, not released: the unsent hold is still reserved and still takes its
+    # units, so another event over the same hour is offered the stock less all three holds (15.1
+    # AC2). A "fix" that released unsent holds to hide them would give back the 2 it holds.
+    assert unsent.status == "RESERVED"
+    other = _event(db, starts_at=at, ends_at=at + 3 * HOUR)
+    assert service.available_for_event(db, other)[kit.id] == 10 - 3 * 2
 
 
 # =============================================================================================
