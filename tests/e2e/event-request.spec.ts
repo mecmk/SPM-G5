@@ -7,7 +7,8 @@
  *     date problem is said under the dates as soon as it is typed, not only on save.
  * AC3 attendance, equipment and facility quantities take positive whole numbers (checked in the
  *     browser, said next to the field as it is typed, and the field to fix is marked and focused
- *     on a save).
+ *     on a save). (f16.2.6) Turning the mouse wheel over a number box leaves the number as typed,
+ *     where Chrome counted it down; one app-wide rule, proved on the attendance box.
  * AC4 venue requirements (room layout, facilities with a quantity, other requirements) are
  *     recorded. Since f2.7.4 every request has at least one venue requirement, so a new request
  *     starts with one and "No venue requirements" is no longer offered (2.7 AC14, proven in
@@ -206,6 +207,21 @@ test('2.1 AC2: an end before the start, or a past date, is refused before anythi
   await page.getByRole('button', { name: 'Save draft' }).click()
   await expect(page.getByRole('alert')).toContainText('in the past')
   expect(createCalls).toBe(0)
+})
+
+test('2.1 AC3 (f16.2.6): turning the mouse wheel over a number box leaves the number as typed', async ({
+  page,
+}) => {
+  await signIn(page, ACCOUNTS.organiser)
+  await startNewRequest(page)
+  const attendance = page.getByLabel('Expected attendance')
+  await attendance.click()
+  await attendance.pressSequentially('60')
+  const box = (await attendance.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  for (let turn = 0; turn < 8; turn++) await page.mouse.wheel(0, 100)
+
+  await expect(attendance).toHaveValue('60')
 })
 
 test('2.1 AC3: attendance, facility and equipment quantities must be positive whole numbers', async ({
