@@ -22,7 +22,9 @@ import {
  *     note, from when and, optionally, until when.
  * AC2 The Equipment catalogue lists each type with its stock and the units out of service now;
  *     a type's page has the Out of service form and its current records, each with Edit and End.
- *     End ends a record in force now, and removes one not yet started.
+ *     End ends a record in force now, and removes one not yet started. (f16.2.5) When a scheduled
+ *     record's start arrives, the catalogue and the type's page change by themselves, with no
+ *     refresh: out of service now, and Scheduled becoming In force.
  * AC3 The quantity is a whole number of at least 1, there is a start, each date is finished and
  *     readable, the end is after the start and the start is not in the past - checked before
  *     anything is sent; a record in force keeps its start; more units than are free over the
@@ -64,6 +66,7 @@ const THUMB_TARGET = 44
 const CONF_PHONE = 'Conference phone' // stock 6
 const PROJECTOR = 'Portable projector' // stock 8
 const VIDEO_CAMERA = 'Video camera' // stock 4, only this spec records against it
+const SPEAKER_SET = 'Portable speaker set' // stock 5, only the f16.2.5 flow takes units out
 const LED_SCREEN = 'Mobile LED screen' // stock 3, all held by the light showcase
 const LAPEL_MIC = 'Lapel microphone' // stock 10, none held in February 2030
 const LIGHT_SHOWCASE = 'Riverside Light Showcase'
@@ -105,6 +108,11 @@ async function openType(page: Page, name: string) {
   await page.goto(CATALOGUE_PATH)
   await catalogue(page).getByRole('link', { name, exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+}
+
+/** The minute after this one, as the From field takes it: a record that starts in a moment. */
+function nextMinute(): string {
+  return new Date(Date.now() + SINGAPORE_OFFSET_MS + 60_000).toISOString().slice(0, 16)
 }
 
 /** The current minute, as the From field takes it: a record that starts now. It waits for a
@@ -310,6 +318,47 @@ test.describe('records units out of service', () => {
     await expect(
       form(page).getByRole('heading', { name: 'Take units out of service' }),
     ).toBeVisible()
+  })
+
+  test('16.2 AC2 (f16.2.5): a scheduled record takes effect on the catalogue and the type page as its start arrives, with no refresh', async ({
+    page,
+  }) => {
+    test.setTimeout(150_000)
+    const note = `Starts in a minute ${Date.now()}`
+    await signIn(page, ACCOUNTS.techSupport)
+    await openType(page, SPEAKER_SET)
+    await fillRecord(page, {
+      units: '1',
+      reason: 'Under maintenance',
+      note,
+      from: nextMinute(),
+      until: inFuture(1),
+    })
+    await form(page).getByRole('button', { name: 'Take out of service' }).click()
+    await expect(record(page, note).getByText('Scheduled', { exact: true })).toBeVisible()
+    await expect(page.getByRole('main')).toContainText('0 out of service now')
+
+    // The catalogue, open in a second tab, is not touched again from here on.
+    const catalogueTab = await page.context().newPage()
+    await catalogueTab.goto(CATALOGUE_PATH)
+    const row = catalogue(catalogueTab).getByRole('row', { name: new RegExp(SPEAKER_SET) })
+    await expect(row.getByRole('cell').nth(2)).toHaveText('0')
+    await expect(row.getByRole('cell').nth(3)).toContainText('Scheduled')
+
+    const MINUTE_AND_A_BIT = 90_000
+    await expect(row.getByRole('cell').nth(2)).toHaveText('1', { timeout: MINUTE_AND_A_BIT })
+    await expect(row.getByRole('cell').nth(3)).toContainText('In force')
+    await expect(page.getByRole('main')).toContainText('1 out of service now', {
+      timeout: MINUTE_AND_A_BIT,
+    })
+    await expect(record(page, note).getByText('In force', { exact: true })).toBeVisible()
+
+    await record(page, note).getByRole('button', { name: 'End' }).click()
+    await page
+      .getByRole('dialog', { name: 'End this record now?' })
+      .getByRole('button', { name: 'End now' })
+      .click()
+    await expect(record(page, note)).toHaveCount(0)
   })
 
   test('16.2 AC2: a period still to come shows on the catalogue with its units, its status and from when to when', async ({
