@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
-import { ACCOUNTS, EVENTS, expectNoSidewaysScroll, inFuture, mainOverflow, signIn } from './support'
+import {
+  ACCOUNTS,
+  corsHeaders,
+  EVENTS,
+  expectNoSidewaysScroll,
+  inFuture,
+  mainOverflow,
+  signIn,
+} from './support'
 
 /**
  * Story 16.2 - mark equipment out of service: what Technical Support and a coordinator click
@@ -567,9 +575,8 @@ const SHOWCASE_PATH = `/events/${EVENTS.productShowcase}`
  *  stubbed short by one, so each is seen without a record taking units. Its pending speaker set
  *  holds one unit, which can only be short of every unit, and that closes it (AC10). */
 async function stubShowcaseShortByOne(page: Page) {
-  const eventPath = SHOWCASE_PATH
   let shortItems: string[] = []
-  await page.route(`**${eventPath}`, async (route) => {
+  await page.route(`**${SHOWCASE_PATH}`, async (route) => {
     if (route.request().resourceType() !== 'fetch') return route.fallback()
     const response = await route.fetch()
     const event = await response.json()
@@ -581,11 +588,12 @@ async function stubShowcaseShortByOne(page: Page) {
       .map((item: { id: string }) => item.id)
     return route.fulfill({ response, json: event })
   })
-  await page.route(`**${eventPath}/equipment-shortages`, async (route) => {
-    const response = await route.fetch()
-    const json = shortItems.map((id) => ({ item_id: id, units_short: 1 }))
-    return route.fulfill({ response, json })
-  })
+  await page.route(`**${SHOWCASE_PATH}/equipment-shortages`, (route) =>
+    route.fulfill({
+      json: shortItems.map((id) => ({ item_id: id, units_short: 1 })),
+      headers: corsHeaders(route.request()),
+    }),
+  )
 }
 
 function showcaseItem(page: Page, name: string) {
@@ -618,7 +626,7 @@ test('16.2 AC11: an item short of some of its units keeps its status, says how m
 for (const [who, account, isShown] of [
   ['an Event Coordinator Lead', ACCOUNTS.lead, true],
   ['Technical Support', ACCOUNTS.techSupport, true],
-  ['a coordinator not the event\'s', ACCOUNTS.coordinator, false],
+  ["a coordinator not the event's", ACCOUNTS.coordinator, false],
   ['Venue Staff', ACCOUNTS.venueStaff, false],
   ['a Safety Officer', ACCOUNTS.safetyOfficer, false],
 ] as const) {
