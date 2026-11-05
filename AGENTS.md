@@ -141,19 +141,20 @@ those. A new feature area gets its line here in the same PR (see
 
 ```text
 backend/
-  app/                  # one package per feature area: router.py, service.py, schemas.py, models.py
+  app/                  # one package per feature area: router.py, service.py, schemas.py, and models.py where the area owns tables
+    main.py             # registers every area's routers; runs the timers that expire lapsed holds and complete ended events
     auth/               # sign-in, sessions, the permission matrix, the dependencies routers use
     bookings/           # venue booking requests, Venue Staff's decisions, withdrawals, the coordinator cancelling an approved booking
     cancellations/      # the organiser cancelling their own event, releasing everything it holds
     change_requests/    # an organiser's requested changes to an approved event, withdrawals, and the coordinator's decisions
     coordination/       # assigning and reassigning an event's coordinator
     equipment/          # an event's equipment requests: recording, holding, submitting, withdrawing, Technical Support's queue and decisions; the equipment catalogue and units out of service; the schedule of every hold, by type
-    events/             # event requests, review and decisions, event details, routine edits
+    events/             # event requests, review and decisions, event details, routine edits, marking an ended event Completed
     notifications/      # who is told of each action, and each user's own notifications
     registrations/      # the events attendees can register for, registering, their own registrations and withdrawing, their profile details, and an event's registration list for its organiser and coordinator
     safety/             # requesting a safety review, the Safety Officer's queue and decision, confirming an approved event
     venues/             # the venue catalogue, its search, its availability calendar and the room layouts venues can offer
-    common/             # shared by feature areas: the audit log, the phone number rule, the queues' search
+    common/             # shared by feature areas: the audit log, the phone number rule, the queues' search, the longest setup or teardown
     dbtool/             # migrate / seed / reset / ready / docs (python -m app.dbtool)
   db/
     migrations/         # NNN_*.sql schema, applied once in order

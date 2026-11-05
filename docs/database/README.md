@@ -8,7 +8,7 @@ before touching anything under `backend/db/`.
 | Path | What it is |
 | --- | --- |
 | `backend/db/migrations/NNN_*.sql` | The schema, as plain PostgreSQL DDL. Applied once, in order. **Source of truth.** |
-| `backend/db/seed/010_reference_data.sql` | Roles, facilities, room layouts, accessibility features, equipment types. Idempotent upserts, except the standard room layouts, which are only added where missing (story 8.6). |
+| `backend/db/seed/010_reference_data.sql` | Roles, facilities, room layouts, accessibility features, equipment types and the safety review factors (story 21.2). Idempotent upserts, except the standard room layouts, which are only added where missing (story 8.6). |
 | `backend/db/seed/020_sample_data.sql` | Sample organisations, users (one per role), venues, events, bookings. Fixed UUIDs. Idempotent upserts. |
 | `backend/app/dbtool/` | The tool behind every `npm run db:*` script (migrate / seed / reset / ready / docs). |
 | `docs/database/DATA_DICTIONARY.md` | **Generated** from the live database (`COMMENT ON` text). Never edit by hand. |

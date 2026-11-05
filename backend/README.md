@@ -21,11 +21,11 @@ API docs (Swagger UI) are available at `http://localhost:8000/docs` while the se
 
 ```text
 app/
-  main.py          FastAPI app; include each feature's router here
+  main.py          FastAPI app: includes each feature's router and runs the hold and completion timers
   config.py        settings (DATABASE_URL, session cookie, ...) read from .env
   db.py            SQLAlchemy engine/session + Base + shared mixins
   <feature>/       one package per feature area (auth, bookings, events, ...), listed below
-  common/          shared by feature areas: the audit log
+  common/          shared by feature areas: the audit log, phone number rule, queue search, turnaround limit
   dbtool/          migrate / seed / reset / ready / docs  (python -m app.dbtool --help)
 db/
   migrations/      schema DDL, applied once in order (source of truth)

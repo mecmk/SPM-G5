@@ -18,7 +18,12 @@ backed by PostgreSQL.
 - **Backend** (`backend/`): a FastAPI service structured **by feature area**
   (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
   `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds
-  cross-cutting helpers (audit log, the phone number rule). `app/dbtool/` is the migration/seed/docs tool.
+  cross-cutting helpers (the audit log, the phone number rule, the queues' search, the longest
+  setup or teardown). `app/main.py`
+  registers every area's routers and runs two timers: one expires lapsed venue holds (story 12.7),
+  the other marks each Confirmed event Completed once it has ended (fix f21.2.2).
+  `app/dbtool/` is the migration/seed/docs tool. The components and how they call one another are
+  drawn in [C4_MODEL.md](C4_MODEL.md).
 - **Database**: PostgreSQL 16, defined by plain SQL migrations in `backend/db/migrations` and
   seeded from `backend/db/seed`. See [database/README.md](database/README.md), the generated
   [data dictionary](database/DATA_DICTIONARY.md) and [ERD](database/ERD.excalidraw).
@@ -30,21 +35,27 @@ backed by PostgreSQL.
 ```text
 roles ──< users >── client_organisations
             │
-            ├──< user_sessions
+            ├──< user_sessions             login_attempts (by e-mail, for the sign-in lock)
             │
             ├──< events (organiser) ──< venue_requirements ──< venue_requirement_facilities >── facilities
             │        │                ──< event_accessibility_needs >── accessibility_features
             │        │                ──< event_equipment_requests >── equipment_types
             │        │                ──< event_status_history / event_clarifications
-            │        │                ──< event_coordinator_assignments / event_change_requests
-            │        │                ──< event_registrations >── users (attendee)
+            │        │                ──< event_coordinator_assignments
+            │        │                ──< event_change_requests ──< event_change_history
+            │        │                ──< event_registrations ──< event_registration_guests
+            │        │                         >── users (attendee)
+            │        │                ──< event_safety_reviews ──< event_safety_review_findings >── safety_review_factors
+            │        │                                                   └──< event_safety_finding_bookings >── venue_bookings
             │        │
-            │        └──< venue_bookings >── venues ──< venue_facilities / venue_layouts /
+            │        └──< venue_bookings >── venues ──< venue_facilities / venue_images /
             │                  │                        venue_accessibility_features /
             │                  │                        venue_unavailability_periods
+            │                  │                     ──< venue_layouts >── room_layouts
             │                  └── (EXCLUDE: no two PENDING or APPROVED bookings overlap on one venue)
             │
             └──< equipment_reservations >── equipment_types ──< equipment_unavailability_periods
+                 deleted_room_layouts (codes a deleted layout held, never reused)
                  notifications, audit_log (cross-cutting)
 ```
 
@@ -77,6 +88,8 @@ service, next to the record they need - not in the permission matrix.
   goes to the browser in an `HttpOnly`, `SameSite=Lax` cookie.
 - Logout sets `revoked_at`; expired or revoked sessions are refused. Deactivating a user
   (`users.is_active = false`) kills their sessions immediately.
+- Repeated failed sign-ins for one e-mail lock sign-in for it for a while (story 1.1 AC6). The
+  count lives in `login_attempts`, and the limits are the `LOGIN_*` settings in `app/config.py`.
 - `POST /auth/login` and `GET /auth/me` return the user with their permission list, so a client
   can hide navigation and actions the role cannot use (story 1.2 AC2). The backend re-checks every
   call.
@@ -92,4 +105,7 @@ service, next to the record they need - not in the permission matrix.
    `test_raise_booking_request.py`), with `@pytest.mark.story(...)` markers.
 4. Frontend: `src/api/<feature>.ts` and `src/<feature>/<Page>.tsx`, hiding anything the role
    lacks the permission for (see `frontend/CLAUDE.md`).
-5. E2E: one Playwright spec for the user-visible flow.
+5. E2E: one Playwright spec for the user-visible flow, with its row in
+   [tests/README.md](../tests/README.md).
+6. Docs: a new feature area gets its line in the folder map in [AGENTS.md](../AGENTS.md) and its
+   component in [C4_MODEL.md](C4_MODEL.md).

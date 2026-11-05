@@ -5,6 +5,19 @@ first release for a customer as part of SMU's IS212 (Software Project Management
 following a Scrum process. The technology stack and feature scope were finalized at project
 setup; the stack is documented below, and feature scope is tracked in the team's backlog.
 
+## Repository
+
+The code is at **<https://github.com/mecmk/SPM-G5>**. Clone it from there; its pull requests,
+CI runs and each run's traceability matrix are on the same page.
+
+## What This Release Contains
+
+The release covers the 20 core features in the Week 4 project instructions. Each one is mapped to
+the component and code that implement it in
+[docs/C4_MODEL.md](docs/C4_MODEL.md#core-features-mapped-to-components-and-tables), which also
+draws the system in C4 levels 1 to 3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how
+the pieces fit together, and [docs/sprints/](docs/sprints/) records what each sprint delivered.
+
 ## Tech Stack
 
 | Layer    | Choice                        |
@@ -71,7 +84,7 @@ macOS: `brew install --cask dbeaver-community`. Or download it from
 ## Setup
 
 ```powershell
-git clone <repo-url>
+git clone https://github.com/mecmk/SPM-G5.git
 cd SPM-G5
 npm run setup
 Copy-Item backend\.env.sample backend\.env
@@ -187,6 +200,32 @@ Neither kind of test touches your development data. Backend tests build their ow
 API on `:8001` and app on `:5174`, and empties the database afterwards, so your `npm run dev`
 stack can stay up. Conventions (fixtures, story markers, traceability) are in
 [docs/testing/README.md](docs/testing/README.md).
+
+### Where the tests are
+
+| Suite | Where | Run with |
+| --- | --- | --- |
+| Backend unit tests | `backend/tests/**/test_*_unit.py`: pure rules, no database | `npm run test:backend` |
+| Backend integration tests | the rest of `backend/tests/`, one file per story, through the API against a real PostgreSQL database; `backend/tests/test_schema.py` covers the schema itself | `npm run test:backend` |
+| End-to-end tests | `tests/e2e/*.spec.ts` (Playwright), one spec per story area | `npm run test:e2e` |
+
+Every test is tagged with the story and acceptance criterion it proves, so `npm run test:trace`
+can list each criterion with the tests behind it.
+
+### Continuous integration
+
+Every pull request runs these GitHub Actions workflows, in [.github/workflows/](.github/workflows/):
+
+| Workflow | What it runs |
+| --- | --- |
+| `backend-ci.yml` | ruff lint and format check, the migrations and seed on a PostgreSQL service, then pytest, uploading the traceability matrix as an artifact |
+| `frontend-ci.yml` | oxlint, the Prettier format check, and the TypeScript build |
+| `e2e.yml` | migrates and seeds a PostgreSQL service, starts the API and the app, and runs Playwright |
+| `lint-markdown.yml` | markdownlint on every Markdown file |
+| `pr-title-check.yml` | the pull request title follows Conventional Commits |
+| `pre-commit.yml` | the repository's pre-commit hooks |
+
+The backend, frontend and e2e workflows run only when files they cover change.
 
 ## Branching Model
 

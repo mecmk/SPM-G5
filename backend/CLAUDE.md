@@ -73,7 +73,9 @@ are reference *tables* seeded from `db/seed/010_reference_data.sql`, never Pytho
 
 ## Architecture
 
-One package per feature area under `app/`, always the same four files:
+One package per feature area under `app/`, always the same files. `models.py` is there only where
+the area owns tables: `app/equipment` and `app/cancellations` work on other areas' tables and have
+none.
 
 | File | Holds | May import |
 | --- | --- | --- |
