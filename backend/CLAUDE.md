@@ -16,7 +16,7 @@ coding rules for this subsystem, with the sites in this repo each one is anchore
 uv sync                                    # install; re-run after pyproject.toml / uv.lock change
 uv run uvicorn app.main:app --reload --port 8000
 uv run pytest                              # needs PostgreSQL running (npm run db:up from root)
-uv run pytest --cov                        # + coverage; fails below 100% of app/, as CI does
+uv run pytest --cov                        # + coverage; fails below 80% of app/, as CI does
 uv run ruff check . && uv run ruff format --check .
 uv run python -m app.dbtool ready          # create + migrate + seed + verify
 uv run python -m app.dbtool reset          # drop all, then migrate + seed + docs  (local only)

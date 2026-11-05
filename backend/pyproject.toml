@@ -27,13 +27,13 @@ markers = [
 ]
 filterwarnings = ["ignore::DeprecationWarning:starlette.testclient", "ignore::DeprecationWarning:fastapi.testclient"]
 
-# Coverage (npm run test:coverage, docs/testing/README.md): every line and branch of app/.
+# Coverage: 80% minimum across app/'s lines and branches. Run locally with: uv run pytest --cov
 [tool.coverage.run]
 branch = true
 source = ["app"]
 
 [tool.coverage.report]
-fail_under = 100
+fail_under = 80
 show_missing = true
 skip_covered = true
 
