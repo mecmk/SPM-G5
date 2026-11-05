@@ -143,6 +143,12 @@ def test_characteristic_lists_are_replaced_when_supplied(venue_staff_client):
 
 @pytest.mark.story("8.3", ac=2)
 def test_update_can_clear_optional_characteristics(venue_staff_client):
+    # The Boardroom has no notes, so record some first: clearing nothing would prove nothing.
+    recorded = venue_staff_client.patch(
+        f"/venues/{Venues.BOARDROOM}", json={"operating_notes": "Closed on public holidays"}
+    )
+    assert recorded.json()["operating_notes"] == "Closed on public holidays"
+
     response = venue_staff_client.patch(
         f"/venues/{Venues.BOARDROOM}",
         json={"operating_notes": None, "facilities": []},
