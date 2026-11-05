@@ -55,9 +55,9 @@ function PeriodRow({ record, loadedAt }: { record: OutOfServiceRecord; loadedAt:
  * every active type, by name, with its stock, the units out of service now and every period they
  * are out - in force or scheduled, from when to when - each opening the type's page. Fix f16.2.5:
  * the figures are read again as a record starts or ends, so a period scheduled for later takes
- * effect on the page without a refresh. AC6: App.tsx guards the route with equipment:manage, and the backend
- * refuses everyone else. On a phone the headers and names wrap (App.css), so the columns fit and
- * nothing scrolls sideways.
+ * effect on the page without a refresh. AC6: App.tsx guards the route with equipment:manage, and
+ * the backend refuses everyone else. On a phone the headers and names wrap (App.css), so the
+ * columns fit and nothing scrolls sideways.
  */
 export function EquipmentCataloguePage() {
   const [load, setLoad] = useState(() => loadCatalogue)

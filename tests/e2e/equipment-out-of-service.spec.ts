@@ -110,9 +110,12 @@ async function openType(page: Page, name: string) {
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
-/** The minute after this one, as the From field takes it: a record that starts in a moment. */
-function nextMinute(): string {
-  return new Date(Date.now() + SINGAPORE_OFFSET_MS + 60_000).toISOString().slice(0, 16)
+/** The minute after this one, as the From field takes it: a record that starts in under a minute.
+ *  Built on `thisMinute`, so it too waits for a fresh minute when this one is nearly over, and the
+ *  start cannot be in the past by the time the form is saved. */
+async function nextMinute(): Promise<string> {
+  const now = await thisMinute()
+  return new Date(Date.parse(`${now}:00Z`) + 60_000).toISOString().slice(0, 16)
 }
 
 /** The current minute, as the From field takes it: a record that starts now. It waits for a
@@ -331,7 +334,7 @@ test.describe('records units out of service', () => {
       units: '1',
       reason: 'Under maintenance',
       note,
-      from: nextMinute(),
+      from: await nextMinute(),
       until: inFuture(1),
     })
     await form(page).getByRole('button', { name: 'Take out of service' }).click()
