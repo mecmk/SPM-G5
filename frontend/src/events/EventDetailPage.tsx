@@ -723,6 +723,11 @@ export function EventDetailPage() {
     can(PERMISSIONS.EQUIPMENT_REQUEST) &&
     isAssignedCoordinator &&
     EQUIPMENT_OPEN_STATUSES.includes(event.status)
+  /** Story 16.2 AC4 with fix f16.2.4 (16.2 AC13): what units out of service leave the event's
+   *  equipment short of is read by its coordinator, an Event Coordinator Lead and Technical
+   *  Support only - mirroring the backend's `can_read_shortages`. */
+  const canSeeShortages =
+    isAssignedCoordinator || can(PERMISSIONS.EVENTS_ASSIGN) || can(PERMISSIONS.EQUIPMENT_MANAGE)
   /** f12.1.1 (story 12.1 AC15): Find a venue, only for whoever may request one for the event -
    *  its assigned coordinator, while it can take a booking. Story 12.5: once its bookings are
    *  known, so it opens on a requirement that needs a venue. */
@@ -1379,7 +1384,7 @@ export function EventDetailPage() {
           canChange={canChangeEquipment}
           isAwaitingDecision={AWAITING_DECISION_STATUSES.includes(event.status)}
           isFlagged={flagged.includes('EQUIPMENT')}
-          canSeeShortages={can(PERMISSIONS.EQUIPMENT_READ)}
+          canSeeShortages={canSeeShortages}
           onChanged={reloadEvent}
         />
 

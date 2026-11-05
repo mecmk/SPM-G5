@@ -127,7 +127,9 @@ def test_the_database_allows_every_status_the_application_uses(db: Session):
     ]
 
     for status in statuses:
-        if status == "WITHDRAWN":  # story 17.2 AC3: always with who withdrew it and when
+        # Story 17.2 AC3: always with who withdrew it and when; fix f16.2.4: closed as out of
+        # service always with when, and from what.
+        if status in ("WITHDRAWN", "OUT_OF_SERVICE"):
             make_equipment_item(
                 db,
                 event=event,
@@ -140,5 +142,14 @@ def test_the_database_allows_every_status_the_application_uses(db: Session):
         _insert_line(db, event_id=event.id, type_id=make_equipment_type(db).id, status=status)
 
     assert sorted(statuses) == sorted(
-        ["REQUESTED", "PENDING", "ACCEPTED", "DECLINED", "UNAVAILABLE", "CANCELLED", "WITHDRAWN"]
+        [
+            "REQUESTED",
+            "PENDING",
+            "ACCEPTED",
+            "DECLINED",
+            "UNAVAILABLE",
+            "CANCELLED",
+            "WITHDRAWN",
+            "OUT_OF_SERVICE",
+        ]
     )

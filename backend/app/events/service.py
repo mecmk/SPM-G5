@@ -217,9 +217,15 @@ _HELD_ITEM_STATUSES = (
 WITH_TECHNICAL_SUPPORT = frozenset(
     {EquipmentRequestStatus.PENDING, EquipmentRequestStatus.ACCEPTED}
 )
-# Story 6.2, 19.2, 17.2 AC3: no longer the event's, kept for Technical Support's record. A 7.2
-# correction neither holds, edits nor removes them.
-KEPT_FOR_RECORD = frozenset({EquipmentRequestStatus.CANCELLED, EquipmentRequestStatus.WITHDRAWN})
+# Story 6.2, 19.2, 17.2 AC3, 16.2 AC10 (fix f16.2.4): no longer the event's, kept for Technical
+# Support's record. A 7.2 correction neither holds, edits nor removes them.
+KEPT_FOR_RECORD = frozenset(
+    {
+        EquipmentRequestStatus.CANCELLED,
+        EquipmentRequestStatus.WITHDRAWN,
+        EquipmentRequestStatus.OUT_OF_SERVICE,
+    }
+)
 # Story 15.1 AC6 (fix f15.1.1): a declined item stays listed as history and does not count, so a
 # correction leaves it alone too. It is not kept for the record: that set also decides how
 # Technical Support's queue (15.2) and an approved change (19.2) treat an item.

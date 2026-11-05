@@ -293,6 +293,7 @@ def test_counts_cover_every_tab_whichever_is_asked_for(tech_client, db):
         **{key: before[key] + 1 for key in ("pending", "accepted", "declined")},
         "cancelled": before["cancelled"],
         "withdrawn": before["withdrawn"],
+        "out_of_service": before["out_of_service"],
     }
 
 

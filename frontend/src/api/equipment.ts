@@ -124,8 +124,10 @@ export function submitEquipment(eventId: string): Promise<EquipmentLine[]> {
 
 /** Story 15.2 AC3: the statuses Technical Support's queue has a tab for; story 6.2 AC15:
  * Cancelled, read-only, for requests once sent to them; story 17.2 AC4: Withdrawn, read-only, for
- * requests their coordinator withdrew. Mirrors `EquipmentQueueStatus`. */
-export type EquipmentQueueStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED' | 'WITHDRAWN'
+ * requests their coordinator withdrew; fix f16.2.4 (16.2 AC12): Out of service, read-only, for
+ * requests closed once sent to them. Mirrors `EquipmentQueueStatus`. */
+export type EquipmentQueueStatus =
+  'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELLED' | 'WITHDRAWN' | 'OUT_OF_SERVICE'
 
 /**
  * Mirrors `EquipmentQueueEntry`: story 15.2 AC1, a request with its event's name and dates, the
@@ -159,6 +161,9 @@ export interface EquipmentQueueEntry {
   /** Story 17.2 AC4: when the coordinator withdrew it, and who; null unless it is withdrawn. */
   withdrawn_at: string | null
   withdrawn_by_name: string | null
+  /** Fix f16.2.4 (16.2 AC12): when units out of service closed it; null unless it is Out of
+   * service. */
+  out_of_service_at: string | null
 }
 
 /** Mirrors `EquipmentQueueCounts`: story 15.2 AC3, how many requests each tab holds. */
@@ -170,6 +175,8 @@ export interface EquipmentQueueCounts {
   cancelled: number
   /** Story 17.2 AC4. */
   withdrawn: number
+  /** Fix f16.2.4 (16.2 AC12). */
+  out_of_service: number
 }
 
 /** Mirrors `EquipmentQueue`: story 15.2 AC1-AC3, one tab of the queue and every tab's count. */
@@ -311,6 +318,8 @@ export interface ShortHold {
   units_short: number
   starts_at: string
   ends_at: string
+  /** Fix f16.2.4 (16.2 AC12): saving closes its item, as it is short of every unit. */
+  closes: boolean
 }
 
 /** Mirrors `EquipmentShortageOut`: story 16.2 AC4, an event's item left short. */

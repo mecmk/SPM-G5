@@ -3623,7 +3623,7 @@
       "x": 2160,
       "y": 643,
       "width": 400,
-      "height": 281
+      "height": 312
     },
     {
       "angle": 0,
@@ -3652,9 +3652,9 @@
       "x": 2168,
       "y": 651,
       "width": 384,
-      "height": 265,
-      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz\n    withdrawn_at?                  timestamptz\nFK  withdrawn_by_id?               uuid",
-      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz\n    withdrawn_at?                  timestamptz\nFK  withdrawn_by_id?               uuid",
+      "height": 296,
+      "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz\n    withdrawn_at?                  timestamptz\nFK  withdrawn_by_id?               uuid\n    out_of_service_at?             timestamptz\n    out_of_service_from?           text",
+      "originalText": "PK  id                             uuid\nFK  event_id                       uuid\nFK  equipment_type_id              uuid\n    quantity                       int\n    technical_notes?               text\n    status                         text\n    status_notes?                  text\nFK  created_by_id?                 uuid\n    created_at                     timestamptz\n    updated_at                     timestamptz\nFK  submitted_by_id?               uuid\n    submitted_at?                  timestamptz\nFK  decided_by_id?                 uuid\n    decided_at?                    timestamptz\n    cancelled_at?                  timestamptz\n    withdrawn_at?                  timestamptz\nFK  withdrawn_by_id?               uuid\n    out_of_service_at?             timestamptz\n    out_of_service_from?           text",
       "fontSize": 13,
       "fontFamily": 3,
       "textAlign": "left",
@@ -3693,7 +3693,7 @@
       "id": "hdr-2bf3f68f5286",
       "type": "rectangle",
       "x": 2160,
-      "y": 984,
+      "y": 1015,
       "width": 400,
       "height": 34
     },
@@ -3722,7 +3722,7 @@
       "id": "text-6a275483d560",
       "type": "text",
       "x": 2168,
-      "y": 990,
+      "y": 1021,
       "width": 384,
       "height": 22,
       "text": "event_status_history",
@@ -3773,7 +3773,7 @@
       "id": "body-2d3f217cd0fc",
       "type": "rectangle",
       "x": 2160,
-      "y": 1018,
+      "y": 1049,
       "width": 400,
       "height": 125
     },
@@ -3802,7 +3802,7 @@
       "id": "text-87b02f963484",
       "type": "text",
       "x": 2168,
-      "y": 1026,
+      "y": 1057,
       "width": 384,
       "height": 109,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\n    from_status?                   text\n    to_status                      text\nFK  changed_by_id?                 uuid\n    changed_at                     timestamptz\n    reason?                        text",
@@ -3845,7 +3845,7 @@
       "id": "hdr-688fb10a7193",
       "type": "rectangle",
       "x": 2160,
-      "y": 1203,
+      "y": 1234,
       "width": 400,
       "height": 34
     },
@@ -3874,7 +3874,7 @@
       "id": "text-d578f3c142c8",
       "type": "text",
       "x": 2168,
-      "y": 1209,
+      "y": 1240,
       "width": 384,
       "height": 22,
       "text": "event_coordinator_assignments",
@@ -3929,7 +3929,7 @@
       "id": "body-6679df9a1566",
       "type": "rectangle",
       "x": 2160,
-      "y": 1237,
+      "y": 1268,
       "width": 400,
       "height": 125
     },
@@ -3958,7 +3958,7 @@
       "id": "text-c8fafe345762",
       "type": "text",
       "x": 2168,
-      "y": 1245,
+      "y": 1276,
       "width": 384,
       "height": 109,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  coordinator_id                 uuid\nFK  assigned_by_id?                uuid\n    assigned_at                    timestamptz\n    unassigned_at?                 timestamptz\n    note?                          text",
@@ -4001,7 +4001,7 @@
       "id": "hdr-3cf56e3072d4",
       "type": "rectangle",
       "x": 2160,
-      "y": 1422,
+      "y": 1453,
       "width": 400,
       "height": 34
     },
@@ -4030,7 +4030,7 @@
       "id": "text-38d7cf8a1029",
       "type": "text",
       "x": 2168,
-      "y": 1428,
+      "y": 1459,
       "width": 384,
       "height": 22,
       "text": "event_clarifications",
@@ -4081,7 +4081,7 @@
       "id": "body-b1371191c10e",
       "type": "rectangle",
       "x": 2160,
-      "y": 1456,
+      "y": 1487,
       "width": 400,
       "height": 109
     },
@@ -4110,7 +4110,7 @@
       "id": "text-d75060b6619b",
       "type": "text",
       "x": 2168,
-      "y": 1464,
+      "y": 1495,
       "width": 384,
       "height": 93,
       "text": "PK  id                             uuid\nFK  event_id                       uuid\nFK  author_id                      uuid\n    kind                           text\n    message                        text\n    created_at                     timestamptz",
@@ -8121,9 +8121,9 @@
       "id": "arrow-51fcafbbc8c8",
       "type": "arrow",
       "x": 2160,
-      "y": 1482,
+      "y": 1513,
       "width": 1760,
-      "height": 1250,
+      "height": 1281,
       "points": [
         [
           0,
@@ -8131,7 +8131,7 @@
         ],
         [
           -1760,
-          -1250
+          -1281
         ]
       ],
       "lastCommittedPoint": null,
@@ -8174,7 +8174,7 @@
       "id": "text-3aad9f2570af",
       "type": "text",
       "x": 1220.0,
-      "y": 849.0,
+      "y": 864.5,
       "width": 120,
       "height": 16,
       "text": "author_id",
@@ -8217,9 +8217,9 @@
       "id": "arrow-3f5af8a4fb4f",
       "type": "arrow",
       "x": 2160,
-      "y": 1482,
+      "y": 1513,
       "width": 140,
-      "height": 1422,
+      "height": 1453,
       "points": [
         [
           0,
@@ -8227,7 +8227,7 @@
         ],
         [
           -140,
-          -1422
+          -1453
         ]
       ],
       "lastCommittedPoint": null,
@@ -8270,7 +8270,7 @@
       "id": "text-d1f721d296c6",
       "type": "text",
       "x": 2030.0,
-      "y": 763.0,
+      "y": 778.5,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -8313,9 +8313,9 @@
       "id": "arrow-9ba177decaa4",
       "type": "arrow",
       "x": 2160,
-      "y": 1263,
+      "y": 1294,
       "width": 1760,
-      "height": 1031,
+      "height": 1062,
       "points": [
         [
           0,
@@ -8323,7 +8323,7 @@
         ],
         [
           -1760,
-          -1031
+          -1062
         ]
       ],
       "lastCommittedPoint": null,
@@ -8366,7 +8366,7 @@
       "id": "text-4385fb60270f",
       "type": "text",
       "x": 1220.0,
-      "y": 739.5,
+      "y": 755.0,
       "width": 120,
       "height": 16,
       "text": "assigned_by_id",
@@ -8409,9 +8409,9 @@
       "id": "arrow-8d2be95cca42",
       "type": "arrow",
       "x": 2160,
-      "y": 1281,
+      "y": 1312,
       "width": 1760,
-      "height": 1031,
+      "height": 1062,
       "points": [
         [
           0,
@@ -8419,7 +8419,7 @@
         ],
         [
           -1760,
-          -1031
+          -1062
         ]
       ],
       "lastCommittedPoint": null,
@@ -8462,7 +8462,7 @@
       "id": "text-172b1d223a07",
       "type": "text",
       "x": 1220.0,
-      "y": 757.5,
+      "y": 773.0,
       "width": 120,
       "height": 16,
       "text": "coordinator_id",
@@ -8505,9 +8505,9 @@
       "id": "arrow-7af12a6cba55",
       "type": "arrow",
       "x": 2160,
-      "y": 1263,
+      "y": 1294,
       "width": 140,
-      "height": 1203,
+      "height": 1234,
       "points": [
         [
           0,
@@ -8515,7 +8515,7 @@
         ],
         [
           -140,
-          -1203
+          -1234
         ]
       ],
       "lastCommittedPoint": null,
@@ -8558,7 +8558,7 @@
       "id": "text-83c2af08689e",
       "type": "text",
       "x": 2030.0,
-      "y": 653.5,
+      "y": 669.0,
       "width": 120,
       "height": 16,
       "text": "event_id",
@@ -10041,9 +10041,9 @@
       "id": "arrow-d450b2b7895e",
       "type": "arrow",
       "x": 2160,
-      "y": 1044,
+      "y": 1075,
       "width": 1760,
-      "height": 812,
+      "height": 843,
       "points": [
         [
           0,
@@ -10051,7 +10051,7 @@
         ],
         [
           -1760,
-          -812
+          -843
         ]
       ],
       "lastCommittedPoint": null,
@@ -10094,7 +10094,7 @@
       "id": "text-cf5a4c7f3965",
       "type": "text",
       "x": 1220.0,
-      "y": 630.0,
+      "y": 645.5,
       "width": 120,
       "height": 16,
       "text": "changed_by_id",
@@ -10137,9 +10137,9 @@
       "id": "arrow-96a4dd0dceb8",
       "type": "arrow",
       "x": 2160,
-      "y": 1044,
+      "y": 1075,
       "width": 140,
-      "height": 984,
+      "height": 1015,
       "points": [
         [
           0,
@@ -10147,7 +10147,7 @@
         ],
         [
           -140,
-          -984
+          -1015
         ]
       ],
       "lastCommittedPoint": null,
@@ -10190,7 +10190,7 @@
       "id": "text-615de7037345",
       "type": "text",
       "x": 2030.0,
-      "y": 544.0,
+      "y": 559.5,
       "width": 120,
       "height": 16,
       "text": "event_id",

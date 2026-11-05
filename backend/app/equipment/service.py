@@ -60,13 +60,17 @@ equipment type, so that I can see at a glance which events have which equipment,
 when." ``list_equipment_holds`` only reads: the holds still reserved, by their own dates, which
 are the units availability takes away. Fix f16.2.2 (16.2 AC9): each hold also carries the units
 it is short, by 16.2 AC4's rule, so the schedule marks it as its event's equipment does.
+
+Fix f16.2.4 (16.2 AC10-AC13): a record that leaves an item short of every unit it holds closes it
+as Out of service (``_close_out_of_service``), and only the event's coordinator, the Leads and
+Technical Support read an event's shortages (``can_read_shortages``).
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Collection, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any
@@ -76,7 +80,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
 from app.auth.models import User
-from app.auth.permissions import RoleCode
+from app.auth.permissions import Permission, RoleCode, role_has
 from app.common.audit import record_audit
 from app.common.search import by_name, matches_any, search_term
 from app.equipment.schemas import (
@@ -146,6 +150,10 @@ NOT_PENDING_MESSAGES = {
     EquipmentRequestStatus.CANCELLED: "This equipment request was cancelled with its event.",
     # Story 17.2 AC4/AC11.
     EquipmentRequestStatus.WITHDRAWN: "This equipment request was withdrawn by its coordinator.",
+    # Fix f16.2.4 (16.2 AC10).
+    EquipmentRequestStatus.OUT_OF_SERVICE: (
+        "This equipment request was closed, as its units are out of service."
+    ),
 }
 # Story 17.2 AC2: a sent item is withdrawn, so Technical Support know, rather than removed.
 WITHDRAW_INSTEAD_MESSAGE = (
@@ -168,6 +176,11 @@ NOT_WITHDRAWABLE_MESSAGES = {
         "This equipment item was cancelled, so there is nothing to withdraw."
     ),
     EquipmentRequestStatus.WITHDRAWN: "This equipment item has already been withdrawn.",
+    # Fix f16.2.4 (16.2 AC10).
+    EquipmentRequestStatus.OUT_OF_SERVICE: (
+        "This equipment item was closed, as its units are out of service, so there is nothing to"
+        " withdraw."
+    ),
 }
 # Story 17.2 AC11: the item is no longer in the status the coordinator saw when they confirmed.
 STATUS_CHANGED_MESSAGE = "This equipment item is now {status}. Check it before you withdraw it."
@@ -185,6 +198,12 @@ _RETURNED_TITLE = '"{event}" is back in Planning'
 _RETURNED_MESSAGE = (
     '{coordinator} withdrew {equipment} from "{event}" while it was confirmed, so it is back in '
     "Planning and needs a new safety check before it is confirmed again."
+)
+# Fix f16.2.4 (16.2 AC10): the same, when a record of units out of service closed the item.
+_OUT_OF_SERVICE_PLANNING_REASON = "{equipment} went out of service."
+_OUT_OF_SERVICE_RETURNED_MESSAGE = (
+    '{equipment} on "{event}" went out of service, so the event is back in Planning and needs a'
+    " new safety check before it is confirmed again."
 )
 # AC2/AC7: the items the coordinator may still edit. Each can be removed too, but a Pending one
 # (17.2 AC2), which is withdrawn instead.
@@ -217,10 +236,12 @@ _LIVE_TAB_STATUSES = (
 _DECISION_CLOSED_EVENT_STATUSES = frozenset(_CLOSED_QUEUE_EVENT_STATUSES)
 WITH_TECHNICAL_SUPPORT = events_service.WITH_TECHNICAL_SUPPORT
 # No longer the event's, kept for Technical Support's record: cancelled by its event or a change
-# (6.2, 19.2), or withdrawn by the coordinator (17.2 AC3). A change leaves a Cancelled one as it
-# is unless it names it again; a Withdrawn one stays Withdrawn even then, and the line is added as
-# new. It holds nothing, so the queue shows it with no figures (6.2 AC15, 17.2 AC4).
+# (6.2, 19.2), withdrawn by the coordinator (17.2 AC3), or closed as out of service (16.2 AC10,
+# fix f16.2.4). A change leaves a Cancelled one as it is unless it names it again; a Withdrawn or
+# Out of service one stays so even then, and the line is added as new. It holds nothing, so the
+# queue shows it with no figures (6.2 AC15, 17.2 AC4).
 KEPT_FOR_RECORD = events_service.KEPT_FOR_RECORD
+_STAYS_CLOSED = frozenset({EquipmentRequestStatus.WITHDRAWN, EquipmentRequestStatus.OUT_OF_SERVICE})
 # Story 13.3 AC3: what each of the queue's orders sorts by first. Requests that tie are then put in
 # date order, soonest first, then in the order they were recorded. AC6: a request with no recorded
 # time - sent before migration 014 - comes last whichever way requests are ordered by it.
@@ -243,7 +264,9 @@ def in_technical_support_queue() -> ColumnElement[bool]:
     It reads ``EventEquipmentRequest`` joined to its ``Event``, so the caller joins them. The queue
     and a notification's target (20.2) both use it, so the page a notice opens is one that holds
     the item. Fix f4.5.1: a rejected event's sent items are kept as a cancelled event's are. Story
-    17.2 AC4: a withdrawn item was always sent, so it is kept, whatever its event."""
+    17.2 AC4: a withdrawn item was always sent, so it is kept, whatever its event. Fix f16.2.4
+    (16.2 AC12): so is an item closed as out of service once it had been sent; one closed before
+    it was ever sent was never theirs."""
     return or_(
         and_(
             EventEquipmentRequest.status.in_(_LIVE_TAB_STATUSES),
@@ -258,6 +281,10 @@ def in_technical_support_queue() -> ColumnElement[bool]:
             Event.status.in_(_CLOSED_QUEUE_EVENT_STATUSES),
         ),
         EventEquipmentRequest.status == EquipmentRequestStatus.WITHDRAWN,
+        and_(
+            EventEquipmentRequest.status == EquipmentRequestStatus.OUT_OF_SERVICE,
+            EventEquipmentRequest.out_of_service_from.in_(WITH_TECHNICAL_SUPPORT),
+        ),
     )
 
 
@@ -1205,13 +1232,12 @@ def plan_equipment_change(event: Event, lines: list[EventEquipmentIn]) -> Equipm
     """Story 19.2 AC5: match ``lines`` to ``event``'s items by id. An item no line names is
     removed; one whose type, quantity and notes are unchanged - and is not Cancelled - is left
     as it is; any other named item is changed. A line without an ``id`` is new, as is one naming
-    a Withdrawn item (17.2 AC3), which stays Withdrawn."""
-    withdrawn = {
-        item.id
-        for item in event.equipment_requests
-        if item.status == EquipmentRequestStatus.WITHDRAWN
+    a Withdrawn item (17.2 AC3), which stays Withdrawn, or an Out of service one (fix f16.2.4),
+    which stays so."""
+    stays_closed = {item.id for item in event.equipment_requests if item.status in _STAYS_CLOSED}
+    wanted = {
+        line.id: line for line in lines if line.id is not None and line.id not in stays_closed
     }
-    wanted = {line.id: line for line in lines if line.id is not None and line.id not in withdrawn}
     planned = []
     for item in event.equipment_requests:
         line = wanted.get(item.id)
@@ -1229,7 +1255,8 @@ def plan_equipment_change(event: Event, lines: list[EventEquipmentIn]) -> Equipm
             change = EquipmentChange.CHANGED
         planned.append(PlannedItem(item=item, line=line, change=change))
     return EquipmentChangePlan(
-        items=planned, added=[line for line in lines if line.id is None or line.id in withdrawn]
+        items=planned,
+        added=[line for line in lines if line.id is None or line.id in stays_closed],
     )
 
 
@@ -1472,8 +1499,10 @@ def withdraw_equipment_item(
 # its units from every hold placed after it. A record is bounded by the stock and the other
 # records, not by the holds (AC3): one that leaves holds short is saved, and the holds it leaves
 # short - first come, first served - are worked out whenever they are read, so the mark follows
-# the records (AC4). Every write takes the equipment type's row first (``lock_types``), as placing
-# a hold does, so a record and a hold, or two records, never miss each other (AC7).
+# the records (AC4). Every write takes the equipment type's row (``lock_types``), as placing a hold
+# does, so a record and a hold, or two records, never miss each other (AC7). Fix f16.2.4: a hold
+# left short of every unit has its item closed as Out of service (AC10), so a record takes the
+# events holding the type before the type, as every write to an event's equipment does.
 OUT_OF_SERVICE_ENTITY_TYPE = "equipment_unavailability_period"
 OUT_OF_SERVICE_CREATED_ACTION = "EQUIPMENT_OUT_OF_SERVICE_CREATED"
 OUT_OF_SERVICE_UPDATED_ACTION = "EQUIPMENT_OUT_OF_SERVICE_UPDATED"
@@ -1504,6 +1533,52 @@ def short_message(*, name: str, short: int, held: int) -> str:
     return (
         f"{name}: {short} of the {held} held for this event cannot be supplied, as they are out"
         " of service."
+    )
+
+
+# Fix f16.2.4 (AC10): the title of the notice telling a coordinator their item was closed.
+OUT_OF_SERVICE_TITLE = "Equipment out of service: {event}"
+OUT_OF_SERVICE_AUDIT_ACTION = "EQUIPMENT_OUT_OF_SERVICE"
+# AC13: why someone who is not the event's coordinator, a Lead or Technical Support is refused.
+SHORTAGES_NOT_YOURS_MESSAGE = (
+    "Only the event's coordinator, the Event Coordinator Leads and Technical Support can see what"
+    " units out of service leave it short of."
+)
+# AC10: the statuses of an item a record can close - those that hold units.
+_CLOSABLE_ITEM_STATUSES = frozenset(
+    {
+        EquipmentRequestStatus.REQUESTED,
+        EquipmentRequestStatus.PENDING,
+        EquipmentRequestStatus.ACCEPTED,
+    }
+)
+
+
+def out_of_service_message(*, name: str, held: int) -> str:
+    """Fix f16.2.4 (AC10): what the coordinator of an event whose item a record closes is told."""
+    units = (
+        f"the {held} held for this event is" if held == 1 else f"all {held} held for this event are"
+    )
+    return (
+        f"{name}: {units} out of service, so the item was closed and nothing is held for it."
+        " Request another type if you still need one."
+    )
+
+
+def closes_item(*, units_short: int, units_held: int) -> bool:
+    """Fix f16.2.4 (AC10): whether a hold short of ``units_short`` of the ``units_held`` it still
+    holds closes its item - short of every one. Short of some, it keeps them (AC11)."""
+    return units_held > 0 and units_short >= units_held
+
+
+def can_read_shortages(viewer: User, event: Event) -> bool:
+    """Fix f16.2.4 (AC13): whether ``viewer`` reads what units out of service leave ``event``
+    short of - its own coordinator, an Event Coordinator Lead (who assigns its coordinator) or
+    Technical Support (who records the units)."""
+    return (
+        viewer.id == event.assigned_coordinator_id
+        or role_has(viewer.role_code, Permission.EVENTS_ASSIGN)
+        or role_has(viewer.role_code, Permission.EQUIPMENT_MANAGE)
     )
 
 
@@ -1563,6 +1638,14 @@ class RecordStarted(OutOfServiceConflict):
 
     def __init__(self) -> None:
         super().__init__(RECORD_STARTED_MESSAGE)
+
+
+class ShortagesNotYours(PermissionError):
+    """Fix f16.2.4 (AC13): the viewer is not the event's coordinator, a Lead or Technical
+    Support."""
+
+    def __init__(self) -> None:
+        super().__init__(SHORTAGES_NOT_YOURS_MESSAGE)
 
 
 @dataclass(frozen=True)
@@ -1639,12 +1722,14 @@ class TypePage:
 @dataclass(frozen=True)
 class ShortHold:
     """AC4/AC5: a hold the records leave short, with its event, the units it still holds and how
-    many of those it cannot have."""
+    many of those it cannot have. Fix f16.2.4 (AC10/AC12): ``closes``, whether saving closes its
+    item, as it is short of every unit."""
 
     hold: EquipmentReservation
     event: Event
     units_held: int
     units_short: int
+    closes: bool = False
 
 
 def _not_yet_ended(now: datetime) -> ColumnElement[bool]:
@@ -1781,18 +1866,22 @@ def _short_holds(
     records: list[events_service.OutOfServiceWindow],
     *,
     now: datetime,
+    leaving_out: Collection[uuid.UUID] = (),
 ) -> list[ShortHold]:
     """AC4: the holds of ``equipment_type`` that ``records`` leave short - those still reserved and
-    not yet over, each by the units it has not released - soonest first."""
-    holds = list(
-        db.scalars(
+    not yet over, each by the units it has not released, but for the holds ``leaving_out`` - soonest
+    first."""
+    holds = [
+        hold
+        for hold in db.scalars(
             select(EquipmentReservation).where(
                 EquipmentReservation.equipment_type_id == equipment_type.id,
                 EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
                 EquipmentReservation.ends_at > now,
             )
         )
-    )
+        if hold.id not in leaving_out
+    ]
     units = {hold.id: hold.quantity - hold.released_quantity for hold in holds}
     short = short_units(
         stock=equipment_type.total_quantity,
@@ -1829,15 +1918,35 @@ def _left_shorter(
 ) -> list[ShortHold]:
     """AC4/AC5: the holds ``after`` leaves short, or shorter than ``before`` did - the ones a save
     affects. The check before saving and the notices on saving both read this, so the holds
-    Technical Support is shown are the ones whose coordinators are told."""
+    Technical Support is shown are the ones whose coordinators are told.
+
+    Fix f16.2.4 (AC10/AC11): those short of every unit, with an item to close, are marked
+    ``closes``; the rest are worked out again without them, since their units go back, and each
+    of those is listed only if still shorter than before."""
     was = {
         each.hold.id: each.units_short for each in _short_holds(db, equipment_type, before, now=now)
     }
-    return [
-        each
-        for each in _short_holds(db, equipment_type, after, now=now)
-        if each.units_short > was.get(each.hold.id, 0)
+
+    def shorter(leaving_out: Collection[uuid.UUID]) -> list[ShortHold]:
+        return [
+            each
+            for each in _short_holds(db, equipment_type, after, now=now, leaving_out=leaving_out)
+            if each.units_short > was.get(each.hold.id, 0)
+        ]
+
+    closing = [
+        replace(each, closes=True)
+        for each in shorter(())
+        if each.hold.equipment_request_id is not None
+        and closes_item(units_short=each.units_short, units_held=each.units_held)
     ]
+    if not closing:
+        return shorter(())
+    left_short = shorter({each.hold.id for each in closing})
+    return sorted(
+        [*closing, *left_short],
+        key=lambda each: (each.hold.starts_at, each.event.name, each.hold.id),
+    )
 
 
 def check_out_of_service(
@@ -1895,20 +2004,143 @@ def _audit(
     )
 
 
-def _tell_left_shorter(
+def _lock_events_holding(
+    db: Session, type_id: uuid.UUID, *, now: datetime, locked: frozenset[uuid.UUID] = frozenset()
+) -> frozenset[uuid.UUID]:
+    """Fix f16.2.4 (AC10): hold the events with a hold of ``type_id`` still to run, but those in
+    ``locked``, as ``events_service.lock_event`` holds one (``FOR NO KEY UPDATE``), in id order.
+    A save may close their items, and every other write to an event's equipment takes the event
+    before the type (15.1 AC10), so the save does too, and the two queue on the event rather than
+    each waiting on the other. Returns every event now held.
+
+    It is called again once the type is held, for a hold placed in between. That hold's own write
+    has committed, since it held the type first, so only a second write to its event at that very
+    moment could be waiting on the type; PostgreSQL would end one of the two."""
+    event_ids = sorted(
+        set(
+            db.scalars(
+                select(EquipmentReservation.event_id).where(
+                    EquipmentReservation.equipment_type_id == type_id,
+                    EquipmentReservation.status == EquipmentHoldStatus.RESERVED,
+                    EquipmentReservation.ends_at > now,
+                )
+            )
+        )
+        - locked
+    )
+    if event_ids:
+        db.execute(
+            select(Event.id)
+            .where(Event.id.in_(event_ids))
+            .order_by(Event.id)
+            .with_for_update(key_share=True)
+        ).all()
+    return locked | frozenset(event_ids)
+
+
+def _lock_for_record(db: Session, type_id: uuid.UUID, *, now: datetime) -> None:
+    """AC7 with fix f16.2.4 (AC10): what a record that may leave holds short holds before it is
+    checked - the events holding the type, then the type, then any event a hold placed in between
+    belongs to."""
+    locked = _lock_events_holding(db, type_id, now=now)
+    lock_types(db, [type_id])
+    _lock_events_holding(db, type_id, now=now, locked=locked)
+
+
+def _close_out_of_service(
+    db: Session,
+    equipment_type: EquipmentType,
+    short: ShortHold,
+    *,
+    record_id: uuid.UUID,
+    actor: User,
+    now: datetime,
+) -> None:
+    """Fix f16.2.4 (AC10): close the item ``short`` holds every unit of as Out of service,
+    whatever its stage: its hold is released, the status it was closed from is kept beside it,
+    the close is audited on its event and its coordinator is told. An Accepted one was part of
+    what the safety check approved, so an event Awaiting Safety Check or Confirmed goes back to
+    Planning and the organiser and Safety Officers are told, as a withdrawal does (17.2 AC9). The
+    caller holds the event and the type. Written, not committed."""
+    item = db.get(EventEquipmentRequest, short.hold.equipment_request_id)
+    event = short.event
+    closed_from = item.status
+    _release_holds(db, EquipmentReservation.equipment_request_id == item.id)
+    item.status = EquipmentRequestStatus.OUT_OF_SERVICE
+    item.out_of_service_at = now
+    item.out_of_service_from = closed_from
+    record_audit(
+        db,
+        actor=actor,
+        action=OUT_OF_SERVICE_AUDIT_ACTION,
+        entity_type="event",
+        entity_id=event.id,
+        details={
+            "item_id": str(item.id),
+            "equipment_type_code": equipment_type.code,
+            "quantity": item.quantity,
+            "from_status": closed_from,
+            "record_id": str(record_id),
+        },
+        commit=False,
+    )
+    notify(
+        db,
+        recipient=event.assigned_coordinator,
+        actor=actor,
+        notification_type=NotificationType.EQUIPMENT_SHORT,
+        title=OUT_OF_SERVICE_TITLE.format(event=event.name),
+        message=out_of_service_message(name=equipment_type.name, held=short.units_held),
+        event_id=event.id,
+        related_entity_type=_SHORT_HOLD_ENTITY_TYPE,
+        related_entity_id=short.hold.id,
+        commit=False,
+    )
+    if closed_from != EquipmentRequestStatus.ACCEPTED:
+        return
+    is_returned = events_service.return_event_to_planning(
+        db,
+        event,
+        actor=actor,
+        at=now,
+        reason=_OUT_OF_SERVICE_PLANNING_REASON.format(equipment=equipment_type.name),
+        details={"item_id": str(item.id), "record_id": str(record_id)},
+    )
+    if is_returned:
+        events_service.notify_of_return_to_planning(
+            db,
+            event,
+            actor=actor,
+            title=_RETURNED_TITLE.format(event=event.name),
+            message=_OUT_OF_SERVICE_RETURNED_MESSAGE.format(
+                equipment=equipment_type.name, event=event.name
+            ),
+            recipients=(event.organiser, *active_members(db, role_code=RoleCode.SAFETY_OFFICER)),
+        )
+
+
+def _close_or_tell(
     db: Session,
     equipment_type: EquipmentType,
     *,
     before: list[events_service.OutOfServiceWindow],
     after: list[events_service.OutOfServiceWindow],
+    record_id: uuid.UUID,
     actor: User,
     now: datetime,
 ) -> None:
     """AC4: tell the coordinator of each event whose hold ``after`` leaves short, or shorter than
     ``before`` did, how short it now is. One no shorter was told when it last became so. An event
     with no coordinator yet is marked all the same, and its coordinator sees the mark once they
-    have it."""
+    have it. Fix f16.2.4 (AC10): a hold short of every unit has its item closed instead."""
     for each in _left_shorter(db, equipment_type, before=before, after=after, now=now):
+        if each.closes:
+            item = db.get(EventEquipmentRequest, each.hold.equipment_request_id)
+            if item.status in _CLOSABLE_ITEM_STATUSES:
+                _close_out_of_service(
+                    db, equipment_type, each, record_id=record_id, actor=actor, now=now
+                )
+                continue
         notify(
             db,
             recipient=each.event.assigned_coordinator,
@@ -1930,8 +2162,10 @@ def add_out_of_service(
 ) -> EquipmentUnavailabilityPeriod:
     """AC1/AC3: record ``data.quantity`` units of ``type_id`` out of service, audited. AC4: the
     coordinators of the holds it leaves short, or shorter, are told, in the same transaction.
-    AC7: under the type's row lock, so two records, or a record and a hold, take turns."""
-    lock_types(db, [type_id])
+    AC7: under the type's row lock, so two records, or a record and a hold, take turns. Fix
+    f16.2.4 (AC10): a hold it leaves short of every unit has its item closed, so the events
+    holding the type are held first (``_lock_for_record``)."""
+    _lock_for_record(db, type_id, now=now)
     equipment_type = _active_type(db, type_id)
     before = _check_record(
         db,
@@ -1956,8 +2190,14 @@ def add_out_of_service(
     _audit(
         db, record.id, action=OUT_OF_SERVICE_CREATED_ACTION, details=_snapshot(record), actor=actor
     )
-    _tell_left_shorter(
-        db, equipment_type, before=before, after=[*before, _window(record)], actor=actor, now=now
+    _close_or_tell(
+        db,
+        equipment_type,
+        before=before,
+        after=[*before, _window(record)],
+        record_id=record.id,
+        actor=actor,
+        now=now,
     )
     db.commit()
     db.refresh(record)
@@ -1975,10 +2215,11 @@ def edit_out_of_service(
 ) -> EquipmentUnavailabilityPeriod:
     """AC2/AC3: change a record - only the fields sent - judged as it would become, or, with
     ``end_now``, end it (``_end_out_of_service``). The audit keeps what was replaced. AC4: the
-    coordinators of holds it leaves short, or shorter, are told."""
+    coordinators of holds it leaves short, or shorter, are told; fix f16.2.4 (AC10): a hold it
+    leaves short of every unit has its item closed."""
     if data.end_now:
         return _end_out_of_service(db, type_id, record_id, actor=actor, now=now)
-    lock_types(db, [type_id])
+    _lock_for_record(db, type_id, now=now)
     equipment_type = _active_type(db, type_id)
     record = _record(db, type_id, record_id)
     sent = data.model_fields_set
@@ -2008,8 +2249,14 @@ def edit_out_of_service(
         details={"before": was, "after": _snapshot(record)},
         actor=actor,
     )
-    _tell_left_shorter(
-        db, equipment_type, before=before, after=[*others, _window(record)], actor=actor, now=now
+    _close_or_tell(
+        db,
+        equipment_type,
+        before=before,
+        after=[*others, _window(record)],
+        record_id=record.id,
+        actor=actor,
+        now=now,
     )
     db.commit()
     db.refresh(record)
@@ -2068,8 +2315,11 @@ def list_event_shortages(
     db: Session, event_id: uuid.UUID, *, viewer: User, now: datetime
 ) -> list[EquipmentShortageOut]:
     """AC4: the items of an event that ``viewer`` can see whose holds the records leave short, and
-    by how many units - worked out now, so the mark follows the records."""
+    by how many units - worked out now, so the mark follows the records. Fix f16.2.4 (AC13): only
+    its coordinator, a Lead or Technical Support reads them (``ShortagesNotYours``)."""
     event = _visible_event(db, event_id, viewer=viewer)
+    if not can_read_shortages(viewer, event):
+        raise ShortagesNotYours()
     type_ids = sorted(
         set(
             db.scalars(
