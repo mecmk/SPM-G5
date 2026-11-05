@@ -716,7 +716,8 @@ INSERT INTO event_equipment_requests (id, event_id, equipment_type_id, quantity,
 ON CONFLICT (id) DO UPDATE SET
     event_id = EXCLUDED.event_id, equipment_type_id = EXCLUDED.equipment_type_id, quantity = EXCLUDED.quantity,
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, created_by_id = EXCLUDED.created_by_id,
-    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 -- Story 15.1's e2e items: the organiser's projectors on 3333..19, held since the request was
 -- submitted but not yet sent to Technical Support, and a speaker set on 3333..20 the coordinator
@@ -737,7 +738,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
     decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 -- More of story 15.2's queue, on 3333..22-26: mostly pending, some accepted, a few declined with
 -- Technical Support's reason, each sent by its event's coordinator. Every item but a declined one
@@ -778,7 +780,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
     decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000001', '33333333-0000-0000-0000-000000000019', '66666666-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000001', 2,
@@ -1422,7 +1425,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
     decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000027', '33333333-0000-0000-0000-000000000080', '66666666-0000-0000-0000-000000000036', '77777777-0000-0000-0000-000000000004', 2,
@@ -1476,6 +1480,7 @@ ON CONFLICT (id) DO UPDATE SET
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id, submitted_at = EXCLUDED.submitted_at,
     decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL,
     cancelled_at = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
@@ -2028,7 +2033,8 @@ ON CONFLICT (id) DO UPDATE SET
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
     submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     cancelled_at = NULL,
-    withdrawn_at = NULL, withdrawn_by_id = NULL;
+    withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000000062', '33333333-0000-0000-0000-000000000062', '66666666-0000-0000-0000-000000000062', '77777777-0000-0000-0000-000000000002', 4,
@@ -2078,7 +2084,8 @@ ON CONFLICT (id) DO UPDATE SET
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
     submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
     cancelled_at = NULL,
-    withdrawn_at = NULL, withdrawn_by_id = NULL;
+    withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000016201', '33333333-0000-0000-0000-000000016201', '66666666-0000-0000-0000-000000016201', '77777777-0000-0000-0000-000000000007', 3,
@@ -2125,7 +2132,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
     submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000016111', '33333333-0000-0000-0000-000000016110', '66666666-0000-0000-0000-000000016111', '77777777-0000-0000-0000-000000000001', 1,
@@ -3382,7 +3390,8 @@ ON CONFLICT (id) DO UPDATE SET
     technical_notes = EXCLUDED.technical_notes, status = EXCLUDED.status, status_notes = EXCLUDED.status_notes,
     created_by_id = EXCLUDED.created_by_id, submitted_by_id = EXCLUDED.submitted_by_id,
     submitted_at = EXCLUDED.submitted_at, decided_by_id = EXCLUDED.decided_by_id, decided_at = EXCLUDED.decided_at,
-    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL;
+    cancelled_at = NULL, withdrawn_at = NULL, withdrawn_by_id = NULL,
+    out_of_service_at = NULL, out_of_service_from = NULL;
 
 INSERT INTO equipment_reservations (id, event_id, equipment_request_id, equipment_type_id, quantity, starts_at, ends_at, status, reserved_by_id, reserved_at, notes) VALUES
     ('eeeeeeee-0000-0000-0000-000000017302', '33333333-0000-0000-0000-000000017301', '66666666-0000-0000-0000-000000017302', '77777777-0000-0000-0000-000000000002', 3,

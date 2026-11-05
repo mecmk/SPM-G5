@@ -42,6 +42,23 @@ AC7 Records that overlap in time add up and never exceed the stock, also when tw
 AC9 (fix f16.2.2) Technical Support's holds schedule (17.3) marks each hold short by the units
     AC4 marks on its event, and none on a hold left whole. (AC8, the event page's wording, is
     e2e-tested.)
+AC10 (fix f16.2.4) A save that leaves an item short of every unit it holds closes it as Out of
+    service, whatever its stage - not yet sent, Pending or Accepted: its hold is released, it no
+    longer takes up its type, and it is kept for the record, as a withdrawn one is. Its coordinator
+    is told it was closed, not that it is short. An Accepted one on an event Awaiting Safety Check
+    or Confirmed sends the event back to Planning, and the organiser and the Safety Officers are
+    told, as a withdrawal does (17.2 AC9). A later edit, End or removal of the record does not
+    reopen it, and it can no longer be decided, withdrawn or edited. The save takes the events
+    holding the type before the type, as every other write does, so it waits for their writes.
+AC11 (fix f16.2.4) An item left short of only some of its units keeps its status and its hold,
+    and its coordinator is told how short it is (AC4). (Its wording on the event page is
+    e2e-tested.)
+AC12 (fix f16.2.4) Before saving, the check says which holds saving would close. Technical
+    Support's queue lists an item closed after it was sent to them under Out of service, with no
+    figures, as a withdrawn one is; one closed before it was ever sent is not theirs.
+AC13 (fix f16.2.4) An event's shortages - what its equipment page says about units out of
+    service - are read only by the event's own coordinator, the Event Coordinator Leads and
+    Technical Support; anyone else is refused (403).
 """
 
 from __future__ import annotations
@@ -93,6 +110,7 @@ SHORT_HOLD_KEYS = {
     "units_short",
     "starts_at",
     "ends_at",
+    "closes",
 }
 NOT_TECH_SUPPORT = [
     pytest.param(user, id=user.role) for user in Users.ONE_PER_ROLE if user != Users.TECH_SUPPORT
@@ -166,12 +184,14 @@ def _event(
     start: float = 10.5,
     end: float = 11,
     coordinator: uuid.UUID | None = Users.COORDINATOR.id,
+    status: str = EventStatus.PLANNING,
     **overrides,
 ) -> Event:
-    """An event in Planning from ``start`` to ``end`` days from now."""
+    """An event, in Planning unless ``status`` says otherwise, from ``start`` to ``end`` days from
+    now."""
     return make_event(
         db,
-        status=EventStatus.PLANNING,
+        status=status,
         assigned_coordinator_id=coordinator,
         starts_at=_days(start),
         ends_at=_days(end),
@@ -186,11 +206,12 @@ def _held(
     units: int,
     *,
     placed_days_ago: float = 5,
+    status: str = "ACCEPTED",
 ) -> EquipmentReservation:
-    """An accepted item of ``units`` on ``event``, held for the event's period, placed
-    ``placed_days_ago`` days ago - the order holds are served in (AC4)."""
+    """An item of ``units`` on ``event`` - accepted unless ``status`` says otherwise - held for the
+    event's period, placed ``placed_days_ago`` days ago - the order holds are served in (AC4)."""
     item = make_equipment_item(
-        db, event=event, equipment_type=equipment_type, quantity=units, status="ACCEPTED"
+        db, event=event, equipment_type=equipment_type, quantity=units, status=status
     )
     hold = db.scalar(
         select(EquipmentReservation).where(EquipmentReservation.equipment_request_id == item.id)
@@ -1119,16 +1140,17 @@ def test_a_hold_already_short_is_not_told_again_by_a_record_leaving_it_no_shorte
 
 @pytest.mark.story("16.2", ac=4)
 def test_a_hold_left_shorter_is_told_again_how_short_it_now_is(tech_client, db: Session):
-    kit = make_equipment_type(db, total_quantity=3, name="Mobile kit")
+    # Fix f16.2.4: a unit is left, as a hold short of every unit is closed instead (AC10).
+    kit = make_equipment_type(db, total_quantity=4, name="Mobile kit")
     event = _event(db)
-    _held(db, event, kit, 3)
+    _held(db, event, kit, 4)
     tech_client.post(_records_path(kit.id), json=_body(1, start=10, end=12))
 
     tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
 
     assert sorted(notice.message for notice in _short_notices(db, event)) == [
-        service.short_message(name="Mobile kit", short=1, held=3),
-        service.short_message(name="Mobile kit", short=3, held=3),
+        service.short_message(name="Mobile kit", short=1, held=4),
+        service.short_message(name="Mobile kit", short=3, held=4),
     ]
 
 
@@ -1179,14 +1201,17 @@ def test_a_record_leaving_every_hold_covered_tells_nobody(tech_client, db: Sessi
 def test_a_hold_of_an_event_with_no_coordinator_is_marked_but_nobody_is_told(
     tech_client, db: Session
 ):
-    kit = make_equipment_type(db, total_quantity=1)
+    # Fix f16.2.4: a unit is left, as a hold short of every unit is closed instead (AC10).
+    kit = make_equipment_type(db, total_quantity=2)
     event = _event(db, coordinator=None)
-    hold = _held(db, event, kit, 1)
+    hold = _held(db, event, kit, 2)
 
     tech_client.post(_records_path(kit.id), json=_body(1, start=10, end=12))
 
     assert _short_notices(db, event) == []
-    tech_client.login(Users.COORDINATOR)
+    # Fix f16.2.4 (AC13): read by the Lead, who assigns its coordinator; another coordinator is
+    # refused.
+    tech_client.login(Users.LEAD)
     assert _shortages(tech_client, event) == [
         {"item_id": str(_item_of(db, hold)), "units_short": 1}
     ]
@@ -1642,11 +1667,10 @@ def _accepter(item_id: uuid.UUID):
 @pytest.mark.story("16.2", ac=7)
 @pytest.mark.story("16.2", ac=4)
 def test_an_accept_and_a_record_saved_at_once_take_turns_without_deadlock(engine):
-    """Accept (16.1) takes the event's row, then the type's. A record takes the type's, then
-    tells the coordinator of the hold it leaves short, and that notice names the event, so it
-    needs a key-share lock on the event's row. Accept therefore holds the event FOR NO KEY UPDATE,
-    which a key share does not wait for; FOR UPDATE would leave each waiting on the other. The
-    event is held first, so Accept is queued on it, and the record behind it, every time."""
+    """Accept (16.1) takes the event's row, then the type's. Fix f16.2.4: so does a record, which
+    may close the event's item (AC10), so the two queue on the event and never wait on each other
+    in turn. The event is held first, so Accept is queued on it, and the record behind it, every
+    time: Accept reserves all three, then the record leaves the accepted hold one short (AC11)."""
     with _committed_kit(engine, stock=3) as (kit_id, event_id):
         with Session(engine) as session:
             item_id = make_equipment_item(
@@ -1671,10 +1695,13 @@ def test_an_accept_and_a_record_saved_at_once_take_turns_without_deadlock(engine
                 holder.close()  # inside the pool: leaving it waits for whatever this holds up
             saved, accepted = saving.result(timeout=20), accepting.result(timeout=20)
 
-        assert saved == CREATED
+        assert (saved, accepted) == (CREATED, CREATED)
         with Session(engine) as session:
-            name = session.get(EquipmentType, kit_id).name
-        assert accepted == service.NOT_ENOUGH_TO_ACCEPT_MESSAGE.format(name=name)
+            item = session.get(EventEquipmentRequest, item_id)
+            assert item.status == "ACCEPTED"
+            assert [notice.message for notice in _short_notices(session, item.event)] == [
+                service.short_message(name=item.equipment_type.name, short=1, held=3)
+            ]
 
 
 # Each lock on an event taken before a type: the two ends of the deadlock above, on every path.
@@ -1869,3 +1896,491 @@ def test_a_hold_already_short_does_not_stop_a_newly_short_one_being_told(tech_cl
     assert _short_notices(db, sooner) == []
     [notice] = _short_notices(db, later)
     assert notice.recipient_id == Users.COORDINATOR_2.id
+
+
+# =============================================================================================
+# AC10 / AC11 (fix f16.2.4) - an item short of every unit is closed; one short of some is kept
+# =============================================================================================
+HOLDING_STATUSES = ["REQUESTED", "PENDING", "ACCEPTED"]
+
+
+def _item(db: Session, hold: EquipmentReservation) -> EventEquipmentRequest:
+    """The item ``hold`` is for, read as it now stands."""
+    item = db.get(EventEquipmentRequest, hold.equipment_request_id)
+    db.refresh(item)
+    return item
+
+
+def _returned_notices(db: Session, event: Event) -> list[Notification]:
+    return list(
+        db.scalars(
+            select(Notification).where(
+                Notification.event_id == event.id,
+                Notification.notification_type == NotificationType.EVENT_RETURNED_TO_PLANNING,
+            )
+        )
+    )
+
+
+@pytest.mark.story("16.2", ac=10)
+@pytest.mark.parametrize("status", HOLDING_STATUSES)
+def test_a_record_taking_every_unit_an_item_holds_closes_it_whatever_its_stage(
+    tech_client, db: Session, status: str
+):
+    kit = make_equipment_type(db, total_quantity=2)
+    event = _event(db)
+    hold = _held(db, event, kit, 2, status=status)
+
+    response = tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+
+    assert response.status_code == 201
+    item = _item(db, hold)
+    assert (item.status, item.out_of_service_from) == ("OUT_OF_SERVICE", status)
+    assert item.out_of_service_at is not None
+    db.refresh(hold)
+    assert (hold.status, hold.released_quantity) == ("RELEASED", 2)
+    tech_client.login(Users.COORDINATOR)
+    assert _shortages(tech_client, event) == []
+    [line] = [
+        each
+        for each in tech_client.get(f"/events/{event.id}").json()["equipment"]
+        if each["id"] == str(item.id)
+    ]
+    assert line["status"] == "OUT_OF_SERVICE"
+    assert datetime.fromisoformat(line["out_of_service_at"]) == item.out_of_service_at
+
+
+@pytest.mark.story("16.2", ac=11)
+@pytest.mark.parametrize("status", HOLDING_STATUSES)
+def test_an_item_left_short_of_all_but_one_unit_keeps_its_status_and_its_hold(
+    tech_client, db: Session, status: str
+):
+    kit = make_equipment_type(db, total_quantity=3, name="Mobile kit")
+    event = _event(db)
+    hold = _held(db, event, kit, 3, status=status)
+
+    tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+
+    item = _item(db, hold)
+    assert (item.status, item.out_of_service_at, item.out_of_service_from) == (status, None, None)
+    db.refresh(hold)
+    assert hold.status == "RESERVED"
+    [notice] = _short_notices(db, event)
+    assert notice.message == service.short_message(name="Mobile kit", short=2, held=3)
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_the_coordinator_is_told_the_item_was_closed_not_that_it_is_short(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=2, name="Mobile kit")
+    event = _event(db, name="Harbour Lights")
+    hold = _held(db, event, kit, 2)
+
+    tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+
+    [notice] = _short_notices(db, event)
+    assert notice.recipient_id == Users.COORDINATOR.id
+    assert notice.title == "Equipment out of service: Harbour Lights"
+    assert notice.message == (
+        "Mobile kit: all 2 held for this event are out of service, so the item was closed and"
+        " nothing is held for it. Request another type if you still need one."
+    )
+    assert (notice.related_entity_type, notice.related_entity_id) == (
+        "equipment_reservation",
+        hold.id,
+    )
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_closing_an_item_is_audited_on_its_event(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=1)
+    event = _event(db)
+    hold = _held(db, event, kit, 1, status="PENDING")
+
+    record_id = tech_client.post(_records_path(kit.id), json=_body(1, start=10, end=12)).json()[
+        "id"
+    ]
+
+    [entry] = db.scalars(
+        select(AuditLog).where(
+            AuditLog.entity_id == event.id, AuditLog.action == "EQUIPMENT_OUT_OF_SERVICE"
+        )
+    ).all()
+    assert entry.actor_id == Users.TECH_SUPPORT.id
+    assert entry.details == {
+        "item_id": str(hold.equipment_request_id),
+        "equipment_type_code": kit.code,
+        "quantity": 1,
+        "from_status": "PENDING",
+        "record_id": record_id,
+    }
+
+
+@pytest.mark.story("16.2", ac=10)
+@pytest.mark.story("16.2", ac=11)
+def test_only_the_hold_placed_last_is_closed_and_the_one_before_is_told_how_short_it_is(
+    tech_client, db: Session
+):
+    """Four units, two holds of two, three taken out: the one unit left goes to the hold placed
+    first, so the later one has none and is closed, and the earlier is one short. Closing the
+    later hold gives nothing back over the record's period, so the earlier is told it is short by
+    one, once."""
+    kit = make_equipment_type(db, total_quantity=4, name="Mobile kit")
+    earlier, later = _event(db), _event(db, coordinator=Users.COORDINATOR_2.id)
+    earlier_hold = _held(db, earlier, kit, 2, placed_days_ago=9)
+    later_hold = _held(db, later, kit, 2, placed_days_ago=1)
+
+    tech_client.post(_records_path(kit.id), json=_body(3, start=10, end=12))
+
+    assert _item(db, earlier_hold).status == "ACCEPTED"
+    assert _item(db, later_hold).status == "OUT_OF_SERVICE"
+    assert [notice.message for notice in _short_notices(db, earlier)] == [
+        service.short_message(name="Mobile kit", short=1, held=2)
+    ]
+    assert [notice.title for notice in _short_notices(db, later)] == [
+        f"Equipment out of service: {later.name}"
+    ]
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_an_edit_raising_a_record_to_every_unit_closes_the_item(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=3)
+    hold = _held(db, _event(db), kit, 3)
+    record = _out(db, kit, 1, start=10, end=12)  # leaves the hold 1 short
+
+    response = tech_client.patch(_record_path(kit.id, record.id), json={"quantity": 3})
+
+    assert response.status_code == 200
+    assert _item(db, hold).status == "OUT_OF_SERVICE"
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_an_item_already_short_that_a_record_leaves_no_shorter_is_not_closed(
+    tech_client, db: Session
+):
+    """Only a save that leaves a hold short of every unit, or shorter than it was, closes it: one
+    left so before this fix, by a record of another period, is marked as it was."""
+    kit = make_equipment_type(db, total_quantity=1)
+    hold = _held(db, _event(db), kit, 1)
+    _out(db, kit, 1, start=10, end=12)  # on file before this fix: the hold is short of its unit
+
+    tech_client.post(_records_path(kit.id), json=_body(1, start=30, end=31))
+
+    assert _item(db, hold).status == "ACCEPTED"
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_an_item_of_an_event_with_no_coordinator_is_closed_and_nobody_is_told(
+    tech_client, db: Session
+):
+    kit = make_equipment_type(db, total_quantity=1)
+    event = _event(db, coordinator=None)
+    hold = _held(db, event, kit, 1, status="REQUESTED")
+
+    tech_client.post(_records_path(kit.id), json=_body(1, start=10, end=12))
+
+    assert _item(db, hold).status == "OUT_OF_SERVICE"
+    assert _short_notices(db, event) == []
+
+
+@pytest.mark.story("16.2", ac=10)
+@pytest.mark.parametrize("event_status", [EventStatus.CONFIRMED, EventStatus.AWAITING_SAFETY_CHECK])
+def test_an_accepted_item_closed_on_an_event_past_planning_sends_it_back_to_planning(
+    tech_client, db: Session, event_status: str
+):
+    confirmed_at = _now() - timedelta(days=1) if event_status == EventStatus.CONFIRMED else None
+    kit = make_equipment_type(db, total_quantity=2, name="Mobile kit")
+    event = _event(db, status=event_status, confirmed_at=confirmed_at, name="Harbour Lights")
+    _held(db, event, kit, 2)
+
+    tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+
+    db.refresh(event)
+    assert (event.status, event.confirmed_at) == (EventStatus.PLANNING, None)
+    told = _returned_notices(db, event)
+    assert {notice.recipient_id for notice in told} == {
+        Users.ORGANISER.id,
+        Users.SAFETY_OFFICER.id,
+    }
+    assert {notice.message for notice in told} == {
+        'Mobile kit on "Harbour Lights" went out of service, so the event is back in Planning and'
+        " needs a new safety check before it is confirmed again."
+    }
+
+
+@pytest.mark.story("16.2", ac=10)
+@pytest.mark.parametrize("status", ["REQUESTED", "PENDING"])
+def test_an_item_never_accepted_closed_on_a_confirmed_event_leaves_it_confirmed(
+    tech_client, db: Session, status: str
+):
+    """The safety check reads accepted items only (21.2), so only losing one undoes it."""
+    confirmed_at = (_now() - timedelta(days=1)).replace(microsecond=0)
+    kit = make_equipment_type(db, total_quantity=1)
+    event = _event(db, status=EventStatus.CONFIRMED, confirmed_at=confirmed_at)
+    hold = _held(db, event, kit, 1, status=status)
+
+    tech_client.post(_records_path(kit.id), json=_body(1, start=10, end=12))
+
+    assert _item(db, hold).status == "OUT_OF_SERVICE"
+    db.refresh(event)
+    assert (event.status, event.confirmed_at) == (EventStatus.CONFIRMED, confirmed_at)
+    assert _returned_notices(db, event) == []
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_an_accepted_item_closed_on_an_event_in_planning_leaves_it_there(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=1)
+    event = _event(db)
+    hold = _held(db, event, kit, 1)
+
+    tech_client.post(_records_path(kit.id), json=_body(1, start=10, end=12))
+
+    assert _item(db, hold).status == "OUT_OF_SERVICE"
+    db.refresh(event)
+    assert event.status == EventStatus.PLANNING
+    assert _returned_notices(db, event) == []
+
+
+@pytest.mark.story("16.2", ac=10)
+@pytest.mark.parametrize("undo", ["removed", "ended", "eased"])
+def test_a_closed_item_stays_closed_once_the_record_is_removed_ended_or_eased(
+    tech_client, db: Session, undo: str
+):
+    kit = make_equipment_type(db, total_quantity=2)
+    event = _event(db, start=0.5, end=1)
+    hold = _held(db, event, kit, 2)
+    if undo == "removed":  # a record not yet started, which is removed
+        record_id = tech_client.post(_records_path(kit.id), json=_body(2, start=0.25, end=None))
+    else:  # a record in force from this minute, which is ended or eased
+        body = _body(2, start=0, end=None) | {"starts_at": _now().replace(second=0).isoformat()}
+        record_id = tech_client.post(_records_path(kit.id), json=body)
+    assert record_id.status_code == 201, record_id.text
+    path = _record_path(kit.id, uuid.UUID(record_id.json()["id"]))
+
+    response = {
+        "removed": lambda: tech_client.delete(path),
+        "ended": lambda: tech_client.patch(path, json={"end_now": True}),
+        "eased": lambda: tech_client.patch(path, json={"quantity": 1}),
+    }[undo]()
+
+    assert response.status_code in (200, 204), response.text
+    assert _item(db, hold).status == "OUT_OF_SERVICE"
+    db.refresh(hold)
+    assert hold.status == "RELEASED"
+
+
+@pytest.mark.story("16.2", ac=10)
+def test_a_closed_item_no_longer_takes_up_its_type_so_it_can_be_requested_again(
+    tech_client, db: Session
+):
+    kit = make_equipment_type(db, total_quantity=2)
+    event = _event(db)
+    _held(db, event, kit, 2)
+    record_id = tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12)).json()[
+        "id"
+    ]
+    tech_client.delete(_record_path(kit.id, uuid.UUID(record_id)))  # the units are back
+
+    tech_client.login(Users.COORDINATOR)
+    response = tech_client.post(
+        f"/events/{event.id}/equipment", json={"equipment_type_code": kit.code, "quantity": 2}
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "REQUESTED"
+
+
+@pytest.mark.story("16.2", ac=10)
+@pytest.mark.parametrize("status", ["PENDING", "ACCEPTED"])
+def test_a_closed_item_can_no_longer_be_withdrawn_decided_or_edited(
+    tech_client, db: Session, status: str
+):
+    kit = make_equipment_type(db, total_quantity=2)
+    event = _event(db)
+    hold = _held(db, event, kit, 2, status=status)
+    tech_client.post(_records_path(kit.id), json=_body(2, start=10, end=12))
+    item_id = hold.equipment_request_id
+
+    decided = tech_client.post(
+        f"/equipment-requests/{item_id}/decision", json={"outcome": "ACCEPTED"}
+    )
+    tech_client.login(Users.COORDINATOR)
+    withdrawn = tech_client.post(
+        f"/events/{event.id}/equipment/{item_id}/withdrawal", json={"expected_status": status}
+    )
+    edited = tech_client.patch(f"/events/{event.id}/equipment/{item_id}", json={"quantity": 1})
+
+    assert (decided.status_code, decided.json()["detail"]) == (
+        409,
+        "This equipment request was closed, as its units are out of service.",
+    )
+    assert (withdrawn.status_code, withdrawn.json()["detail"]) == (
+        409,
+        "This equipment item was closed, as its units are out of service, so there is nothing"
+        " to withdraw.",
+    )
+    assert (edited.status_code, edited.json()["detail"]) == (
+        409,
+        "This equipment item is out of service, so it can no longer be changed.",
+    )
+    assert _item(db, hold).status == "OUT_OF_SERVICE"
+
+
+# --- AC10 - the save takes the events holding the type before the type -------------------------
+@pytest.mark.story("16.2", ac=10)
+def test_a_record_waits_for_a_write_to_an_event_holding_the_type_then_closes_its_item(engine):
+    """Closing an item writes to its event's equipment, so the save takes the event first, as the
+    coordinator's writes and a decision do (event, then type), and waits for one under way. Taking
+    the type first would leave it waiting on the event while the write waited on the type: here
+    the write takes the type while the save waits, which a save holding the type would deadlock."""
+    with _committed_kit(engine, stock=2) as (kit_id, event_id):
+        with Session(engine) as session:
+            item_id = make_equipment_item(
+                session,
+                event=session.get(Event, event_id),
+                equipment_type=session.get(EquipmentType, kit_id),
+                quantity=2,
+                status="PENDING",
+            ).id
+            session.commit()
+        holder = Session(engine)
+        pids: queue.Queue[int] = queue.Queue()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            try:
+                coordinator = holder.get(User, Users.COORDINATOR.id)
+                service._event_for_change(holder, event_id, actor=coordinator)
+                saving = pool.submit(_in_own_session, engine, _recorder(kit_id, 2), pids)
+                assert _waited_on_a_lock(engine, saving, pids)
+                holder.execute(
+                    select(EquipmentType.id)
+                    .where(EquipmentType.id == kit_id)
+                    .with_for_update(nowait=True)
+                )
+            finally:
+                holder.close()  # inside the pool: leaving it waits for whatever this holds up
+            assert saving.result(timeout=20) == CREATED
+
+        with Session(engine) as session:
+            assert session.get(EventEquipmentRequest, item_id).status == "OUT_OF_SERVICE"
+
+
+# =============================================================================================
+# AC12 (fix f16.2.4) - Technical Support sees which holds a save closes, and the closed items
+# =============================================================================================
+@pytest.mark.story("16.2", ac=12)
+def test_the_check_says_which_holds_saving_would_close(tech_client, db: Session):
+    kit = make_equipment_type(db, total_quantity=3)
+    _held(db, _event(db), kit, 3)
+
+    some = _check(tech_client, kit.id, quantity=2, starts_at=_days(10), ends_at=_days(12))
+    every = _check(tech_client, kit.id, quantity=3, starts_at=_days(10), ends_at=_days(12))
+
+    [short] = some.json()["short_holds"]
+    assert (short["units_short"], short["closes"]) == (2, False)
+    [closing] = every.json()["short_holds"]
+    assert (closing["units_short"], closing["closes"]) == (3, True)
+
+
+def _closed(db: Session, event: Event, kit: EquipmentType, *, was: str) -> EventEquipmentRequest:
+    """An item closed as Out of service from ``was``, sent to Technical Support unless it was
+    never sent."""
+    sent = (
+        {}
+        if was == "REQUESTED"
+        else {"submitted_at": _now() - timedelta(days=2), "submitted_by_id": Users.COORDINATOR.id}
+    )
+    return make_equipment_item(
+        db,
+        event=event,
+        equipment_type=kit,
+        quantity=1,
+        status="OUT_OF_SERVICE",
+        is_held=False,
+        out_of_service_from=was,
+        **sent,
+    )
+
+
+@pytest.mark.story("16.2", ac=12)
+def test_the_queue_lists_items_closed_after_they_were_sent_under_out_of_service(
+    tech_client, db: Session
+):
+    event = _event(db, name="Out of service fair")
+    pending = _closed(db, event, make_equipment_type(db), was="PENDING")
+    accepted = _closed(db, event, make_equipment_type(db), was="ACCEPTED")
+    never_sent = _closed(db, event, make_equipment_type(db), was="REQUESTED")
+
+    response = tech_client.get(
+        "/equipment-requests", params={"status": "OUT_OF_SERVICE", "search": "Out of service fair"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    listed = {entry["id"]: entry for entry in body["items"]}
+    assert set(listed) == {str(pending.id), str(accepted.id)}
+    assert str(never_sent.id) not in listed
+    entry = listed[str(pending.id)]
+    assert (entry["status"], entry["available"], entry["shortfall"]) == (
+        "OUT_OF_SERVICE",
+        None,
+        None,
+    )
+    assert datetime.fromisoformat(entry["out_of_service_at"]) == pending.out_of_service_at
+    assert body["counts"]["out_of_service"] == 2
+    every_tab = tech_client.get("/equipment-requests", params={"search": "Out of service fair"})
+    assert {each["id"] for each in every_tab.json()["items"]} == set(listed)
+
+
+@pytest.mark.story("16.2", ac=12)
+def test_a_closed_request_opens_on_its_own_page_with_no_figures(tech_client, db: Session):
+    item = _closed(db, _event(db), make_equipment_type(db), was="ACCEPTED")
+
+    response = tech_client.get(f"/equipment-requests/{item.id}")
+
+    assert response.status_code == 200
+    assert (response.json()["status"], response.json()["available"]) == ("OUT_OF_SERVICE", None)
+
+
+# =============================================================================================
+# AC13 (fix f16.2.4) - who reads an event's shortages: its coordinator, the Leads and Technical
+# Support
+# =============================================================================================
+@pytest.mark.story("16.2", ac=13)
+@pytest.mark.parametrize(
+    ("user", "expected"),
+    [
+        pytest.param(Users.COORDINATOR, 200, id="its-coordinator"),
+        pytest.param(Users.LEAD, 200, id="lead"),
+        pytest.param(Users.TECH_SUPPORT, 200, id="technical-support"),
+        pytest.param(Users.COORDINATOR_2, 403, id="another-coordinator"),
+        pytest.param(Users.VENUE_STAFF, 403, id="venue-staff"),
+        pytest.param(Users.SAFETY_OFFICER, 403, id="safety-officer"),
+    ],
+)
+def test_an_events_shortages_are_read_only_by_its_coordinator_the_leads_and_technical_support(
+    login_as, db: Session, user, expected: int
+):
+    kit = make_equipment_type(db, total_quantity=2)
+    event = _event(db)
+    _held(db, event, kit, 2)
+    _out(db, kit, 1, start=10, end=12)
+
+    response = login_as(user).get(f"/events/{event.id}/equipment-shortages")
+
+    assert response.status_code == expected, response.text
+    if expected == 200:
+        assert [each["units_short"] for each in response.json()] == [1]
+    else:
+        assert response.json()["detail"] == service.SHORTAGES_NOT_YOURS_MESSAGE
+
+
+@pytest.mark.story("16.2", ac=13)
+def test_an_event_with_no_coordinator_has_its_shortages_read_by_the_leads_and_technical_support(
+    login_as, db: Session
+):
+    event = _event(db, coordinator=None)
+
+    path = f"/events/{event.id}/equipment-shortages"
+
+    assert login_as(Users.LEAD).get(path).status_code == 200
+    assert login_as(Users.TECH_SUPPORT).get(path).status_code == 200
+    assert login_as(Users.COORDINATOR).get(path).status_code == 403

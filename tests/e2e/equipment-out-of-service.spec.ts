@@ -32,21 +32,29 @@ import {
  * AC5 Before saving, the page lists the holds the record would leave short and asks to confirm;
  *     Cancel saves nothing.
  * AC6 Only Technical Support has the catalogue; anyone else is told it is not permitted.
- * AC8 (f16.2.2) A short item says what to do about it: withdraw it, or remove it if it was never
- *     sent. An accepted one reads Accepted, not Accepted (reserved). Seeded for the accepted
- *     screens; every status at once from stubbed shortages, since no seeded record leaves a
- *     Pending or unsent hold short and one that did would move figures other specs read.
- *     Fix f16.2.3: only the viewer with the Withdraw or Remove button reads the advice; Technical
- *     Support, a coordinator not the event's, and its own once the event awaits the safety check
- *     read the plain mark.
+ * AC8 (f16.2.2) An accepted item left short reads Accepted, not Accepted (reserved). Its advice to
+ *     withdraw or remove the item went with fix f16.2.4 (AC11).
  * AC9 (f16.2.2) Technical Support's holds schedule marks the same hold short. Which holds, and by
  *     how many, are backend cases.
+ * AC10 (f16.2.4) A record that takes every unit an item holds closes it as Out of service: its
+ *     coordinator sees it closed, with no Withdraw, Edit or Remove. The rules - whatever its stage,
+ *     back to Planning, who is told, what stays closed - are backend cases.
+ * AC11 (f16.2.4) An item short of only some of its units keeps its status, and its mark says how
+ *     many can still be supplied, with no advice to withdraw or remove it. Seeded for the accepted
+ *     screens; the other statuses from stubbed shortages, since no seeded record leaves a Pending
+ *     or unsent hold short and one that did would move figures other specs read.
+ * AC12 (f16.2.4) The list of holds before saving says which items saving will close, and
+ *     Technical Support's queue lists a closed item once sent to them under Out of service.
+ * AC13 (f16.2.4) Only the event's coordinator, an Event Coordinator Lead and Technical Support see
+ *     the marks; anyone else sees each item's status alone. The server's refusal is a backend case.
  *
  * Specs share one database and run in parallel, so each flow that records units uses a window
  * of its own on a type no other flow here records against: the conference phones in 2031, and
  * from now until tomorrow for the one record in force (the seeded conference phone holds are in
  * 2027), and the mobile LED screens over the evening of EVENTS.lightShowcase in February 2030,
- * which nothing else holds. None moves a figure another spec reads.
+ * which nothing else holds. AC10's flow adds lapel microphones to the light showcase and takes
+ * every lapel microphone out over its evening, when nothing else holds any. None moves a figure
+ * another spec reads.
  */
 
 const CATALOGUE_PATH = '/equipment/catalogue'
@@ -57,6 +65,7 @@ const CONF_PHONE = 'Conference phone' // stock 6
 const PROJECTOR = 'Portable projector' // stock 8
 const VIDEO_CAMERA = 'Video camera' // stock 4, only this spec records against it
 const LED_SCREEN = 'Mobile LED screen' // stock 3, all held by the light showcase
+const LAPEL_MIC = 'Lapel microphone' // stock 10, none held in February 2030
 const LIGHT_SHOWCASE = 'Riverside Light Showcase'
 
 const QUANTITY_MESSAGE = 'Enter a whole number of at least 1.'
@@ -66,12 +75,10 @@ const START_IN_THE_PAST_MESSAGE = 'The start cannot be in the past.'
 const DATE_INCOMPLETE_MESSAGE = 'Enter a complete, real date and time'
 const DATE_INVALID_MESSAGE = 'Enter a valid date and time, with a four-digit year.'
 
-// AC8 (f16.2.2): what a short item tells whoever reads the event's equipment.
-const SHORT_WITHDRAW_ADVICE =
-  "Technical Support can't supply these until the units are back; withdraw it if you need another type."
-const SHORT_REMOVE_ADVICE =
-  "Technical Support can't supply these until the units are back; remove it if you need another type."
 const HOLDS_PATH = '/equipment/holds'
+const QUEUE_PATH = '/equipment/requests'
+// AC11 (f16.2.4): the advice f16.2.2 gave a short item, which no short item gives any more.
+const NO_ADVICE = /withdraw it|remove it/i
 
 /** Singapore's clock, which every date field reads (frontend/src/shared/format.ts). */
 const SINGAPORE_OFFSET_MS = 8 * 60 * 60 * 1000
@@ -483,7 +490,7 @@ test('16.2 AC3: more units than are free over the period are refused by the serv
 test.describe('takes a seeded hold short once', () => {
   test.describe.configure({ retries: 0 })
 
-  test('16.2 AC4/AC5/AC8/AC9: a record that leaves a hold short lists it first, and once confirmed the coordinator sees the item short on the event and Technical Support sees the hold short on the schedule', async ({
+  test('16.2 AC4/AC5/AC8/AC9/AC11: a record that leaves a hold short lists it first, and once confirmed the coordinator sees the item short on the event and Technical Support sees the hold short on the schedule', async ({
     page,
   }) => {
     const pixels = `Dead pixels across the top row ${Date.now()}`
@@ -504,6 +511,8 @@ test.describe('takes a seeded hold short once', () => {
     const hold = dialog.getByRole('listitem').filter({ hasText: LIGHT_SHOWCASE })
     await expect(hold).toContainText('1 of 3 short')
     await expect(hold).toContainText('Carl Coordinator')
+    // AC12 (f16.2.4): a hold left some of its units is short, not closed.
+    await expect(hold).not.toContainText('closed')
     await expect(records(page)).toContainText('No units are out of service.')
     await dialog.getByRole('button', { name: 'Save anyway' }).click()
     await expect(dialog).toHaveCount(0)
@@ -514,11 +523,12 @@ test.describe('takes a seeded hold short once', () => {
     await signIn(page, ACCOUNTS.coordinator2)
     await page.goto(`/events/${EVENTS.lightShowcase}`)
     const item = page.getByRole('listitem').filter({ hasText: LED_SCREEN })
-    await expect(item).toContainText('Short: 1 of 3 out of service')
-    // AC8: the accepted item no longer reads as reserved, and says what to do.
+    // AC11 (f16.2.4): how many can still be supplied, and no advice to withdraw it.
+    await expect(item).toContainText('Short: 1 of 3 out of service, so only 2 can be supplied')
+    await expect(item).not.toContainText(NO_ADVICE)
+    // AC8: the accepted item no longer reads as reserved.
     await expect(item.getByText('Accepted', { exact: true })).toBeVisible()
     await expect(item).not.toContainText('(reserved)')
-    await expect(item).toContainText(SHORT_WITHDRAW_ADVICE)
 
     // AC9: Technical Support's holds schedule marks the same hold.
     await page.getByRole('button', { name: 'Sign out' }).click()
@@ -529,7 +539,7 @@ test.describe('takes a seeded hold short once', () => {
       .getByRole('region', { name: LED_SCREEN, exact: true })
       .getByRole('row')
       .filter({ hasText: LIGHT_SHOWCASE })
-    await expect(held).toContainText('Short: 1 of 3 out of service')
+    await expect(held).toContainText('Short: 1 of 3 out of service, so only 2 can be supplied')
     await expect(held.getByText('Accepted', { exact: true })).toBeVisible()
     await expect(held).not.toContainText('(reserved)')
   })
@@ -558,28 +568,29 @@ test.describe('takes a seeded hold short once', () => {
   })
 })
 
-// --- AC8 (f16.2.2): what a short item says, whatever its status -----------------------------------
+// --- AC11 / AC13 (f16.2.4): a partly short item, and who reads its mark ---------------------------
 const SHOWCASE_PATH = `/events/${EVENTS.productShowcase}`
 
-/** The showcase's three holding items - microphones accepted, a speaker set pending, laptops not
- *  yet sent - each stubbed short by one, so every status is seen without a record taking units.
- *  `status` stands in for the event's own, to show it past the point its equipment can change. */
-async function stubShowcaseShortByOne(page: Page, status?: string) {
-  let holdingItems: string[] = []
+/** Two of the showcase's holding items - microphones accepted (3), laptops not yet sent (2) -
+ *  stubbed short by one, so each is seen without a record taking units. Its pending speaker set
+ *  holds one unit, which can only be short of every unit, and that closes it (AC10). */
+async function stubShowcaseShortByOne(page: Page) {
+  let shortItems: string[] = []
   await page.route(`**${SHOWCASE_PATH}`, async (route) => {
     if (route.request().resourceType() !== 'fetch') return route.fallback()
     const response = await route.fetch()
     const event = await response.json()
-    holdingItems = event.equipment
-      .filter((item: { status: string }) =>
-        ['REQUESTED', 'PENDING', 'ACCEPTED'].includes(item.status),
+    shortItems = event.equipment
+      .filter(
+        (item: { status: string; quantity: number }) =>
+          ['REQUESTED', 'PENDING', 'ACCEPTED'].includes(item.status) && item.quantity > 1,
       )
       .map((item: { id: string }) => item.id)
-    return route.fulfill({ response, json: status === undefined ? event : { ...event, status } })
+    return route.fulfill({ response, json: event })
   })
   await page.route(`**${SHOWCASE_PATH}/equipment-shortages`, (route) =>
     route.fulfill({
-      json: holdingItems.map((id) => ({ item_id: id, units_short: 1 })),
+      json: shortItems.map((id) => ({ item_id: id, units_short: 1 })),
       headers: corsHeaders(route.request()),
     }),
   )
@@ -592,56 +603,117 @@ function showcaseItem(page: Page, name: string) {
     .filter({ hasText: name })
 }
 
-test('16.2 AC8: a short item says to withdraw it, or to remove it if it was never sent, and an accepted one reads Accepted, not reserved', async ({
+test('16.2 AC11: an item short of some of its units keeps its status, says how many can still be supplied, and is not told to withdraw or remove it', async ({
   page,
 }) => {
   await stubShowcaseShortByOne(page)
   await signIn(page, ACCOUNTS.coordinator2)
   await page.goto(SHOWCASE_PATH)
+  const item = (name: string) => showcaseItem(page, name)
 
-  const mics = showcaseItem(page, 'Wireless microphone')
-  await expect(mics).toContainText(`Short: 1 of 3 out of service. ${SHORT_WITHDRAW_ADVICE}`)
+  const mics = item('Wireless microphone')
+  await expect(mics).toContainText('Short: 1 of 3 out of service, so only 2 can be supplied')
   await expect(mics.getByText('Accepted', { exact: true })).toBeVisible()
   await expect(mics).not.toContainText('(reserved)')
+  await expect(mics).not.toContainText(NO_ADVICE)
 
-  const speakers = showcaseItem(page, 'Portable speaker set')
-  await expect(speakers).toContainText(`Short: 1 of 1 out of service. ${SHORT_WITHDRAW_ADVICE}`)
-  await expect(speakers.getByText('Pending', { exact: true })).toBeVisible()
-
-  await expect(showcaseItem(page, 'Presentation laptop')).toContainText(
-    `Short: 1 of 2 out of service. ${SHORT_REMOVE_ADVICE}`,
-  )
+  const laptops = item('Presentation laptop')
+  await expect(laptops).toContainText('Short: 1 of 2 out of service, so only 1 can be supplied')
+  await expect(laptops.getByText('Not yet sent', { exact: true })).toBeVisible()
+  await expect(laptops).not.toContainText(NO_ADVICE)
 })
 
-// f16.2.3: the advice names a Withdraw or Remove button, so only whoever has one reads it.
-for (const viewer of [
-  { who: 'Technical Support', account: ACCOUNTS.techSupport },
-  { who: "a coordinator who isn't the event's", account: ACCOUNTS.coordinator },
-  {
-    who: "the event's coordinator once it awaits the safety check",
-    account: ACCOUNTS.coordinator2,
-    status: 'AWAITING_SAFETY_CHECK',
-  },
-]) {
-  test(`16.2 AC8: ${viewer.who} reads a short item's mark without the advice to withdraw or remove it`, async ({
+for (const [who, account, isShown] of [
+  ['an Event Coordinator Lead', ACCOUNTS.lead, true],
+  ['Technical Support', ACCOUNTS.techSupport, true],
+  ["a coordinator not the event's", ACCOUNTS.coordinator, false],
+  ['Venue Staff', ACCOUNTS.venueStaff, false],
+  ['a Safety Officer', ACCOUNTS.safetyOfficer, false],
+] as const) {
+  test(`16.2 AC13: ${who} ${isShown ? 'sees' : 'does not see'} what units out of service leave the event short of`, async ({
     page,
   }) => {
-    await stubShowcaseShortByOne(page, viewer.status)
-    await signIn(page, viewer.account)
+    await stubShowcaseShortByOne(page)
+    await signIn(page, account)
     await page.goto(SHOWCASE_PATH)
-
     const mics = showcaseItem(page, 'Wireless microphone')
-    await expect(mics).toContainText('Short: 1 of 3 out of service')
-    await expect(mics.getByText('Accepted', { exact: true })).toBeVisible()
-    const laptops = showcaseItem(page, 'Presentation laptop')
-    await expect(laptops).toContainText('Short: 1 of 2 out of service')
-    for (const item of [mics, showcaseItem(page, 'Portable speaker set'), laptops]) {
-      await expect(item).not.toContainText(SHORT_WITHDRAW_ADVICE)
-      await expect(item).not.toContainText(SHORT_REMOVE_ADVICE)
-      await expect(item.getByRole('button')).toHaveCount(0)
+    await expect(mics).toBeVisible()
+
+    if (isShown) {
+      await expect(mics).toContainText('Short: 1 of 3 out of service')
+    } else {
+      // The item and its status, but no mark: the page does not ask, so the stub never answers.
+      await expect(mics.getByText('Accepted (reserved)', { exact: true })).toBeVisible()
+      await expect(mics).not.toContainText('Short:')
     }
   })
 }
+
+// --- AC10 / AC12 (f16.2.4): a record that takes every unit an item holds closes it ----------------
+test.describe('closes an item it takes every unit of', () => {
+  test.describe.configure({ retries: 0 })
+
+  test("16.2 AC10/AC12: a record that takes every unit an item holds says it will close it, then the item reads Out of service on the event and in Technical Support's queue", async ({
+    page,
+  }) => {
+    const notes = `Clip-on mics for the hosts ${Date.now()}`
+    const equipment = () => page.getByRole('region', { name: 'Equipment requirements' })
+    const lapels = () => equipment().getByRole('listitem').filter({ hasText: notes })
+
+    // The showcase's coordinator asks for two lapel microphones and sends them.
+    await signIn(page, ACCOUNTS.coordinator2)
+    await page.goto(`/events/${EVENTS.lightShowcase}`)
+    const add = equipment().getByRole('form', { name: 'Add equipment' })
+    await add.getByLabel('Equipment type').selectOption('LAPEL_MIC')
+    await add.getByLabel('Quantity').fill('2')
+    await add.getByLabel('Technical notes').fill(notes)
+    await add.getByRole('button', { name: 'Add item' }).click()
+    await expect(lapels()).toContainText('Not yet sent')
+    await equipment().getByRole('button', { name: 'Submit to Technical Support' }).click()
+    await expect(lapels().getByText('Pending', { exact: true })).toBeVisible()
+
+    // AC12: Technical Support takes every lapel microphone out over the evening, and is told the
+    // item will be closed before anything is saved.
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await signIn(page, ACCOUNTS.techSupport)
+    await openType(page, LAPEL_MIC)
+    await fillRecord(page, {
+      units: '10',
+      reason: 'Lost',
+      note: `Box of lapel mics missing ${Date.now()}`,
+      from: '2030-02-20T12:00',
+      until: '2030-02-21T12:00',
+    })
+    await form(page).getByRole('button', { name: 'Take out of service' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Some holds will be short' })
+    const hold = dialog.getByRole('listitem').filter({ hasText: LIGHT_SHOWCASE })
+    await expect(hold).toContainText('2 of 2 short')
+    await expect(hold).toContainText('Its item will be closed as out of service.')
+    await dialog.getByRole('button', { name: 'Save anyway' }).click()
+    await expect(dialog).toHaveCount(0)
+
+    // AC12: the closed request is under Out of service in Technical Support's queue.
+    await page.goto(QUEUE_PATH)
+    await page.getByRole('tab', { name: /^Out of service/ }).click()
+    const card = page
+      .getByRole('listitem')
+      .filter({ hasText: LIGHT_SHOWCASE })
+      .filter({ hasText: LAPEL_MIC })
+    await expect(card.getByText('Out of service', { exact: true })).toBeVisible()
+    await expect(card.getByRole('button', { name: 'Accept' })).toHaveCount(0)
+
+    // AC10: the coordinator sees the item closed, with nothing left to do to it.
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await signIn(page, ACCOUNTS.coordinator2)
+    await page.goto(`/events/${EVENTS.lightShowcase}`)
+    await expect(lapels().getByText('Out of service', { exact: true })).toBeVisible()
+    await expect(lapels()).toContainText(
+      'Every unit held was taken out of service, so this item was closed and nothing is held for it.',
+    )
+    await expect(lapels()).not.toContainText('Short:')
+    await expect(lapels().getByRole('button')).toHaveCount(0)
+  })
+})
 
 // --- On a phone -----------------------------------------------------------------------------------
 test("16.2 AC2: on a phone, the catalogue's columns and a type's page fit without sideways scrolling, its fields take the width and its button is big enough for a thumb", async ({

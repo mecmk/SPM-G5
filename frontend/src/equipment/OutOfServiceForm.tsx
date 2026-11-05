@@ -27,6 +27,8 @@ import { refuseNonDigits } from '../shared/inputGuards'
 
 const WHOLE_NUMBER = /^\d+$/
 const UNTIL_HINT = 'Leave blank to keep them out until the record is ended.'
+/** Fix f16.2.4 (16.2 AC12): what a hold short of every unit says before saving. */
+const CLOSES_SENTENCE = 'Its item will be closed as out of service.'
 
 /** What the form holds: the inputs' own strings. */
 interface FormValues {
@@ -413,7 +415,8 @@ export function OutOfServiceForm({
         >
           <p>
             Saving leaves these events with fewer {typeName} units than they hold. Each event&apos;s
-            coordinator is told, and the item shows as short on the event until enough are back.
+            coordinator is told, and the item shows as short on the event until enough are back. An
+            item left with none of its units is closed as out of service instead.
           </p>
           <ul className="check-list">
             {short.map((hold) => (
@@ -425,6 +428,12 @@ export function OutOfServiceForm({
                     {formatSchedule(hold.starts_at, hold.ends_at)} ·{' '}
                     {hold.coordinator_name ?? 'No coordinator yet'}
                   </span>
+                  {hold.closes && (
+                    <>
+                      <br />
+                      <span className="small item-short">{CLOSES_SENTENCE}</span>
+                    </>
+                  )}
                 </span>
                 <span className="mono">{describeHoldShort(hold.units_short, hold.units_held)}</span>
               </li>

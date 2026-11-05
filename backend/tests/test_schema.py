@@ -301,6 +301,13 @@ def _live_booking_ids(conn, condition: str = "TRUE") -> list:
             "status, cancelled_at, withdrawn_at, withdrawn_by_id",
             id="17.2-equipment-withdrawn",
         ),
+        pytest.param(
+            "event_equipment_requests",
+            "status = 'OUT_OF_SERVICE', out_of_service_at = now(), out_of_service_from = 'PENDING'"
+            " WHERE status NOT IN ('CANCELLED', 'WITHDRAWN')",
+            "status, out_of_service_at, out_of_service_from",
+            id="f16.2.4-equipment-out-of-service",
+        ),
     ],
 )
 def test_reseeding_puts_every_closed_row_back(db: Session, table, closing, columns):
