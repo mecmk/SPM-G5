@@ -61,7 +61,7 @@ winget install OpenJS.NodeJS.LTS
 macOS: `brew install node@22` — Linux: use [nvm](https://github.com/nvm-sh/nvm) or your
 distribution's package manager.
 
-### Docker Desktop (optional — only required to run a local PostgreSQL instance)
+### Docker Desktop (runs the local PostgreSQL that the `npm run db:*` scripts start)
 
 ```powershell
 winget install -e --id Docker.DockerDesktop
@@ -69,7 +69,8 @@ winget install -e --id Docker.DockerDesktop
 
 macOS: `brew install --cask docker-desktop`. Or download it from
 [docker.com](https://www.docker.com/products/docker-desktop/), or use an existing PostgreSQL 16
-server instead. After installing, open Docker Desktop once and wait for "Engine running".
+server instead (see [Without Docker](#what-docker-compose-up--d-does)). After installing, open
+Docker Desktop once and wait for "Engine running".
 
 ### DBeaver Community (optional — database viewer)
 
@@ -87,10 +88,10 @@ macOS: `brew install --cask dbeaver-community`. Or download it from
 git clone https://github.com/mecmk/SPM-G5.git
 cd SPM-G5
 npm run setup
-Copy-Item backend\.env.sample backend\.env
-Copy-Item frontend\.env.sample frontend\.env
+Copy-Item backend\.env.sample backend\.env      # macOS/Linux: cp backend/.env.sample backend/.env
+Copy-Item frontend\.env.sample frontend\.env    # macOS/Linux: cp frontend/.env.sample frontend/.env
 docker compose up -d
-pip install pre-commit
+uv tool install pre-commit                      # or: pip install pre-commit
 pre-commit install
 pre-commit install --hook-type commit-msg
 ```
@@ -131,8 +132,9 @@ docker compose down -v     # stop the database and delete its data volume
 docker compose logs -f db  # view the database's logs
 ```
 
-Without Docker, any PostgreSQL 16 server works — set `backend/.env`'s `DATABASE_URL` to point
-at it instead.
+Without Docker, any PostgreSQL 16 server works: set `backend/.env`'s `DATABASE_URL` to point at
+it. `npm run db:ready` and `npm run db:reset` start Docker first, so run their database step
+directly instead, from `backend/`: `uv run python -m app.dbtool ready` (or `reset`).
 
 ## Running the App
 
@@ -172,11 +174,17 @@ list, including the other organisers, coordinators and attendees, is in
 ### Database commands
 
 ```powershell
+npm run db:up       # start Postgres in Docker (docker compose up -d)
+npm run db:down     # stop it; the data is kept
 npm run db:ready    # start Postgres, migrate, seed, verify
 npm run db:status   # applied / pending / drifted migrations
+npm run db:seed     # reload the sample data only
 npm run db:reset    # wipe the local database and rebuild it from migrations + seed
 npm run db:docs     # regenerate docs/database/DATA_DICTIONARY.md and ERD.excalidraw
 ```
+
+`db:ready` also regenerates the data dictionary and ERD when it applies a new migration, and
+`db:reset` always does, so commit those two files with the migration that changed them.
 
 Schema, seed data, data dictionary and ERD are explained in
 [docs/database/README.md](docs/database/README.md).
@@ -187,11 +195,12 @@ To run the backend and frontend in separate terminals instead, see
 ## Running Tests
 
 ```powershell
-npm run lint         # lint and format-check the backend and frontend
-npm run format       # auto-fix formatting issues in the backend and frontend
-npm run test         # backend tests (needs Postgres running) and a frontend build check
-npm run test:trace   # backend tests + docs/testing/TRACEABILITY.md (story/AC -> test matrix)
-npm run test:e2e     # end-to-end tests on a throwaway database and their own servers
+npm run lint           # lint and format-check the backend and frontend
+npm run format         # auto-fix formatting issues in the backend and frontend
+npm run test           # backend tests (needs Postgres running), then the frontend lint and build
+npm run test:trace     # backend tests + docs/testing/TRACEABILITY.md (story/AC -> test matrix)
+npm run test:coverage  # backend tests with coverage; below 100% of app/'s lines and branches fails, as in CI
+npm run test:e2e       # end-to-end tests on a throwaway database and their own servers
 ```
 
 Neither kind of test touches your development data. Backend tests build their own
@@ -206,26 +215,31 @@ stack can stay up. Conventions (fixtures, story markers, traceability) are in
 | Suite | Where | Run with |
 | --- | --- | --- |
 | Backend unit tests | `backend/tests/**/test_*_unit.py`: pure rules, no database | `npm run test:backend` |
-| Backend integration tests | the rest of `backend/tests/`, one file per story, through the API against a real PostgreSQL database; `backend/tests/test_schema.py` covers the schema itself | `npm run test:backend` |
+| Backend integration tests | the rest of `backend/tests/`, one file per story, mostly through the API against a real PostgreSQL database; `backend/tests/test_schema.py` covers the schema itself and `backend/tests/dbtool/` the database commands | `npm run test:backend` |
 | End-to-end tests | `tests/e2e/*.spec.ts` (Playwright), one spec per story area | `npm run test:e2e` |
 
-Every test is tagged with the story and acceptance criterion it proves, so `npm run test:trace`
-can list each criterion with the tests behind it.
+Tests are tagged with the story, and almost always the acceptance criterion, they prove, so
+`npm run test:trace` can list each criterion with the tests behind it. The one health check,
+`backend/tests/test_health.py`, proves no story.
 
 ### Continuous integration
 
-Every pull request runs these GitHub Actions workflows, in [.github/workflows/](.github/workflows/):
+Every pull request to `main` runs these GitHub Actions workflows, in
+[.github/workflows/](.github/workflows/). They run on pull requests only, not on `main` after a
+merge; `e2e.yml` can also be started by hand from the Actions tab.
 
 | Workflow | What it runs |
 | --- | --- |
-| `backend-ci.yml` | ruff lint and format check, the migrations and seed on a PostgreSQL service, then pytest, uploading the traceability matrix as an artifact |
+| `backend-ci.yml` | ruff lint and format check, the migrations and seed on a PostgreSQL service, then pytest with coverage, failing below 100% of `app/`'s lines and branches, and uploading the traceability matrix as an artifact |
 | `frontend-ci.yml` | oxlint, the Prettier format check, and the TypeScript build |
 | `e2e.yml` | migrates and seeds a PostgreSQL service, starts the API and the app, and runs Playwright |
 | `lint-markdown.yml` | markdownlint on every Markdown file |
 | `pr-title-check.yml` | the pull request title follows Conventional Commits |
 | `pre-commit.yml` | the repository's pre-commit hooks |
 
-The backend, frontend and e2e workflows run only when files they cover change.
+The backend and frontend workflows run only when the pull request adds or modifies a file under
+`backend/` or `frontend/` respectively; e2e runs when it adds or modifies one under any of those
+or `tests/`.
 
 ## Branching Model
 
