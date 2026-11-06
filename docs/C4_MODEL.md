@@ -232,7 +232,7 @@ Every feature area's routes are guarded by `require_permission()` or `CurrentUse
 signing in and out (`POST /auth/login`, `POST /auth/logout`) and fetching a picture file
 (`/uploads/events/` and `/uploads/venues/`). Every area records its changes with `record_audit()` and reads and writes
 through `get_db()`. Every area but two sends its notices with `notify()`: registrations sends
-none, and a venue closure's notices are sent by `app/bookings` (`end_bookings_for_closure`). The
+none, and venues leaves a closure's notices to `app/bookings` (`end_bookings_for_closure`). The
 timers open a session of their own, outside any request.
 
 ```mermaid
