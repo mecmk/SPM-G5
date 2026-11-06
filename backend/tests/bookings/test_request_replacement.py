@@ -5,10 +5,10 @@ covers, so nothing is marked and no replacement is requested. A booking already 
 shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
 normal pending request once its original closes (9.5 AC8, CL-194).
 
-The tests that remain cover 12.6 AC4, AC6, AC9 and AC10 (a pending replacement raised before 9.5:
-withdrawing it, the second request refused while it stands, and what a closed original leaves)
-and, tagged 9.5 AC8, the same once the original closes. The tests of raising a replacement went
-with the request.
+The tests that remain cover 12.6 AC4, AC5, AC6, AC9 and AC10 (a pending replacement raised
+before 9.5: the original untouched while it stands, rejecting or withdrawing it, the second
+request refused while it stands, and what a closed original leaves) and, tagged 9.5 AC8, the same
+once the original closes. The tests of raising a replacement went with the request.
 
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
@@ -71,13 +71,16 @@ Safety review and confirmation
     Once the replacement is approved or withdrawn, or the unavailability ends with no replacement
     pending, the event can be sent and confirmed as usual.
 
-This file raises the replacement, and what follows from raising it: AC2, AC4-AC10. The search that
-leaves out the unavailable venue (AC1) is test_venue_search_exclude_venue.py and the page flow is
-tests/e2e/venue-replacement.spec.ts. Approval, the release of the original and the "Replaced by"
-display are test_replacement_approval.py; the schema's own guards (the composite foreign key, the
-index and its trigger) are test_replacement_schema.py; what Venue Staff see is
-test_replacement_for_venue_staff.py. The one-per-requirement rule of 12.5 still refuses a normal
-second request, whatever the replacement's state.
+This file is a pending replacement and what can happen to it short of approval: AC4, AC5, AC6, AC9
+and AC10. Approval, the release of the original and the "Replaced by" display are
+test_replacement_approval.py; the schema's own guards (the composite foreign key, the index and its
+trigger) are test_replacement_schema.py; what Venue Staff see is
+test_replacement_for_venue_staff.py; AC7 is test_replacement_with_change_request.py. The retired
+parts are proven gone in
+tests/venues/test_closure_ends_bookings.py, tagged 9.5 AC7 and the 12.6 criterion each retires:
+the request route and the search's exclusion (AC1), the Venue unavailable filter (AC11), and the
+safety review and Confirm checks (AC12). The one-per-requirement rule of 12.5 still refuses a
+normal second request, whatever the replacement's state.
 
 Every case builds its own event, venues and booking (``make_scenario``), dated 45 days ahead, so
 no seeded booking is in the way.
@@ -142,6 +145,47 @@ def test_the_event_list_names_the_pending_replacement_on_the_original(coordinato
     assert original["replaced_by_venue_name"] is None
     assert replacement["replaces_venue_name"] == scene.original_venue.name
     assert replacement["pending_replacement_venue_name"] is None
+
+
+# --- AC5: the replacement is rejected or withdrawn ----------------------------------------------
+@pytest.mark.story("12.6", ac=5)
+@pytest.mark.parametrize("outcome", [BookingStatus.REJECTED, BookingStatus.WITHDRAWN])
+def test_a_rejected_or_withdrawn_replacement_leaves_the_original_as_it_was(login_as, db, outcome):
+    """Venue Staff reject the replacement, or the coordinator withdraws it: the original stays
+    approved with its approval and hold, and the event's list no longer names a replacement on
+    it, pending or approved. Asking for another replacement went with the request (9.5 AC7)."""
+    scene = make_scenario(db)
+    body = request_replacement(db, scene)
+    before = (
+        scene.original.status,
+        scene.original.decided_by_id,
+        scene.original.decided_at,
+        scene.original.hold_expires_at,
+    )
+
+    if outcome == BookingStatus.REJECTED:
+        response = login_as(Users.VENUE_STAFF).post(
+            f"{BOOKINGS_PATH}/{body['id']}/reject",
+            json={"decision_reason": "The room is double-booked that day."},
+        )
+    else:
+        response = login_as(Users.COORDINATOR).post(f"{BOOKINGS_PATH}/{body['id']}/withdraw")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == outcome
+    db.expire_all()
+    original = db.get(VenueBooking, scene.original.id)
+    assert (
+        original.status,
+        original.decided_by_id,
+        original.decided_at,
+        original.hold_expires_at,
+    ) == before
+    assert column(db, original.id, "replaced_by_booking_id") is None
+    listed = login_as(Users.COORDINATOR).get(f"{BOOKINGS_PATH}/for-event/{scene.event.id}")
+    entry = {item["id"]: item for item in listed.json()}[str(original.id)]
+    assert entry["pending_replacement_venue_name"] is None
+    assert entry["replaced_by_venue_name"] is None
 
 
 # --- AC6: the unavailability ends first ---------------------------------------------------------

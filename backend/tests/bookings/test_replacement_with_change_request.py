@@ -6,7 +6,8 @@ shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement bef
 normal pending request once its original closes (9.5 AC8, CL-194).
 
 The tests that remain cover 12.6 AC3 and AC8 (an approved change that unfits an original that
-has a replacement raised before 9.5, pending or approved) and 12.5 AC10.
+has a replacement raised before 9.5, pending or approved), AC7 (approving a replacement whose
+suitability was overridden needs no change request) and 12.5 AC10.
 
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
@@ -96,17 +97,19 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, object_session
 
 from app.auth.models import User
 from app.bookings import service
 from app.bookings.models import BookingStatus, ReleaseCause, VenueBooking
 from app.change_requests.models import EventChangeRequest
+from app.events.models import EventStatus
 from tests.support.change_requests import approve_as_seen
 from tests.support.factories import make_venue
 from tests.support.replacement import (
     BOOKINGS_PATH,
+    add_pending_replacement,
     approve,
     column,
     hall,
@@ -358,3 +361,34 @@ def test_approving_the_replacement_of_an_original_released_by_a_change_still_wor
         {"id": original.id},
     ).all()
     assert replaced_audit == []
+
+
+@pytest.mark.story("12.6", ac=7)
+@pytest.mark.parametrize("event_status", [EventStatus.PLANNING, EventStatus.CONFIRMED])
+def test_approving_an_overridden_replacement_needs_no_change_request(login_as, db, event_status):
+    """The replacement is a venue too small for the requirement, raised with a justification
+    (11.1): Venue Staff's approval goes through on its own, with no change request (19.1) asked
+    for or written, and the event's details and status as they were."""
+    scene = make_scenario(db, event_status=event_status)
+    replacement = add_pending_replacement(db, scene, venue=hall(db, capacity=30))
+    justification = "The closest room left that day; ten will join by video."
+    db.execute(
+        text("UPDATE venue_bookings SET suitability_override_reason = :why WHERE id = :id"),
+        {"why": justification, "id": replacement.id},
+    )
+    event = scene.event
+    before = (event.status, event.starts_at, event.ends_at, event.expected_attendance)
+
+    response = approve(login_as(Users.VENUE_STAFF), replacement.id)
+
+    assert response.status_code == 200, response.text
+    approved = _booking(db, replacement.id)
+    assert approved.status == BookingStatus.APPROVED
+    assert approved.suitability_override_reason == justification
+    assert _booking(db, scene.original.id).status == BookingStatus.CANCELLED
+    db.refresh(event)
+    assert (event.status, event.starts_at, event.ends_at, event.expected_attendance) == before
+    assert (
+        db.scalars(select(EventChangeRequest).where(EventChangeRequest.event_id == event.id)).all()
+        == []
+    )
