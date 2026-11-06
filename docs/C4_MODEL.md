@@ -161,7 +161,7 @@ flowchart TB
 | Arrow | The call |
 | --- | --- |
 | Safety check to Events | `events/service.py::record_transition` moves the event to Awaiting Safety Check, back to Planning, or Confirmed |
-| Change requests to Events | `events/service.py`'s `check_proposed_*` rules and `get_own_event_for_update` |
+| Change requests to Events | raising one: `events/service.py`'s `check_proposed_*` rules; approving one: `apply_proposed_schedule` and `apply_proposed_venue_requirements` write the change, `record_changes` adds it to the change history, and `return_event_to_planning` sends an event past Planning back for a new safety check |
 | Cancellations to Events | `events/service.py::lock_own_event`, then `record_transition` to Cancelled |
 | Coordination to Events | `events/service.py::lock_event`, before the coordinator is set |
 | Registrations to Events | reads the `Event` model (`app/events/models.py`) for the events open to registration |
@@ -216,17 +216,21 @@ flowchart TB
 | --- | --- |
 | Safety check to Venue bookings | `bookings/service.py::lock_named_bookings`, `release_booking` |
 | Change requests to Venue bookings | `bookings/service.py::release_booking` |
-| Change requests to Equipment | `equipment/service.py::take_units` |
+| Change requests to Equipment | `equipment/service.py::apply_equipment_change` for a change to the equipment, `recheck_equipment_for_new_dates` for new dates, and `take_units` to count what is free |
 | Cancellations to Venue bookings | `bookings/service.py::lock_holding_bookings`, `release_booking` |
 | Cancellations to Equipment | `equipment/service.py::release_for_cancelled_event` |
 | Cancellations to Registrations | `registrations/service.py::cancel_for_event` |
 | Cancellations to Change requests | `change_requests/service.py::cancel_pending_for_event` |
 
+Not drawn: to show the impact of a pending change before it is decided (story 19.3), change
+requests also read each venue's capacity and closures from `app/venues` and the places taken from
+`registrations/service.py::count_places_taken`.
+
 ### What every area calls in the shared services
 
 Every feature area's routes are guarded by `require_permission()` or `CurrentUser`, except
-signing in (`POST /auth/login`) and fetching a picture file (`/uploads/events/` and
-`/uploads/venues/`). Every area records its changes with `record_audit()` and reads and writes
+signing in and out (`POST /auth/login`, `POST /auth/logout`) and fetching a picture file
+(`/uploads/events/` and `/uploads/venues/`). Every area records its changes with `record_audit()` and reads and writes
 through `get_db()`. Every area but two sends its notices with `notify()`: registrations sends
 none, and a venue closure's notices are sent by `app/bookings` (`end_bookings_for_closure`). The
 timers open a session of their own, outside any request.
@@ -330,10 +334,11 @@ flowchart LR
 The lapsed-hold check (`bookings/deps.py::release_lapsed_holds`, used through `ReleaseLapsedHolds`
 by the booking and venue routers) and the hold timer in `app/main.py` both call `sweep_holds()`. A
 hold ends one of two ways: one of those expires it, or `trg_events_complete_venue_holds` completes
-it when its event becomes Confirmed. If two staff approve overlapping requests at once,
-`ex_venue_bookings_no_double_booking` refuses the second, and the service turns that into a
-`BookingConflict`, a 409 naming the event that holds the venue; the dynamic view of approving a
-booking, below, follows it step by step.
+it when its event becomes Confirmed. A pending request already holds its venue, so a clash is
+refused when a request is raised, never at approval: if two coordinators request overlapping
+periods at the same moment, `ex_venue_bookings_no_double_booking` refuses the second insert, and
+the service turns that into `VenueHeld`, a 409 naming the event that holds the venue. The dynamic
+view of requesting a booking, below, follows it step by step.
 
 ## Dynamic view: Venue Staff updates a venue
 
@@ -365,37 +370,45 @@ sequenceDiagram
     R-->>VS: 200 and the full record
 ```
 
-## Dynamic view: approving a venue booking
+## Dynamic view: requesting a venue booking
 
-Stories 12.1, 13.2 and 14.2. It is drawn because it is the design decision most worth
-explaining. A pending request already holds its venue, so an overlapping request is refused when
-it is raised. At approval the database still has the last word: its exclusion constraint refuses
-any two pending or approved bookings that overlap, even when two staff members approve at the same
-moment, and the service turns that refusal into a readable conflict.
+Stories 12.1 and 14.2. It is drawn because it is the design decision most worth explaining. A
+pending request holds its venue for its whole held period, setup and teardown included (migration
+`010`), so a clash is refused when a request is raised, and two requests that overlap can never
+both reach Venue Staff. The service checks for a holding booking first, to name it, and the
+database has the last word: if two coordinators request the same slot at the same moment, its
+exclusion constraint refuses the second insert, and the service turns that refusal into the same
+conflict. Approving a request (13.2) keeps the same check only as a safety net, since the request
+it approves already holds its slot.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor VS as Venue Staff
+    actor EC as Event Coordinator
     participant R as Booking endpoints
     participant S as Booking service
+    participant V as Venue service
     participant AU as Audit log writer
+    participant N as Notification service
     participant DB as PostgreSQL
 
-    VS->>R: POST /bookings/{id}/approve with the session cookie
-    R->>S: Fetch the booking, locking its row against a racing decision
-    S-->>VS: 409 if the request is no longer pending
-    S->>DB: Set the booking to approved
-    Note over DB: The exclusion constraint refuses any two<br/>pending or approved bookings that overlap
-    alt The held period overlaps another booking
+    EC->>R: POST /bookings with the session cookie
+    R->>R: require_permission(BOOKINGS_REQUEST), then validate the body, else 401, 403 or 422
+    R->>S: create_booking_request
+    S->>DB: find_holding_booking - a pending or approved booking of the venue over the held period?
+    S-->>EC: 409 (VenueHeld) naming the event that holds the venue, if there is one
+    S->>V: find_blocking_unavailability, judge_venue_for_requirement
+    S->>DB: Insert the request as PENDING, holding the venue
+    Note over DB: ex_venue_bookings_no_double_booking refuses any two<br/>pending or approved bookings that overlap
+    alt Another request took the slot a moment earlier
         DB-->>S: Rejected by the constraint
-        S->>DB: Find the booking that holds the venue
-        S-->>VS: 409 naming the event that already holds the venue
+        S->>DB: find_holding_booking
+        S-->>EC: 409 (VenueHeld) naming the event that now holds the venue
     else No overlap
         DB-->>S: Accepted
-        S->>AU: Record the decision
-        AU->>DB: Append to the audit log in the same transaction
-        S-->>VS: 200 and the approved booking
+        S->>AU: record_audit, in the same transaction
+        S->>N: notify every active Venue Staff member (BOOKING_REQUESTED)
+        S-->>EC: 201 and the pending request
     end
 ```
 
@@ -438,7 +451,7 @@ would answer instead of the project's container.
 ## Core features mapped to components and tables
 
 The 20 core features from the Week 4 instructions, the component that owns each one, the tables
-behind it, and the package whose code implements it so far ("—" where there is none yet). Epic
+behind it, and the packages whose code implements it. Epic
 numbers match the product backlog story IDs, so feature 8 is story 8.x.
 
 | # | Core feature | Component | Main tables | Code |
@@ -481,8 +494,9 @@ writer, so no feature has to invent its own history.
   remembered to check.
 - **Sessions live in the database.** Logging out revokes the row, so a stolen cookie stops
   working immediately.
-- **The schema covers the whole backlog, the code does not.** That keeps later stories from
-  needing migrations that reshape existing tables.
+- **The schema is plain SQL migrations, never reshaped once applied.** The first migration laid
+  down the tables for the backlog as it stood; a story that needs a new table or column adds a
+  migration of its own, and an applied one is never edited.
 
 ## Keeping this file honest
 

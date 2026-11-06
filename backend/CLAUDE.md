@@ -55,11 +55,11 @@ setting to its upper-case name.
 
 ## Domain
 
-The migrations define tables for **the entire product backlog** — events, bookings, equipment,
-registrations, notifications — ahead of the application code; `ls app/` shows which feature
-areas have code. **The schema running ahead of the app is deliberate: a table existing is not a
-licence to build the feature.** Add code when a story asks for it. Every table and column is
-described in the generated [data dictionary](../docs/database/DATA_DICTIONARY.md).
+The first migration laid down tables for **the whole product backlog as it stood** — events,
+bookings, equipment, registrations, notifications — ahead of the application code, and stories
+since have added tables of their own in later migrations. **A table existing is not a licence to
+build the feature.** Add code when a story asks for it. Every table and column is described in the
+generated [data dictionary](../docs/database/DATA_DICTIONARY.md).
 
 - `roles` → `users` → `user_sessions`. `users.role_code` is the RBAC key; external users also
   belong to a `client_organisations` row.

@@ -15,15 +15,15 @@ backed by PostgreSQL.
   design system from story c3. Every section a role can use is in its sidebar, and a section is
   listed only once a story delivers its page (1.2 AC5). Feature pages live in `src/<feature>/`,
   with a matching `src/api/<feature>.ts`. See [frontend/CLAUDE.md](../frontend/CLAUDE.md).
-- **Backend** (`backend/`): a FastAPI service structured **by feature area**
-  (`app/auth/`, `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules),
-  `schemas.py` (request/response shapes) and `models.py` (SQLAlchemy models). `app/common/` holds
-  cross-cutting helpers (the audit log, the phone number rule, the queues' search, the longest
-  setup or teardown). `app/main.py`
-  registers every area's routers and runs two timers: one expires lapsed venue holds (story 12.7),
-  the other marks each Confirmed event Completed once it has ended (fix f21.2.2).
-  `app/dbtool/` is the migration/seed/docs tool. The components and how they call one another are
-  drawn in [C4_MODEL.md](C4_MODEL.md).
+- **Backend** (`backend/`): a FastAPI service structured **by feature area** (`app/auth/`,
+  `app/venues/`, ...). Each area has `router.py` (HTTP), `service.py` (rules) and `schemas.py`
+  (request/response shapes), plus `models.py` (SQLAlchemy models) where it owns tables;
+  `app/equipment/` and `app/cancellations/` work on other areas' tables and have none. `app/common/`
+  holds cross-cutting helpers (the audit log, the phone number rule, the queues' search, the longest
+  setup or teardown). `app/main.py` registers every area's routers and runs two timers: one expires
+  lapsed venue holds (story 12.7), the other marks each Confirmed event Completed once it has ended
+  (fix f21.2.2). `app/dbtool/` is the migration/seed/docs tool. The components and how they call one
+  another are drawn in [C4_MODEL.md](C4_MODEL.md).
 - **Database**: PostgreSQL 16, defined by plain SQL migrations in `backend/db/migrations` and
   seeded from `backend/db/seed`. See [database/README.md](database/README.md), the generated
   [data dictionary](database/DATA_DICTIONARY.md) and [ERD](database/ERD.excalidraw).
