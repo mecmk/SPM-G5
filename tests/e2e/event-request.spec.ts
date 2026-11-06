@@ -710,7 +710,11 @@ test('2.1 AC2: a date problem is said under the dates as soon as it is typed', a
   await expect(end).not.toHaveAttribute('aria-invalid', 'true')
 })
 
-/** Set both dates to a day `days` from today. Each availability test uses its own far-off day. */
+/**
+ * Set both dates to a day `days` from today. Each availability test uses its own far-off day, past
+ * every seeded hold on a laptop, as the seed's dates are fixed and today is not: a nearer day comes
+ * to land on one, and the stock the test counts on is short that day.
+ */
 async function setDates(page: Page, days: number) {
   await page.getByLabel('Proposed start').fill(inFuture(days, 9))
   await page.getByLabel('Proposed end').fill(inFuture(days, 17))
@@ -736,7 +740,7 @@ test('2.1 AC6: the form says how many of an item are available for the chosen da
     item.getByText('Choose the start and end to see how many are available.'),
   ).toBeVisible()
 
-  await setDates(page, 300)
+  await setDates(page, 640)
 
   await expect(item.getByText('6 available for these dates')).toBeVisible()
 })
@@ -749,7 +753,7 @@ test('2.1 AC6: asking for more than is available is stopped and pointed at', asy
     if (request.method() === 'POST' && request.url().endsWith('/events')) createCalls += 1
   })
   await fillEssentials(page, uniqueName('Too many'))
-  await setDates(page, 320)
+  await setDates(page, 660)
   await addEquipment(page, 1, 'Presentation laptop', '7')
   const quantity = equipmentItem(page, 1).getByLabel('Quantity')
 
@@ -776,7 +780,7 @@ test('2.1 AC11: a refused submission stays a draft and the form shows the new co
   await signIn(page, ACCOUNTS.organiser)
   await startNewRequest(page)
   await fillEssentials(page, uniqueName('Late'))
-  await setDates(page, 360)
+  await setDates(page, 700)
   await fillContact(page)
   await answerVenueAndAccessibility(page)
   await addEquipment(page, 1, 'Presentation laptop', '6')
@@ -787,7 +791,7 @@ test('2.1 AC11: a refused submission stays a draft and the form shows the new co
   const other = await secondOrganiser(browser, page)
   await startNewRequest(other)
   await fillEssentials(other, uniqueName('First'))
-  await setDates(other, 360)
+  await setDates(other, 700)
   await fillContact(other)
   await answerVenueAndAccessibility(other)
   await addEquipment(other, 1, 'Presentation laptop', '4')
