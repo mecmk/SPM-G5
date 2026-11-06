@@ -83,7 +83,8 @@ def _event_row(db: Session, event_id):
 
 
 def _submitted_and_assigned_to_chloe(login_as) -> str:
-    """A fresh request of Olivia's, submitted, then given to Chloe by the Lead (5.4 AC3)."""
+    """A fresh request of Olivia's, submitted, then given to Chloe by the Lead (5.4 AC3). It has
+    no coordinator yet, so no ``expected_coordinator_id`` is sent (5.6 AC6)."""
     organiser = login_as(Users.ORGANISER)
     draft = create_submittable_event_request(organiser)
     assert organiser.post(f"/events/{draft['id']}/submit").status_code == 200
@@ -221,6 +222,7 @@ def test_simultaneous_submissions_each_land_without_a_coordinator(engine):
         with Session(engine) as session:
             actor = session.get(User, owner)
             start.wait()
+            # submit_event commits its own transaction, so the checks below read committed rows.
             return service.submit_event(session, event_id, actor=actor).status
 
     try:
