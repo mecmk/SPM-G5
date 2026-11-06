@@ -178,7 +178,7 @@ npm run db:up       # start Postgres in Docker (docker compose up -d)
 npm run db:down     # stop it; the data is kept
 npm run db:ready    # start Postgres, migrate, seed, verify
 npm run db:status   # applied / pending / drifted migrations
-npm run db:seed     # reload the sample data only
+npm run db:seed     # re-run every seed file (reference and sample data) over what is there
 npm run db:reset    # wipe the local database and rebuild it from migrations + seed
 npm run db:docs     # regenerate docs/database/DATA_DICTIONARY.md and ERD.excalidraw
 ```
@@ -237,9 +237,10 @@ merge; `e2e.yml` can also be started by hand from the Actions tab.
 | `pr-title-check.yml` | the pull request title follows Conventional Commits |
 | `pre-commit.yml` | the repository's pre-commit hooks |
 
-The backend and frontend workflows run only when the pull request adds or modifies a file under
-`backend/` or `frontend/` respectively; e2e runs when it adds or modifies one under any of those
-or `tests/`.
+The backend and frontend workflows run only when the pull request modifies or deletes a file
+under `backend/` or `frontend/` respectively; e2e runs when it modifies or deletes one under any
+of those or `tests/`. A pull request that only adds or renames files there skips them (backlog
+item c7).
 
 ## Branching Model
 
