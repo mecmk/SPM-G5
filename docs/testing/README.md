@@ -165,4 +165,5 @@ discarded with the job.
 
 `.github/workflows/backend-ci.yml` starts a PostgreSQL service, applies the migrations to an
 empty database, runs pytest with `--traceability`, and uploads the matrix. `e2e.yml` does the
-same and then runs Playwright. Both only run when relevant paths change.
+same and then runs Playwright. `frontend-ci.yml` runs the frontend's lint, format check and build.
+All three only run when relevant paths change.

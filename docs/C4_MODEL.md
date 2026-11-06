@@ -1,170 +1,265 @@
 # C4 model
 
-How ConnectSphere is put together, described with the [C4 model](https://c4model.com): context,
-containers, components, plus a dynamic and a deployment view. The scope is the **first release**,
-the 20 core features listed in the Week 4 project instructions.
+How ConnectSphere is built, in the first three levels of the [C4 model](https://c4model.com): the
+system in its context, the containers it runs as, and the components inside the API application.
+A dynamic and a deployment view follow. The scope is the first release, the 20 core features
+listed in the Week 4 project instructions.
 
 This file is written by hand. The data dictionary and ERD under `docs/database/` are generated
 from the live schema and describe the data; this file describes the software.
 
 ## How to read it
 
-- Each component names the package that implements it, such as `app/bookings`. A component with
-  no package yet names the epics it serves instead: the backlog asks for it and the database
-  already has its tables, but no application code exists. The schema deliberately runs ahead of
-  the code, so a table is not evidence of a feature.
+- Diagrams are Mermaid flowcharts drawn in C4 notation. Dark blue is a person inside ConnectSphere
+  Event Services and grey one outside it; blue is the software system and its containers; light
+  blue is a component and darker blue a cross-area workflow; light grey is anything outside the
+  part being zoomed into. A dashed line is a boundary, and an arrow from a boundary applies to
+  everything inside it.
+- Every arrow between two components is a call in the code. The table under each Level 3 diagram
+  names the functions behind its arrows.
+- GitHub renders the diagrams in place. In VS Code, use the Markdown Preview Mermaid Support
+  extension. To export one as an image, paste it into [mermaid.live](https://mermaid.live).
 - Which stories are done is tracked in the backlog, not here. This file changes when a feature
   area, a container or a responsibility does.
-- Diagrams are Mermaid flowcharts drawn in C4 notation, which lay out more cleanly than
-  Mermaid's own C4 diagrams. Dark blue is a person inside ConnectSphere Event Services and grey
-  one outside it; blue is the software system and its containers; light blue is a component of
-  the container being zoomed into, and light grey anything outside that zoom. A dashed line is a
-  boundary, and an arrow from a boundary applies to everything inside it.
-- GitHub renders the diagrams in place. In VS Code, use the Markdown Preview Mermaid Support
-  extension. To move things around visually, paste a diagram into
-  [mermaid.live](https://mermaid.live), then copy the text back.
 
 ## Level 1: system context
 
-Who uses ConnectSphere and what they use it for. The first release has no external system
-dependencies: notifications are in-app only, and there is no e-mail, calendar or payment
-integration.
+Who uses ConnectSphere and what for. Five roles are ConnectSphere's own staff and two come from
+outside, as each role's `is_internal` flag in the `roles` table says. ConnectSphere relies on no
+other system: the API makes no outbound requests, so notifications stay in the app and there is
+no e-mail, calendar or payment integration.
 
 ```mermaid
 flowchart TB
     classDef person fill:#08427b,stroke:#052e56,color:#ffffff
     classDef external fill:#686868,stroke:#4d4d4d,color:#ffffff
     classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff
+    classDef container fill:#2e77bc,stroke:#1f5a91,color:#ffffff
+    classDef component fill:#85bbf0,stroke:#5d82a8,color:#000000
+    classDef workflow fill:#5d9fe0,stroke:#3f78b3,color:#000000
+    classDef outside fill:#e6e6e6,stroke:#b3b3b3,color:#333333
 
-    organiser(["<b>Event Organiser</b><br/><i>[Person, external]</i><br/>A client's contact, who<br/>requests an event and<br/>follows its progress"]):::external
-    attendee(["<b>Attendee</b><br/><i>[Person, external]</i><br/>Signs up for a<br/>confirmed event"]):::external
-
-    lead(["<b>Event Coordinator Lead</b><br/><i>[Person, internal]</i><br/>Gives each submitted<br/>request a coordinator;<br/>watches the workload"]):::person
-    coordinator(["<b>Event Coordinator</b><br/><i>[Person, internal]</i><br/>Owns the planning<br/>of one event"]):::person
-    venueStaff(["<b>Venue Staff</b><br/><i>[Person, internal]</i><br/>Keeps the venue catalogue<br/>accurate and decides<br/>booking requests"]):::person
-    techStaff(["<b>Technical Support Staff</b><br/><i>[Person, internal]</i><br/>Looks after equipment<br/>and decides what can<br/>be reserved"]):::person
+    organiser(["<b>Event Organiser</b><br/><i>[Person, external]</i><br/>A client's contact for<br/>an event"]):::external
+    attendee(["<b>Attendee</b><br/><i>[Person, external]</i><br/>Signs up for public<br/>events"]):::external
+    lead(["<b>Event Coordinator Lead</b><br/><i>[Person, internal]</i><br/>Gives each submitted<br/>event a coordinator"]):::person
+    coordinator(["<b>Event Coordinator</b><br/><i>[Person, internal]</i><br/>Plans and confirms<br/>an event"]):::person
+    venueStaff(["<b>Venue Staff</b><br/><i>[Person, internal]</i><br/>Runs the venues"]):::person
+    techStaff(["<b>Technical Support Staff</b><br/><i>[Person, internal]</i><br/>Runs the equipment"]):::person
     safetyOfficer(["<b>Safety Officer</b><br/><i>[Person, internal]</i><br/>Checks an event is<br/>safe to run"]):::person
 
-    connectsphere["<b>ConnectSphere</b><br/><i>[Software system]</i><br/>Event requests, review,<br/>venue bookings and<br/>equipment, safety checks,<br/>registration and<br/>notifications"]:::system
+    connectsphere["<b>ConnectSphere</b><br/><i>[Software system]</i><br/>Event requests and review,<br/>venue and equipment<br/>bookings, safety checks,<br/>registration, notifications"]:::system
 
-    organiser -->|"Submits requests, answers<br/>clarifications, asks for<br/>changes, cancels"| connectsphere
-    attendee -->|"Registers for an event,<br/>withdraws"| connectsphere
-    lead -->|"Assigns and reassigns<br/>events"| connectsphere
-    coordinator -->|"Reviews requests, books<br/>venues, orders equipment,<br/>confirms events"| connectsphere
-    venueStaff -->|"Maintains venues,<br/>approves or rejects<br/>bookings"| connectsphere
-    techStaff -->|"Accepts or declines<br/>equipment, records units<br/>out of service"| connectsphere
-    safetyOfficer -->|"Approves an event, or<br/>sends it back for changes"| connectsphere
+    organiser -->|"Submits and follows<br/>event requests, asks<br/>for changes, cancels"| connectsphere
+    attendee -->|"Registers for events,<br/>withdraws"| connectsphere
+    lead -->|"Assigns events<br/>to coordinators"| connectsphere
+    coordinator -->|"Reviews requests,<br/>books venues and<br/>equipment, decides<br/>change requests"| connectsphere
+    venueStaff -->|"Manages venues and<br/>closures, decides<br/>booking requests"| connectsphere
+    techStaff -->|"Decides equipment<br/>requests, records units<br/>out of service"| connectsphere
+    safetyOfficer -->|"Approves an event,<br/>or asks for changes"| connectsphere
 ```
 
 ## Level 2: containers
 
-The parts that run separately and how they talk to each other.
+The parts that run separately. People use the single-page application in a browser; it calls the
+API, and only the API touches the database and the uploaded pictures while the app runs.
 
 ```mermaid
 flowchart TB
     classDef person fill:#08427b,stroke:#052e56,color:#ffffff
     classDef external fill:#686868,stroke:#4d4d4d,color:#ffffff
+    classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff
     classDef container fill:#2e77bc,stroke:#1f5a91,color:#ffffff
+    classDef component fill:#85bbf0,stroke:#5d82a8,color:#000000
+    classDef workflow fill:#5d9fe0,stroke:#3f78b3,color:#000000
+    classDef outside fill:#e6e6e6,stroke:#b3b3b3,color:#333333
 
     organiser(["<b>Event Organiser</b><br/><i>[Person, external]</i>"]):::external
     staff(["<b>ConnectSphere staff</b><br/><i>[Person, internal]</i><br/>Every internal role"]):::person
     attendee(["<b>Attendee</b><br/><i>[Person, external]</i>"]):::external
 
     subgraph connectsphere["<b>ConnectSphere</b> [system]"]
-        spa["<b>Single-page application</b><br/><i>[Container: React 19,<br/>TypeScript, Vite]</i><br/>Role-aware pages, one<br/>area per feature. A page<br/>is listed once a story<br/>delivers it"]:::container
-        api["<b>API application</b><br/><i>[Container: Python 3.12,<br/>FastAPI, Uvicorn]</i><br/>REST endpoints, sessions,<br/>role checks and every<br/>business rule, plus<br/>timers that expire<br/>lapsed venue holds and<br/>mark ended events<br/>Completed. OpenAPI<br/>docs at /docs"]:::container
-        db[("<b>Database</b><br/><i>[Container: PostgreSQL 16]</i><br/>Users and sessions,<br/>events, venues, bookings,<br/>equipment, registrations,<br/>notifications, audit log")]:::container
-        uploads["<b>Upload storage</b><br/><i>[Container: folder on<br/>disk, UPLOAD_DIR]</i><br/>Event cover pictures<br/>and venue pictures"]:::container
-        dbtool["<b>Schema and seed tool</b><br/><i>[Container: Python CLI,<br/>app.dbtool]</i><br/>Applies SQL migrations,<br/>loads reference and<br/>sample data, regenerates<br/>the data dictionary<br/>and the ERD"]:::container
+        spa["<b>Single-page application</b><br/><i>[Container: React 19,<br/>React Router, Vite]</i><br/>Each role's pages; holds<br/>no business rules"]:::container
+        api["<b>API application</b><br/><i>[Container: Python 3.12,<br/>FastAPI, Uvicorn]</i><br/>Every rule and access<br/>decision; timers expire<br/>holds and complete<br/>ended events"]:::container
+        db[("<b>Database</b><br/><i>[Container: PostgreSQL 16]</i><br/>Every record, with the<br/>constraints that must<br/>never be broken")]:::container
+        uploads["<b>Upload storage</b><br/><i>[Container: folder on<br/>disk, UPLOAD_DIR]</i><br/>Event and venue<br/>pictures"]:::container
+        dbtool["<b>Schema and seed tool</b><br/><i>[Container: Python CLI,<br/>app.dbtool]</i><br/>Migrations, seed data,<br/>data dictionary and ERD"]:::container
     end
 
-    organiser -->|"Uses<br/>[HTTP]"| spa
-    staff -->|"Uses<br/>[HTTP]"| spa
-    attendee -->|"Uses<br/>[HTTP]"| spa
+    organiser -->|"Uses<br/>[browser]"| spa
+    staff -->|"Uses<br/>[browser]"| spa
+    attendee -->|"Uses<br/>[browser]"| spa
     spa -->|"Calls<br/>[JSON over HTTP,<br/>session cookie]"| api
-    api -->|"Reads and writes<br/>[SQLAlchemy 2<br/>over psycopg 3]"| db
-    api -->|"Writes and serves<br/>pictures<br/>[files, /uploads/]"| uploads
-    dbtool -->|"Creates the schema,<br/>seeds data<br/>[SQL and DDL]"| db
+    api -->|"Reads and writes<br/>[SQLAlchemy 2,<br/>psycopg 3]"| db
+    api -->|"Saves and serves<br/>pictures<br/>[/uploads/...]"| uploads
+    dbtool -->|"Migrates and seeds<br/>[SQL]"| db
 
     style connectsphere fill:none,stroke:#666666,stroke-dasharray:6 4
 ```
 
-Each container in one line:
-
 | Container | Technology | Responsibility |
 | --- | --- | --- |
-| Single-page application | React 19, TypeScript, Vite on port 5173 | Shows each role only what its permissions allow. Holds no rules of its own |
-| API application | FastAPI on port 8000 | Every rule and every access decision. One module per feature area, plus the timers that expire lapsed venue holds and mark ended events Completed |
-| Database | PostgreSQL 16 on port 5433 | The single copy of event, venue, equipment and registration data. Enforces the rules that must never be broken |
+| Single-page application | React 19, React Router and Vite, on port 5173 in development | Each role's pages, showing only what its permissions allow. Holds no rules of its own |
+| API application | Python 3.12, FastAPI and Uvicorn, on port 8000 | Every rule and every access decision, one package per feature area. Two timers in `app/main.py` expire lapsed venue holds and mark ended events Completed |
+| Database | PostgreSQL 16 in Docker, on host port 5433 | Every record. Its constraints enforce what must never break, such as two venue holds that overlap |
 | Upload storage | A folder on disk, `UPLOAD_DIR` (`backend/uploads` by default) | Event cover pictures and venue pictures, written by the API and served at `/uploads/events/` and `/uploads/venues/` |
-| Schema and seed tool | `python -m app.dbtool` | Migrations, seed data, and the generated data dictionary and ERD |
+| Schema and seed tool | `python -m app.dbtool`, behind the `npm run db:*` scripts | Applies the SQL migrations, loads the reference and sample data, and regenerates the data dictionary and ERD |
 
 ## Level 3: components of the API application
 
-Inside the API application. Each feature area is one package with the same four files: a router
-for HTTP, a service for rules, schemas for request and response shapes, and models for tables.
-`app/main.py` registers every area's routers, so a request from the single-page application lands
-in its area's `router.py`. The three workflows that act on an event across areas (safety check,
-change requests, cancellations) are the darker blue, and every area uses the same shared
-services.
+Inside the API application. Each feature area is one package under `backend/app/`: a `router.py`
+for HTTP, a `service.py` for its rules and a `schemas.py` for request and response shapes, plus a
+`models.py` where the area owns tables (every area but `app/equipment` and `app/cancellations`,
+which work on other areas' tables). `app/main.py` registers every area's routers and runs the two
+timers. The three cross-area workflows are the darker blue; the next two views draw what they
+change and what every area calls in the shared services.
 
 ```mermaid
 flowchart TB
+    classDef person fill:#08427b,stroke:#052e56,color:#ffffff
+    classDef external fill:#686868,stroke:#4d4d4d,color:#ffffff
+    classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff
+    classDef container fill:#2e77bc,stroke:#1f5a91,color:#ffffff
     classDef component fill:#85bbf0,stroke:#5d82a8,color:#000000
     classDef workflow fill:#5d9fe0,stroke:#3f78b3,color:#000000
     classDef outside fill:#e6e6e6,stroke:#b3b3b3,color:#333333
 
-    spa["<b>Single-page application</b><br/><i>[Container: React 19]</i>"]:::outside
-
+    spa["<b>Single-page application</b><br/><i>[Container]</i>"]:::outside
     subgraph api["<b>API application</b> [container]"]
+        entry["<b>App entry point</b><br/><i>[app/main.py]</i><br/>Registers every area's<br/>router, CORS, /health"]:::component
         subgraph areas["<b>Feature areas</b>"]
-            safety["<b>Safety check</b><br/><i>[app/safety]</i><br/>The officer's decision;<br/>confirming the event"]:::workflow
-            changes["<b>Change requests</b><br/><i>[app/change_requests]</i><br/>Approving one applies<br/>the change"]:::workflow
-            cancellations["<b>Cancellations</b><br/><i>[app/cancellations]</i><br/>Releases everything a<br/>cancelled event holds"]:::workflow
-            coordination["<b>Coordination</b><br/><i>[app/coordination]</i><br/>The Lead's queue,<br/>assigning, reassigning"]:::component
-            registrations["<b>Registrations</b><br/><i>[app/registrations]</i><br/>Attendees register and<br/>withdraw; the list"]:::component
-            equipment["<b>Equipment</b><br/><i>[app/equipment]</i><br/>Requests, unit holds,<br/>Technical Support's<br/>queue and schedule"]:::component
-            bookings["<b>Venue bookings</b><br/><i>[app/bookings]</i><br/>Requests, holds,<br/>decisions, conflicts,<br/>hold expiry"]:::component
-            events["<b>Events</b><br/><i>[app/events]</i><br/>Requests, review, status,<br/>details and edits"]:::component
-            venues["<b>Venues</b><br/><i>[app/venues]</i><br/>Catalogue, search,<br/>calendar, closures,<br/>room layouts"]:::component
+            safety["<b>Safety check</b><br/><i>[app/safety]</i><br/>The officer's review<br/>and decision"]:::workflow
+            changes["<b>Change requests</b><br/><i>[app/change_requests]</i><br/>Raising and deciding<br/>changes to an event"]:::workflow
+            cancellations["<b>Cancellations</b><br/><i>[app/cancellations]</i><br/>The organiser cancels<br/>an event"]:::workflow
+            coordination["<b>Coordination</b><br/><i>[app/coordination]</i><br/>The Lead assigns and<br/>reassigns coordinators"]:::component
+            registrations["<b>Registrations</b><br/><i>[app/registrations]</i><br/>Attendees register<br/>and withdraw"]:::component
+            equipment["<b>Equipment</b><br/><i>[app/equipment]</i><br/>Equipment requests,<br/>holds, out of service"]:::component
+            bookings["<b>Venue bookings</b><br/><i>[app/bookings]</i><br/>Booking requests,<br/>holds and decisions"]:::component
+            events["<b>Events</b><br/><i>[app/events]</i><br/>Event requests, review,<br/>status, availability"]:::component
+            venues["<b>Venues</b><br/><i>[app/venues]</i><br/>Catalogue, search,<br/>calendar, closures"]:::component
         end
-        timer["<b>Timers</b><br/><i>[asyncio tasks,<br/>app/main.py]</i><br/>Expire lapsed holds,<br/>warning coordinators first;<br/>mark ended events Completed"]:::component
-        subgraph shared["<b>Shared by every area</b>"]
-            access["<b>Access control</b><br/><i>[app/auth]</i><br/>Sessions and permissions;<br/>answers 401 and 403"]:::component
-            notifications["<b>Notification service</b><br/><i>[app/notifications]</i><br/>One notice per action,<br/>never to whoever acted"]:::component
-            audit["<b>Audit log writer</b><br/><i>[app/common/audit.py]</i><br/>Who changed what, when,<br/>in the same transaction"]:::component
-            session["<b>Database session</b><br/><i>[app/db.py]</i><br/>Engine, session factory,<br/>one session per request"]:::component
-        end
+        timers["<b>Timers</b><br/><i>[asyncio tasks,<br/>app/main.py]</i><br/>Expire lapsed holds;<br/>complete ended events"]:::component
     end
 
-    db[("<b>Database</b><br/><i>[Container: PostgreSQL 16]</i>")]:::outside
-
-    spa -->|"JSON over HTTP,<br/>session cookie"| areas
-    safety -->|"confirms, or returns<br/>to Planning"| events
-    changes -->|"applies an approved<br/>change to"| events
-    cancellations -->|"cancels, releasing<br/>what it holds"| events
-    coordination -->|"assigns a coordinator to"| events
-    registrations -->|"registers attendees for"| events
-    equipment -->|"holds units for"| events
-    bookings -->|"books venues for"| events
-    bookings -->|"checks hours and<br/>closures in"| venues
-    timer -->|"sweep_holds()"| bookings
-    timer -->|"complete_ended_events()"| events
-    areas -->|"require_permission(),<br/>notify(), record_audit(),<br/>get_db()"| shared
-    timer -->|"opens its own session"| session
-    session -->|"SQL over psycopg 3"| db
-    events ~~~ notifications
-    venues ~~~ audit
+    spa -->|"JSON over HTTP,<br/>session cookie"| entry
+    entry -->|"routes each request to<br/>its area's router.py"| areas
+    safety -->|"moves the event to<br/>Confirmed or Planning"| events
+    changes -->|"applies the change"| events
+    cancellations -->|"marks the event<br/>Cancelled"| events
+    coordination -->|"assigns a<br/>coordinator to"| events
+    registrations -->|"reads the events<br/>open to register"| events
+    equipment -->|"checks availability;<br/>returns to Planning"| events
+    bookings -->|"returns an event<br/>to Planning"| events
+    bookings -->|"checks closures<br/>and suitability"| venues
+    venues -->|"a closure ends<br/>its bookings"| bookings
+    timers -->|"sweep_holds()"| bookings
+    timers -->|"complete_ended_events()"| events
 
     style api fill:none,stroke:#666666,stroke-dasharray:6 4
     style areas fill:none,stroke:#888888,stroke-dasharray:3 3
-    style shared fill:none,stroke:#888888,stroke-dasharray:3 3
 ```
 
-Arrows show the main calls. The code has more: the workflows also release bookings, equipment and
-registrations in their own areas, the notification service reads back into the areas to work out
-where each notice opens, and venues, bookings and events read one another. The queue search and
-the phone number rule in `app/common` are left out.
+| Arrow | The call |
+| --- | --- |
+| Safety check to Events | `events/service.py::record_transition` moves the event to Awaiting Safety Check, back to Planning, or Confirmed |
+| Change requests to Events | raising one: `events/service.py`'s `check_proposed_*` rules; approving one: `apply_proposed_schedule` and `apply_proposed_venue_requirements` write the change, `record_changes` adds it to the change history, and `return_event_to_planning` sends an event past Planning back for a new safety check |
+| Cancellations to Events | `events/service.py::lock_own_event`, then `record_transition` to Cancelled |
+| Coordination to Events | `events/service.py::lock_event`, before the coordinator is set |
+| Registrations to Events | reads the `Event` model (`app/events/models.py`) for the events open to registration |
+| Equipment to Events | `events/service.py::available_by_type`, `return_event_to_planning` |
+| Venue bookings to Events | `events/service.py::lock_event`, `return_event_to_planning` |
+| Venue bookings to Venues | `venues/service.py::find_blocking_unavailability`, `judge_venue_for_requirement`, `people_to_hold` |
+| Venues to Venue bookings | `bookings/service.py::end_bookings_for_closure` |
+| Timers to Venue bookings | `bookings/service.py::sweep_holds` |
+| Timers to Events | `events/service.py::complete_ended_events` |
+
+Not drawn, to keep the picture readable: Events calls `equipment/service.py::release_for_rejected_event`
+and reads room layouts and capacity from `app/venues`; Venues reads
+`events/service.py::latest_end_allowed`; and the notification service reads back into six areas
+(`notifications/targets.py`) to work out where each notice opens.
+
+### What the cross-area workflows change
+
+Each workflow changes other areas' records in the same transaction as its own, through the
+functions those areas expose.
+
+```mermaid
+flowchart TB
+    classDef person fill:#08427b,stroke:#052e56,color:#ffffff
+    classDef external fill:#686868,stroke:#4d4d4d,color:#ffffff
+    classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff
+    classDef container fill:#2e77bc,stroke:#1f5a91,color:#ffffff
+    classDef component fill:#85bbf0,stroke:#5d82a8,color:#000000
+    classDef workflow fill:#5d9fe0,stroke:#3f78b3,color:#000000
+    classDef outside fill:#e6e6e6,stroke:#b3b3b3,color:#333333
+
+    cancellations["<b>Cancellations</b><br/><i>[app/cancellations]</i><br/>The organiser cancels<br/>an event"]:::workflow
+    changes["<b>Change requests</b><br/><i>[app/change_requests]</i><br/>Raising and deciding<br/>changes to an event"]:::workflow
+    safety["<b>Safety check</b><br/><i>[app/safety]</i><br/>The officer's review<br/>and decision"]:::workflow
+    events["<b>Events</b><br/><i>[app/events]</i><br/>Event requests, review,<br/>status, availability"]:::component
+    bookings["<b>Venue bookings</b><br/><i>[app/bookings]</i><br/>Booking requests,<br/>holds and decisions"]:::component
+    equipment["<b>Equipment</b><br/><i>[app/equipment]</i><br/>Equipment requests,<br/>holds, out of service"]:::component
+    registrations["<b>Registrations</b><br/><i>[app/registrations]</i><br/>Attendees register<br/>and withdraw"]:::component
+
+    cancellations -->|"closes the event's<br/>pending ones"| changes
+    safety -->|"confirms, or returns<br/>to Planning"| events
+    safety -->|"releases the bookings<br/>a finding names"| bookings
+    changes -->|"checks and applies<br/>the change"| events
+    changes -->|"releases the bookings<br/>it no longer fits"| bookings
+    changes -->|"re-holds units"| equipment
+    cancellations -->|"marks Cancelled"| events
+    cancellations -->|"releases every<br/>booking"| bookings
+    cancellations -->|"releases every<br/>hold"| equipment
+    cancellations --->|"cancels every<br/>registration"| registrations
+```
+
+| Arrow | The call |
+| --- | --- |
+| Safety check to Venue bookings | `bookings/service.py::lock_named_bookings`, `release_booking` |
+| Change requests to Venue bookings | `bookings/service.py::release_booking` |
+| Change requests to Equipment | `equipment/service.py::apply_equipment_change` for a change to the equipment, `recheck_equipment_for_new_dates` for new dates, and `take_units` to count what is free |
+| Cancellations to Venue bookings | `bookings/service.py::lock_holding_bookings`, `release_booking` |
+| Cancellations to Equipment | `equipment/service.py::release_for_cancelled_event` |
+| Cancellations to Registrations | `registrations/service.py::cancel_for_event` |
+| Cancellations to Change requests | `change_requests/service.py::cancel_pending_for_event` |
+
+Not drawn: to show the impact of a pending change before it is decided (story 19.3), change
+requests also read each venue's capacity and closures from `app/venues` and the places taken from
+`registrations/service.py::count_places_taken`.
+
+### What every area calls in the shared services
+
+Every feature area's routes are guarded by `require_permission()` or `CurrentUser`, except
+signing in and out (`POST /auth/login`, `POST /auth/logout`) and fetching a picture file
+(`/uploads/events/` and `/uploads/venues/`). Every area records its changes with `record_audit()` and reads and writes
+through `get_db()`. Every area but two sends its notices with `notify()`: registrations sends
+none, and venues leaves a closure's notices to `app/bookings` (`end_bookings_for_closure`). The
+timers open a session of their own, outside any request.
+
+```mermaid
+flowchart TB
+    classDef person fill:#08427b,stroke:#052e56,color:#ffffff
+    classDef external fill:#686868,stroke:#4d4d4d,color:#ffffff
+    classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff
+    classDef container fill:#2e77bc,stroke:#1f5a91,color:#ffffff
+    classDef component fill:#85bbf0,stroke:#5d82a8,color:#000000
+    classDef workflow fill:#5d9fe0,stroke:#3f78b3,color:#000000
+    classDef outside fill:#e6e6e6,stroke:#b3b3b3,color:#333333
+
+    area["<b>Each feature area</b><br/><i>[app/&lt;area&gt;]</i><br/>router.py and service.py"]:::workflow
+    timers["<b>Timers</b><br/><i>[asyncio tasks,<br/>app/main.py]</i><br/>Expire lapsed holds;<br/>complete ended events"]:::component
+    access["<b>Access control</b><br/><i>[app/auth]</i><br/>Sessions and permissions;<br/>answers 401 and 403"]:::component
+    notifications["<b>Notification service</b><br/><i>[app/notifications]</i><br/>One notice per action,<br/>never to whoever acted"]:::component
+    audit["<b>Audit log writer</b><br/><i>[app/common/audit.py]</i><br/>Who changed what, when,<br/>in the same transaction"]:::component
+    session["<b>Database session</b><br/><i>[app/db.py]</i><br/>Engine, session factory,<br/>one session per request"]:::component
+    db[("<b>Database</b><br/><i>[Container: PostgreSQL 16]</i>")]:::outside
+
+    area -->|"routes guarded by<br/>require_permission()"| access
+    area -->|"notify(), except<br/>registrations and venues"| notifications
+    area -->|"record_audit(), in the<br/>same transaction"| audit
+    area -->|"get_db(), one<br/>session per request"| session
+    timers -->|"a session of<br/>their own"| session
+    session -->|"SQL over psycopg 3"| db
+```
 
 What each component does:
 
@@ -194,10 +289,15 @@ word on double booking.
 
 ```mermaid
 flowchart LR
+    classDef person fill:#08427b,stroke:#052e56,color:#ffffff
+    classDef external fill:#686868,stroke:#4d4d4d,color:#ffffff
+    classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff
+    classDef container fill:#2e77bc,stroke:#1f5a91,color:#ffffff
     classDef component fill:#85bbf0,stroke:#5d82a8,color:#000000
+    classDef workflow fill:#5d9fe0,stroke:#3f78b3,color:#000000
     classDef outside fill:#e6e6e6,stroke:#b3b3b3,color:#333333
 
-    spa["<b>Single-page application</b><br/><i>[Container: React 19]</i>"]:::outside
+    spa["<b>Single-page application</b><br/><i>[Container]</i>"]:::outside
 
     subgraph pkg["<b>Venue bookings</b> [package: app/bookings]"]
         router["<b>Booking endpoints</b><br/><i>[router.py]</i><br/>Raise, approve, reject,<br/>withdraw, cancel, switch;<br/>service errors become 4xx"]:::component
@@ -208,8 +308,8 @@ flowchart LR
     end
 
     access["<b>Access control</b><br/><i>[app/auth/deps.py]</i><br/>Signed in and permitted,<br/>else 401 or 403"]:::outside
-    events["<b>Events service</b><br/><i>[app/events]</i><br/>Venue requirements and<br/>the event's status"]:::outside
-    venues["<b>Venue service</b><br/><i>[app/venues]</i><br/>Opening hours, closures,<br/>capacity and layouts"]:::outside
+    events["<b>Events service</b><br/><i>[app/events]</i><br/>Locks the event; returns<br/>it to Planning"]:::outside
+    venues["<b>Venue service</b><br/><i>[app/venues]</i><br/>Closures, suitability,<br/>capacity"]:::outside
     notifications["<b>Notification service</b><br/><i>[app/notifications]</i><br/>Tells the people involved,<br/>never whoever acted"]:::outside
     audit["<b>Audit log writer</b><br/><i>[app/common/audit.py]</i><br/>Each decision and expiry,<br/>in the same transaction"]:::outside
     db[("<b>Database</b><br/><i>[Container: PostgreSQL 16]</i><br/>ex_venue_bookings_no_double_booking<br/>refuses overlapping holds;<br/>trg_events_complete_venue_holds<br/>completes holds on Confirmed")]:::outside
@@ -222,8 +322,8 @@ flowchart LR
     router -->|"validates with"| schemas
     service -->|"builds replies with"| schemas
     service -->|"reads and writes"| model
-    service -->|"reads requirements<br/>and status"| events
-    service --->|"checks hours<br/>and closures"| venues
+    service -->|"lock_event(),<br/>return_event_to_planning()"| events
+    service --->|"find_blocking_unavailability(),<br/>judge_venue_for_requirement()"| venues
     service --->|"notify()"| notifications
     service --->|"record_audit()"| audit
     model -->|"SQL over psycopg 3"| db
@@ -231,11 +331,14 @@ flowchart LR
     style pkg fill:none,stroke:#666666,stroke-dasharray:6 4
 ```
 
-The hold timer in `app/main.py` (the Level 3 view above) calls the same `sweep_holds()` as the
-lapsed-hold check, on its own schedule. A hold ends one of two ways: the timer or the lapsed-hold
-check expires it, or `trg_events_complete_venue_holds` completes it when its event becomes
-Confirmed. The dynamic view of approving a booking, further down, shows the exclusion constraint
-at work when two staff approve at once.
+The lapsed-hold check (`bookings/deps.py::release_lapsed_holds`, used through `ReleaseLapsedHolds`
+by the booking and venue routers) and the hold timer in `app/main.py` both call `sweep_holds()`. A
+hold ends one of two ways: one of those expires it, or `trg_events_complete_venue_holds` completes
+it when its event becomes Confirmed. A pending request already holds its venue, so a clash is
+refused when a request is raised, never at approval: if two coordinators request overlapping
+periods at the same moment, `ex_venue_bookings_no_double_booking` refuses the second insert, and
+the service turns that into `VenueHeld`, a 409 naming the event that holds the venue. The dynamic
+view of requesting a booking, below, follows it step by step.
 
 ## Dynamic view: Venue Staff updates a venue
 
@@ -267,37 +370,45 @@ sequenceDiagram
     R-->>VS: 200 and the full record
 ```
 
-## Dynamic view: approving a venue booking
+## Dynamic view: requesting a venue booking
 
-Stories 12.1, 13.2 and 14.2. It is drawn because it is the design decision most worth
-explaining. A pending request already holds its venue, so an overlapping request is refused when
-it is raised. At approval the database still has the last word: its exclusion constraint refuses
-any two pending or approved bookings that overlap, even when two staff members approve at the same
-moment, and the service turns that refusal into a readable conflict.
+Stories 12.1 and 14.2. It is drawn because it is the design decision most worth explaining. A
+pending request holds its venue for its whole held period, setup and teardown included (migration
+`010`), so a clash is refused when a request is raised, and two requests that overlap can never
+both reach Venue Staff. The service checks for a holding booking first, to name it, and the
+database has the last word: if two coordinators request the same slot at the same moment, its
+exclusion constraint refuses the second insert, and the service turns that refusal into the same
+conflict. Approving a request (13.2) keeps the same check only as a safety net, since the request
+it approves already holds its slot.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor VS as Venue Staff
+    actor EC as Event Coordinator
     participant R as Booking endpoints
     participant S as Booking service
+    participant V as Venue service
     participant AU as Audit log writer
+    participant N as Notification service
     participant DB as PostgreSQL
 
-    VS->>R: POST /bookings/{id}/approve with the session cookie
-    R->>S: Fetch the booking, locking its row against a racing decision
-    S-->>VS: 409 if the request is no longer pending
-    S->>DB: Set the booking to approved
-    Note over DB: The exclusion constraint refuses any two<br/>pending or approved bookings that overlap
-    alt The held period overlaps another booking
+    EC->>R: POST /bookings with the session cookie
+    R->>R: require_permission(BOOKINGS_REQUEST), then validate the body, else 401, 403 or 422
+    R->>S: create_booking_request
+    S->>DB: find_holding_booking - a pending or approved booking of the venue over the held period?
+    S-->>EC: 409 (VenueHeld) naming the event that holds the venue, if there is one
+    S->>V: find_blocking_unavailability, judge_venue_for_requirement
+    S->>DB: Insert the request as PENDING, holding the venue
+    Note over DB: ex_venue_bookings_no_double_booking refuses any two<br/>pending or approved bookings that overlap
+    alt Another request took the slot a moment earlier
         DB-->>S: Rejected by the constraint
-        S->>DB: Find the booking that holds the venue
-        S-->>VS: 409 naming the event that already holds the venue
+        S->>DB: find_holding_booking
+        S-->>EC: 409 (VenueHeld) naming the event that now holds the venue
     else No overlap
         DB-->>S: Accepted
-        S->>AU: Record the decision
-        AU->>DB: Append to the audit log in the same transaction
-        S-->>VS: 200 and the approved booking
+        S->>AU: record_audit, in the same transaction
+        S->>N: notify every active Venue Staff member (BOOKING_REQUESTED)
+        S-->>EC: 201 and the pending request
     end
 ```
 
@@ -340,7 +451,7 @@ would answer instead of the project's container.
 ## Core features mapped to components and tables
 
 The 20 core features from the Week 4 instructions, the component that owns each one, the tables
-behind it, and the package whose code implements it so far ("—" where there is none yet). Epic
+behind it, and the packages whose code implements it. Epic
 numbers match the product backlog story IDs, so feature 8 is story 8.x.
 
 | # | Core feature | Component | Main tables | Code |
@@ -383,13 +494,15 @@ writer, so no feature has to invent its own history.
   remembered to check.
 - **Sessions live in the database.** Logging out revokes the row, so a stolen cookie stops
   working immediately.
-- **The schema covers the whole backlog, the code does not.** That keeps later stories from
-  needing migrations that reshape existing tables.
+- **The schema is plain SQL migrations, never reshaped once applied.** The first migration laid
+  down the tables for the backlog as it stood; a story that needs a new table or column adds a
+  migration of its own, and an applied one is never edited.
 
 ## Keeping this file honest
 
 Update it when you add a feature area, change a container or move a responsibility between
-components. A new feature area is a node in the Level 3 diagram and a row in the table under it.
+components. A new feature area is a component in the first Level 3 diagram, a row in its
+"What each component does" table, and a row in the call tables for any area it calls.
 Nothing regenerates it. The checklist in [ARCHITECTURE.md](ARCHITECTURE.md) and
 [AGENTS.md → Keeping Docs Current](../AGENTS.md#keeping-docs-current) list the other places a new
 feature has to appear.
