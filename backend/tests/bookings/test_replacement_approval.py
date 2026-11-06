@@ -5,9 +5,9 @@ covers, so nothing is marked and no replacement is requested. A booking already 
 shows "Replaced by <venue>" (9.5 AC7), and a request raised as a replacement before 9.5 becomes a
 normal pending request once its original closes (9.5 AC8, CL-194).
 
-The tests that remain cover 12.6 AC3 and AC8 (approving a replacement raised before 9.5, which
-releases its original, and "Replaced by <venue>" shown only for an approved one) and, tagged
-9.5 AC8, approving one whose original has closed.
+The tests that remain cover 12.6 AC3, AC6 and AC8 (approving a replacement raised before 9.5,
+which releases its original although no mark stands any more, and "Replaced by <venue>" shown only
+for an approved one) and, tagged 9.5 AC8, approving one whose original has closed.
 
 Happy path
 1. On an approved booking marked "Venue unavailable – alternative needed" (9.4), the assigned
@@ -120,7 +120,10 @@ def _listed(client, scene) -> dict:
 
 # --- AC3: the release -------------------------------------------------------------------------
 @pytest.mark.story("12.6", ac=3)
+@pytest.mark.story("12.6", ac=6)
 def test_approving_a_replacement_cancels_the_original_in_one_transaction(login_as, db):
+    """AC6: no booking is marked any more (9.5 AC7), so this is also a replacement approved after
+    its original's mark has gone, and it still replaces the original."""
     scene = make_scenario(db)
     body = request_replacement(db, scene)
     approved_by, approved_at = scene.original.decided_by_id, scene.original.decided_at

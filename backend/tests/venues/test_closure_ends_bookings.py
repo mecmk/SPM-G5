@@ -1693,6 +1693,7 @@ def test_no_response_carries_the_mark(db, venue_staff_client, login_as):
 
 
 @pytest.mark.story("9.5", ac=7)
+@pytest.mark.story("12.6", ac=11)
 def test_the_unavailable_filter_of_the_coordinators_events_is_gone(db, login_as):
     """AC7 (12.6 AC11): ``?venue_unavailable=true`` lists every assigned event as the plain list
     does."""
@@ -1709,6 +1710,7 @@ def test_the_unavailable_filter_of_the_coordinators_events_is_gone(db, login_as)
 
 
 @pytest.mark.story("9.5", ac=7)
+@pytest.mark.story("12.6", ac=1)
 def test_the_replacement_request_route_and_the_search_exclusion_are_gone(
     db, login_as, venue_staff_client
 ):
@@ -1746,6 +1748,7 @@ def _with_a_pending_replacement(db: Session):
 
 
 @pytest.mark.story("9.5", ac=7)
+@pytest.mark.story("12.6", ac=12)
 def test_a_pending_replacement_of_a_holding_original_no_longer_blocks_the_review(
     db, coordinator_client
 ):
@@ -1759,6 +1762,7 @@ def test_a_pending_replacement_of_a_holding_original_no_longer_blocks_the_review
 
 
 @pytest.mark.story("9.5", ac=7)
+@pytest.mark.story("12.6", ac=12)
 def test_a_pending_replacement_of_a_holding_original_no_longer_blocks_confirm(
     db, coordinator_client
 ):
